@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CarbonVault — Carbon Intelligence Platform</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Cal+Sans&family=Fraunces:opsz,wght@9..144,300;9..144,700;9..144,900&display=swap" rel="stylesheet">
+    <style>
+      *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+      :root {
+        --bg0: #040508;
+        --bg1: #080b12;
+        --bg2: #0d1120;
+        --bg3: #111829;
+        --bg4: #161f34;
+        --glass: rgba(255,255,255,0.035);
+        --glass2: rgba(255,255,255,0.06);
+        --border: rgba(255,255,255,0.07);
+        --border2: rgba(255,255,255,0.13);
+
+        /* Teal/Cyan — primary */
+        --teal: #2dd4bf;
+        --teal-d: #14b8a6;
+        --teal-dd: #0d9488;
+        --teal-l: #5eead4;
+        --teal-glow: rgba(45,212,191,0.18);
+
+        /* Gold — accent */
+        --gold: #f59e0b;
+        --gold-l: #fbbf24;
+        --gold-ll: #fde68a;
+        --gold-glow: rgba(245,158,11,0.15);
+
+        /* Rose — danger */
+        --rose: #f43f5e;
+        --rose-l: #fb7185;
+
+        /* Violet — secondary */
+        --violet: #7c3aed;
+        --violet-l: #8b5cf6;
+        --violet-ll: #a78bfa;
+
+        /* Sky — info */
+        --sky: #0ea5e9;
+        --sky-l: #38bdf8;
+
+        /* Emerald — success */
+        --emerald: #10b981;
+        --emerald-l: #34d399;
+
+        /* Text */
+        --t1: #f1f5f9;
+        --t2: #94a3b8;
+        --t3: #475569;
+        --t4: #1e293b;
+
+        --radius: 14px;
+        --radius-sm: 9px;
+        --shadow-card: 0 1px 3px rgba(0,0,0,0.4), 0 8px 32px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.06);
+        --shadow-glow-teal: 0 0 40px rgba(45,212,191,0.12), 0 0 80px rgba(45,212,191,0.06);
+        --shadow-modal: 0 25px 80px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.06);
+      }
+
+      body {
+        font-family: 'Plus Jakarta Sans', sans-serif;
+        background: var(--bg0);
+        color: var(--t1);
+        min-height: 100vh;
+        overflow-x: hidden;
+      }
+
+      /* Global mesh gradient */
+      body::before {
+        content: '';
+        position: fixed; inset: 0; z-index: 0; pointer-events: none;
+        background:
+          radial-gradient(ellipse 70% 50% at 10% 0%, rgba(45,212,191,0.07) 0%, transparent 55%),
+          radial-gradient(ellipse 50% 40% at 90% 100%, rgba(124,58,237,0.06) 0%, transparent 55%),
+          radial-gradient(ellipse 40% 35% at 60% 40%, rgba(245,158,11,0.03) 0%, transparent 60%);
+      }
+
+      /* Dot grid overlay */
+      body::after {
+        content: '';
+        position: fixed; inset: 0; z-index: 0; pointer-events: none; opacity: 0.4;
+        background-image: radial-gradient(circle, rgba(255,255,255,0.15) 1px, transparent 1px);
+        background-size: 28px 28px;
+        mask-image: radial-gradient(ellipse 80% 80% at center, black 30%, transparent 100%);
+      }
+
+      #root { position: relative; z-index: 1; }
+
+      ::-webkit-scrollbar { width: 4px; }
+      ::-webkit-scrollbar-track { background: transparent; }
+      ::-webkit-scrollbar-thumb { background: rgba(45,212,191,0.3); border-radius: 4px; }
+      ::-webkit-scrollbar-thumb:hover { background: rgba(45,212,191,0.55); }
+
+      input, textarea, select {
+        font-family: 'Plus Jakarta Sans', sans-serif !important;
+      }
+      input:focus, textarea:focus, select:focus {
+        border-color: rgba(45,212,191,0.5) !important;
+        box-shadow: 0 0 0 3px rgba(45,212,191,0.1) !important;
+        outline: none !important;
+      }
+
+      @keyframes float {
+        0%, 100% { transform: translateY(0); }
+        50% { transform: translateY(-6px); }
+      }
+      @keyframes shimmer {
+        0% { background-position: -200% center; }
+        100% { background-position: 200% center; }
+      }
+      @keyframes fadeUp {
+        from { opacity: 0; transform: translateY(16px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+      @keyframes pulse-ring {
+        0% { transform: scale(1); opacity: 0.6; }
+        100% { transform: scale(1.8); opacity: 0; }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>
