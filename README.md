@@ -1,6 +1,6 @@
 # 🌱 CarbonVault — Carbon Credit Marketplace Platform
 
-A comprehensive, full-stack *B2B*carbon credit marketplace** connecting NGOs, corporate buyers, and environmental projects in a **unified ecosystem**. Features blockchain-ready architecture, satellite-based verification (NDVI/LST), fraud detection, MRV-engine integration, and professional ESG reporting.
+A comprehensive, full-stack **carbon credit marketplace** connecting NGOs, corporate buyers, and environmental projects in a **unified ecosystem**. Features blockchain-ready architecture, satellite-based verification (NDVI/LST), fraud detection, MRV-engine integration, and professional ESG reporting.
 
 ---
 
