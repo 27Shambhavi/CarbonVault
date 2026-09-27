@@ -16,7 +16,11 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 # Create folder for storing images
-UPLOAD_FOLDER = "uploads"
+try:
+    from core.config import UPLOAD_DIR
+    UPLOAD_FOLDER = str(UPLOAD_DIR)
+except ImportError:
+    UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.dirname(__file__)), "uploads")
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 # Credit calculator instance

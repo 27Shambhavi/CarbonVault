@@ -20,16 +20,20 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
+from credit_calculation.credits_module.db import SessionLocal
+from credit_calculation.credits_module.db_models import Project, FundingDetails, Transaction, Wallet
+
 # ── Razorpay SDK setup ──────────────────────────────────────────────────
 # ── Razorpay SDK setup ──────────────────────────────────────────────────
 try:
-    import razorpay
+    from core.config import RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET, INR_USD_RATE
+except ImportError:
+    RAZORPAY_KEY_ID = os.getenv("RAZORPAY_KEY_ID", "rzp_test_SXyS0q18CPS1p1")
+    RAZORPAY_KEY_SECRET = os.getenv("RAZORPAY_KEY_SECRET", "9m0Tq4EB8zFLXKJUgzgmCy9I")
+    INR_USD_RATE = float(os.getenv("INR_USD_RATE", "83.5"))
 
-    # ============================================================
-    # ✅ 👉 PUT YOUR RAZORPAY KEYS HERE (BEST FOR HACKATHON DEMO)
-    # ============================================================
-    RAZORPAY_KEY_ID = "rzp_test_SXyS0q18CPS1p1"        # 👈 PASTE YOUR KEY_ID HERE
-    RAZORPAY_KEY_SECRET = "9m0Tq4EB8zFLXKJUgzgmCy9I"    # 👈 PASTE YOUR SECRET HERE
+try:
+    import razorpay
 
     if RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET:
         razorpay_client = razorpay.Client(auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET))
@@ -40,11 +44,6 @@ try:
 
 except ImportError:
     razorpay_client = None
-
-    # ❌ REMOVE HARDCODED KEYS (SECURITY RISK)
-    RAZORPAY_KEY_ID = ""
-    RAZORPAY_KEY_SECRET = ""
-
     logger.warning("razorpay package not installed — payment will use fallback mode")
 
 
@@ -171,6 +170,10 @@ def buy_credits(req: BuyCreditsRequest):
             FundingDetails.project_id == req.project_id
         ).first()
         price_per_ton = funding.price_per_ton if funding else project.price or 12.0
+
+        # Deduct purchased credits from project
+        if project.credits is not None:
+            project.credits = max(0.0, float(project.credits) - float(req.quantity))
 
         # Create transaction record
         txn = Transaction(

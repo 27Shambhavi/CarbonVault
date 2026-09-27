@@ -14,7 +14,7 @@ export default function AdminUsers() {
     (u.name.toLowerCase().includes(search.toLowerCase())||u.email.toLowerCase().includes(search.toLowerCase()))
   );
 
-  const inp = {background:'rgba(255,255,255,0.04)',border:`1px solid ${T.border}`,borderRadius:9,padding:'10px 14px',color:T.t1,fontSize:14,outline:'none',width:'100%',fontFamily:'Plus Jakarta Sans, sans-serif'};
+  const inp = {background:'var(--input-bg, rgba(255,255,255,0.04))',border:`1px solid ${T.border}`,borderRadius:9,padding:'10px 14px',color:T.t1,fontSize:14,outline:'none',width:'100%',fontFamily:'Plus Jakarta Sans, sans-serif'};
 
   return (
     <div style={{padding:28}}>
@@ -28,7 +28,7 @@ export default function AdminUsers() {
           {l:'Buyers',     value:mockUsers.filter(u=>u.role==='buyer').length, color:T.violetLL},
           {l:'Suspended',  value:mockUsers.filter(u=>u.status==='suspended').length, color:T.roseL},
         ].map(({l,value,color})=>(
-          <div key={l} style={{background:'rgba(255,255,255,0.03)',border:`1px solid ${T.border}`,borderRadius:12,padding:'16px 18px',textAlign:'center',position:'relative',overflow:'hidden'}}>
+          <div key={l} style={{background:'var(--card-bg, rgba(255,255,255,0.03))',border:`1px solid ${T.border}`,borderRadius:12,padding:'16px 18px',textAlign:'center',position:'relative',overflow:'hidden',boxShadow:'var(--shadow-card)'}}>
             <div style={{position:'absolute',top:0,left:0,right:0,height:1,background:`linear-gradient(90deg,transparent,${color}40,transparent)`}}/>
             <div style={{fontSize:30,fontWeight:800,fontFamily:'Fraunces, serif',color,letterSpacing:'-1px'}}>{value}</div>
             <div style={{fontSize:10,color:T.t3,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.6px',marginTop:5}}>{l}</div>

@@ -3,6 +3,7 @@ import { MapContainer, TileLayer, Polygon, Popup, CircleMarker, useMap } from 'r
 import { latLngBounds } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { T } from '../UI.jsx';
+import { useApp } from '../../AppContext.jsx';
 import { wktPolygonToLeafletRings } from '../../utils/wktToLeaflet.js';
 import { geojsonToLeafletPolygonPositions } from './geojsonLeaflet.js';
 
@@ -18,8 +19,8 @@ function toTuple(c) {
   return [10, 20];
 }
 
-const TILE_URL = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
-const TILE_ATTRIB = '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/">CARTO</a>';
+const TILE_URL = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+const TILE_ATTRIB = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
 
 function statusStyle(status, selected, adminMode) {
   const s = (status || 'pending').toLowerCase();
@@ -147,13 +148,16 @@ export function ProjectMap({
     setMapReady(true);
   }, []);
 
+  const appContext = useApp();
+  const theme = appContext?.theme || 'dark';
+
   const centerTuple = toTuple(center);
 
   const shellStyle = {
     position: 'relative',
     borderRadius: 12,
     overflow: 'hidden',
-    background: '#0d1120',
+    background: 'var(--bg2, #0d1120)',
     border: `1px solid ${T.border}`,
     height,
   };
@@ -180,11 +184,11 @@ export function ProjectMap({
       <MapContainer
         center={centerTuple}
         zoom={zoom ?? 2}
-        style={{ height: '100%', width: '100%', background: '#0d1120' }}
+        style={{ height: '100%', width: '100%', background: 'var(--bg2, #0d1120)' }}
         scrollWheelZoom
         worldCopyJump
       >
-        <TileLayer attribution={TILE_ATTRIB} url={TILE_URL} />
+        <TileLayer attribution={TILE_ATTRIB} url={TILE_URL} maxZoom={19} />
         {bounds && <FitBounds bounds={bounds} />}
 
         {features.flatMap((f) => {
@@ -272,12 +276,13 @@ export function ProjectMap({
             left: 12,
             display: 'flex',
             gap: 14,
-            background: 'rgba(8,11,18,0.9)',
+            background: theme === 'light' ? 'rgba(255,255,255,0.92)' : 'rgba(8,11,18,0.92)',
             borderRadius: 8,
             padding: '7px 12px',
             border: `1px solid ${T.border}`,
             zIndex: 1000,
             pointerEvents: 'none',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
           }}
         >
           {[
