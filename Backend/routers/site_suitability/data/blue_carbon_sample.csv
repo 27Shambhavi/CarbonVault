@@ -1,0 +1,6 @@
+site_id,latitude,longitude,elevation_m,mean_temp_C,annual_precip_mm,ndvi_mean,soil_type,soil_org_c_t_ha,tidal_range_m,salinity_ppt,water_depth_m,flood_frequency_score,land_cover_class,protected_area_flag,pop_density_per_km2,urban_distance_m,industrial_distance_m,cyclone_exposure_score,sea_level_rise_risk_score,suitability_score,recommended_ecosystem,carbon_potential_tCO2_per_ha_per_year,plantation_cost_inr_per_ha,maintenance_cost_inr_per_yr,roi_percent
+4f078aa2-56dc-4a10-9890-3e48f7df87cd,19.07,72.87,1.2,28.5,2200,0.55,silty_clay,45,2.1,30,0.8,0.6,coastal_wetland,0,5000,1200,5000,0.6,0.7,82,mangrove,10,250000,15000,60
+9edb2948-fbb1-4353-91bd-43bf2b11c2a4,34.05,-118.24,0.5,18.1,380,0.25,sandy,12,1.2,35,0.4,0.3,urban_coast,0,3300,200,800,0.1,0.8,42,seagrass,6,400000,30000,12
+7fa95ea3-ad78-4d25-96a0-bb54b36b608d,-33.87,151.21,0.8,22.0,1200,0.45,peaty,80,1.5,28,0.6,0.4,salt_marsh,1,1200,5000,20000,0.2,0.5,74,salt_marsh,7,180000,12000,45
+32119eb3-176e-454e-946b-77ad5d20605b,1.29,103.85,0.9,29.0,2400,0.62,clayey,60,1.9,32,0.7,0.7,coastal_wetland,0,8000,800,4000,0.5,0.6,88,mangrove,12,300000,20000,72
+35681735-b805-4563-b6df-a56328ba53ed,51.5,-0.12,0.4,11.5,600,0.18,sandy_silt,20,2.5,31,0.3,0.8,coastal_marsh,0,5500,1500,2500,0.05,0.7,58,salt_marsh,5,200000,10000,28

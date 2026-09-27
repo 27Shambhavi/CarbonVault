@@ -1,0 +1,53 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+
+# Virtual Environments
+venv/
+.venv/
+Backend/venv/
+Backend/.venv/
+env/
+
+# Environment files
+.env
+.env.*
+Backend/.env
+Backend/fraud_detection_new/app/.env
+
+# Node
+node_modules/
+npm-debug.log*
+
+# Vite / Frontend build
+Frontend/dist/
+Frontend/.vite/
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Uploads (runtime files)
+uploads/
+Backend/uploads/
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE / Editor
+.vscode/
+.idea/
+*.suo
+*.user
+
+# Logs
+*.log
+logs/
