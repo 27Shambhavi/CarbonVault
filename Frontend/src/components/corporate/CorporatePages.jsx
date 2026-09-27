@@ -2,11 +2,11 @@ import { useState, useEffect } from 'react';
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { mockTransactions, mockGRSData, mockMarketplace, mockESGReport, generateMockESGReport } from '../../data/mockData.js';
 import { fetchAllProjects, fetchMapProjects, fetchMarketplaceListings, createBuyRequest, createOrder, buyCredits, fetchTransactions, fetchWallet, generateESGReport } from '../../services/api.js';
-import { Card, SectionHeader, Table, Badge, MRVScore, KPICard, Modal, Btn, T, ScoreGauge } from '../UI.jsx';
+import { Card, SectionHeader, Table, Badge, MRVScore, KPICard, Modal, Btn, T, ScoreGauge, withAlpha } from '../UI.jsx';
 import { ProjectMap } from '../GoogleMap.jsx';
 import { Package, FileText, Wallet as WalletIcon, TrendingUp, MapPin, Download, Star, ShoppingCart, Leaf, DollarSign, CheckCircle, AlertCircle } from 'lucide-react';
 
-const inp = { background:'rgba(255,255,255,0.04)', border:`1px solid ${T.border}`, borderRadius:9, padding:'10px 14px', color:T.t1, fontSize:14, outline:'none', width:'100%', fontFamily:'Plus Jakarta Sans, sans-serif' };
+const inp = { background:'var(--input-bg, rgba(255,255,255,0.04))', border:`1px solid ${T.border}`, borderRadius:9, padding:'10px 14px', color:T.t1, fontSize:14, outline:'none', width:'100%', fontFamily:'Plus Jakarta Sans, sans-serif' };
 
 export function CorporateDashboard() {
   const [projects, setProjects] = useState([]);
@@ -63,7 +63,7 @@ export function CorporateDashboard() {
           {[{l:'Transparency',v:mockGRSData.transparency},{l:'Quality',v:mockGRSData.quality},{l:'Commitment',v:mockGRSData.commitment}].map(({l,v})=>(
             <div key={l} style={{marginBottom:10}}>
               <div style={{display:'flex',justifyContent:'space-between',marginBottom:4,fontSize:12}}><span style={{color:T.t3}}>{l}</span><span style={{color:T.teal,fontWeight:700}}>{v}%</span></div>
-              <div style={{height:4,background:'rgba(255,255,255,0.07)',borderRadius:3,overflow:'hidden'}}><div style={{height:'100%',width:`${v}%`,background:`linear-gradient(90deg,${T.teal}70,${T.teal})`,borderRadius:3}}/></div>
+              <div style={{height:4,background:'var(--border, rgba(255,255,255,0.07))',borderRadius:3,overflow:'hidden'}}><div style={{height:'100%',width:`${v}%`,background:`linear-gradient(90deg,${withAlpha(T.teal, '70', 60)},${T.teal})`,borderRadius:3}}/></div>
             </div>
           ))}
         </Card>
@@ -354,7 +354,7 @@ export function CorporateWallet() {
 
 const ChartTooltip=({active,payload,label})=>{
   if(!active||!payload?.length)return null;
-  return(<div style={{background:'#0c1020',border:`1px solid rgba(45,212,191,0.2)`,borderRadius:10,padding:'10px 14px'}}>
+  return(<div style={{background:'var(--card-bg, #0c1020)',border:`1px solid ${T.border2}`,borderRadius:10,padding:'10px 14px',boxShadow:'var(--shadow-modal)'}}>
     <div style={{color:T.teal,fontSize:11,fontWeight:700,marginBottom:4}}>{label}</div>
     {payload.map((p,i)=><div key={i} style={{color:T.t2,fontSize:12}}><span style={{color:p.color||T.t1,fontWeight:700}}>{typeof p.value==='number'?p.value.toLocaleString():p.value}</span></div>)}
   </div>);
@@ -668,8 +668,8 @@ export function CorporateESG() {
                     <div style={{fontSize:42,fontWeight:900,color:T.teal,fontFamily:'Fraunces, serif'}}>{(report.governance.compliance_score * 100).toFixed(0)}</div>
                     <div style={{fontSize:12,color:T.t3,marginBottom:8}}>/100</div>
                   </div>
-                  <div style={{height:6,background:'rgba(255,255,255,0.07)',borderRadius:3,marginTop:10,overflow:'hidden'}}>
-                    <div style={{height:'100%',width:`${report.governance.compliance_score * 100}%`,background:`linear-gradient(90deg,${T.teal},${T.tealDD})`,borderRadius:3,boxShadow:`0 0 8px ${T.teal}60`}}/>
+                  <div style={{height:6,background:'var(--border, rgba(255,255,255,0.07))',borderRadius:3,marginTop:10,overflow:'hidden'}}>
+                    <div style={{height:'100%',width:`${report.governance.compliance_score * 100}%`,background:`linear-gradient(90deg,${T.teal},${T.tealDD})`,borderRadius:3,boxShadow:`0 0 8px ${withAlpha(T.teal, '60', 40)}`}}/>
                   </div>
                 </div>
                 <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>

@@ -9,10 +9,30 @@ router = APIRouter()
 
 # -------------------------
 # In-Memory Database
-# (Replace with real DB later)
 # -------------------------
 
-corporates: Dict[str, dict] = {}
+corporates: Dict[str, dict] = {
+    "Microsoft Sustainability": {
+        "GRS": 88.5,
+        "Badge": "Platinum",
+        "Breakdown": {"Impact Score": 92.0, "Quality Score": 89.5, "Commitment Score": 85.0, "Credibility Score": 87.0}
+    },
+    "Google Carbon Team": {
+        "GRS": 84.2,
+        "Badge": "Gold",
+        "Breakdown": {"Impact Score": 88.0, "Quality Score": 85.0, "Commitment Score": 80.0, "Credibility Score": 83.5}
+    },
+    "HSBC Green Finance": {
+        "GRS": 76.8,
+        "Badge": "Gold",
+        "Breakdown": {"Impact Score": 79.0, "Quality Score": 77.0, "Commitment Score": 75.0, "Credibility Score": 76.0}
+    },
+    "Shell Renewables": {
+        "GRS": 68.4,
+        "Badge": "Silver",
+        "Breakdown": {"Impact Score": 70.0, "Quality Score": 69.0, "Commitment Score": 65.0, "Credibility Score": 69.0}
+    }
+}
 
 
 # -------------------------

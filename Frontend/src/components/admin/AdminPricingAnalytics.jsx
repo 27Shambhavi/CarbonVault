@@ -1,12 +1,12 @@
 import { useState } from 'react';
 import { AreaChart, Area, LineChart, Line, BarChart, Bar, RadarChart, Radar, PolarGrid, PolarAngleAxis, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { mockPricing, mockCreditsOverTime, mockCreditsByType, mockResilienceData } from '../../data/mockData.js';
-import { Card, SectionHeader, KPICard, Btn, T } from '../UI.jsx';
+import { Card, SectionHeader, KPICard, Btn, T, withAlpha } from '../UI.jsx';
 import { DollarSign, TrendingUp, Package, Activity, Save, RotateCcw } from 'lucide-react';
 
 const CT=({active,payload,label})=>{
   if(!active||!payload?.length)return null;
-  return(<div style={{background:'#0c1020',border:`1px solid rgba(45,212,191,0.2)`,borderRadius:10,padding:'10px 14px'}}>
+  return(<div style={{background:'var(--card-bg, #0c1020)',border:`1px solid ${T.border2}`,borderRadius:10,padding:'10px 14px',boxShadow:'var(--shadow-modal)'}}>
     <div style={{color:T.teal,fontSize:11,fontWeight:700,marginBottom:4}}>{label}</div>
     {payload.map((p,i)=><div key={i} style={{color:T.t2,fontSize:12}}><span style={{color:T.t1,fontWeight:700}}>{typeof p.value==='number'?p.value.toLocaleString():p.value}</span></div>)}
   </div>);
@@ -63,8 +63,8 @@ export function AdminPricing() {
         <div>
           <Card style={{marginBottom:16}}>
             <SectionHeader title="Live Price Preview"/>
-            <div style={{background:'linear-gradient(135deg,rgba(45,212,191,0.08),rgba(45,212,191,0.04))',border:`1px solid rgba(45,212,191,0.18)`,borderRadius:13,padding:24,marginBottom:18,textAlign:'center',position:'relative',overflow:'hidden'}}>
-              <div style={{position:'absolute',top:0,left:0,right:0,height:1,background:`linear-gradient(90deg,transparent,${T.teal}60,transparent)`}}/>
+            <div style={{background:'linear-gradient(135deg,color-mix(in srgb, var(--teal) 8%, transparent),color-mix(in srgb, var(--teal) 4%, transparent))',border:`1px solid color-mix(in srgb, var(--teal) 22%, transparent)`,borderRadius:13,padding:24,marginBottom:18,textAlign:'center',position:'relative',overflow:'hidden'}}>
+              <div style={{position:'absolute',top:0,left:0,right:0,height:1,background:`linear-gradient(90deg,transparent,${withAlpha(T.teal, '60', 50)},transparent)`}}/>
               <div style={{fontSize:10,color:T.teal,textTransform:'uppercase',letterSpacing:'1px',marginBottom:8}}>Effective Market Price</div>
               <div style={{fontSize:58,fontWeight:900,color:T.tealL,fontFamily:'Fraunces, serif',letterSpacing:'-2px',lineHeight:1,textShadow:`0 0 40px rgba(45,212,191,0.6)`}}>${final}</div>
               <div style={{fontSize:12,color:T.t3,marginTop:6}}>per tonne CO₂e</div>

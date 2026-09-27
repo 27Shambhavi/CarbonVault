@@ -7,7 +7,7 @@ import {
   LayoutDashboard, Users, FolderCheck, DollarSign, BarChart3,
   Map, Upload, ShieldCheck, TreePine, ShoppingCart,
   Wallet, FileText, Star, Globe, Trophy, FileSearch, Award, Plus,
-  Activity, TrendingUp, Layers
+  Activity, TrendingUp, Layers, Sun, Moon
 } from 'lucide-react';
 
 const adminNav = [
@@ -30,12 +30,21 @@ const corporateNav = [
   {id:'wallet',      label:'My Wallet',   icon:Wallet},
   {id:'esg',         label:'ESG Reports', icon:FileText},
 ];
-const navMap = {admin:adminNav, ngo:ngoNav, corporate:corporateNav};
+const publicNav = [
+  {id:'dashboard',    label:'Impact Stats',     icon:LayoutDashboard},
+  {id:'leaderboard',  label:'Leaderboard',      icon:Trophy},
+  {id:'projects',     label:'Marketplace View', icon:ShoppingCart},
+  {id:'climate',      label:'Climate Insights', icon:Globe},
+  {id:'certificates', label:'Certificates',     icon:Award},
+  {id:'audit',        label:'Audit Trail',      icon:FileSearch},
+];
+const navMap = {admin:adminNav, ngo:ngoNav, corporate:corporateNav, public:publicNav};
 
 const RC = {
   admin:     {color:T.goldL,    bg:'rgba(245,158,11,0.1)',   border:'rgba(251,191,36,0.22)',   label:'Administrator'},
   ngo:       {color:T.skyL,     bg:'rgba(56,189,248,0.1)',   border:'rgba(56,189,248,0.22)',   label:'NGO Organization'},
   corporate: {color:T.violetLL, bg:'rgba(167,139,250,0.1)',  border:'rgba(167,139,250,0.22)',  label:'Corporate Buyer'},
+  public:    {color:T.emeraldL, bg:'rgba(16,185,129,0.1)',   border:'rgba(16,185,129,0.22)',   label:'Public Transparency'},
 };
 
 export function Sidebar() {
@@ -45,9 +54,9 @@ export function Sidebar() {
   const rc = RC[user.role] || RC.admin;
 
   return (
-    <div style={{
+    <div className="no-print" style={{
       width:sidebarOpen?252:0, minHeight:'100vh',
-      background:'rgba(4,5,8,0.96)', backdropFilter:'blur(24px)',
+      background:'var(--sidebar-bg, rgba(4,5,8,0.96))', backdropFilter:'blur(24px)',
       borderRight:`1px solid ${T.border}`,
       display:'flex', flexDirection:'column',
       overflow:'hidden', transition:'width 0.28s cubic-bezier(0.4,0,0.2,1)', flexShrink:0,
@@ -60,14 +69,14 @@ export function Sidebar() {
       <div style={{padding:'20px 18px',borderBottom:`1px solid ${T.border}`,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
         <div style={{display:'flex',alignItems:'center',gap:10}}>
           <div style={{width:36,height:36,background:`linear-gradient(135deg, ${T.teal}, ${T.tealDD})`,borderRadius:10,display:'flex',alignItems:'center',justifyContent:'center',boxShadow:`0 4px 16px rgba(45,212,191,0.35), inset 0 1px 0 rgba(255,255,255,0.2)`}}>
-            <Leaf size={16} color="#021a17" strokeWidth={2.5}/>
+            <Leaf size={16} color="#ffffff" strokeWidth={2.5}/>
           </div>
           <div>
             <div style={{fontFamily:'Fraunces, serif',fontWeight:900,fontSize:17,color:T.t1,letterSpacing:'-0.3px',whiteSpace:'nowrap'}}>CarbonVault</div>
             <div style={{fontSize:9,color:T.teal,fontWeight:700,letterSpacing:'1.5px',textTransform:'uppercase',marginTop:0}}>Carbon Intelligence</div>
           </div>
         </div>
-        <button onClick={()=>setSidebarOpen(false)} style={{background:'rgba(255,255,255,0.05)',border:`1px solid ${T.border}`,color:T.t3,cursor:'pointer',width:26,height:26,borderRadius:7,display:'flex',alignItems:'center',justifyContent:'center',transition:'all 0.15s'}}
+        <button onClick={()=>setSidebarOpen(false)} style={{background:'var(--glass2, rgba(255,255,255,0.05))',border:`1px solid ${T.border}`,color:T.t3,cursor:'pointer',width:26,height:26,borderRadius:7,display:'flex',alignItems:'center',justifyContent:'center',transition:'all 0.15s'}}
           onMouseEnter={e=>e.currentTarget.style.borderColor=T.border2}
           onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
           <X size={13}/>
@@ -75,7 +84,7 @@ export function Sidebar() {
       </div>
 
       {/* Role pill */}
-      <div style={{padding:'13px 14px',borderBottom:`1px solid rgba(255,255,255,0.04)`}}>
+      <div style={{padding:'13px 14px',borderBottom:`1px solid var(--border)`}}>
         <div style={{background:rc.bg,border:`1px solid ${rc.border}`,borderRadius:10,padding:'9px 13px'}}>
           <div style={{fontSize:9,color:`${rc.color}99`,fontWeight:800,letterSpacing:'1px',textTransform:'uppercase'}}>{rc.label}</div>
           <div style={{fontSize:13,color:T.t1,fontWeight:600,marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{user.org}</div>
@@ -91,14 +100,14 @@ export function Sidebar() {
             <button key={id} onClick={()=>setPage(id)} style={{
               width:'100%',display:'flex',alignItems:'center',gap:9,padding:'9px 11px',
               borderRadius:9,marginBottom:1,border:'none',cursor:'pointer',textAlign:'left',
-              background:active?`${rc.color}12`:'transparent',
+              background:active?`color-mix(in srgb, ${rc.color} 14%, transparent)`:'transparent',
               color:active?rc.color:T.t3,
               fontWeight:active?600:400,fontSize:13,
               transition:'all 0.14s',whiteSpace:'nowrap',
               fontFamily:'Plus Jakarta Sans, sans-serif',
               borderLeft:`2px solid ${active?rc.color:'transparent'}`,
             }}
-            onMouseEnter={e=>{if(!active){e.currentTarget.style.background='rgba(255,255,255,0.04)';e.currentTarget.style.color=T.t2;}}}
+            onMouseEnter={e=>{if(!active){e.currentTarget.style.background='var(--glass2, rgba(255,255,255,0.04))';e.currentTarget.style.color=T.t2;}}}
             onMouseLeave={e=>{if(!active){e.currentTarget.style.background='transparent';e.currentTarget.style.color=T.t3;}}}>
               <Icon size={14}/>
               <span style={{flex:1}}>{label}</span>
@@ -109,9 +118,9 @@ export function Sidebar() {
       </nav>
 
       {/* User card */}
-      <div style={{padding:'12px 14px',borderTop:`1px solid rgba(255,255,255,0.04)`}}>
-        <div style={{display:'flex',alignItems:'center',gap:9,padding:10,borderRadius:10,background:'rgba(255,255,255,0.03)',border:`1px solid ${T.border}`}}>
-          <div style={{width:30,height:30,borderRadius:'50%',background:`${rc.color}1a`,border:`1px solid ${rc.color}30`,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+      <div style={{padding:'12px 14px',borderTop:`1px solid var(--border)`}}>
+        <div style={{display:'flex',alignItems:'center',gap:9,padding:10,borderRadius:10,background:'var(--glass, rgba(255,255,255,0.03))',border:`1px solid ${T.border}`}}>
+          <div style={{width:30,height:30,borderRadius:'50%',background:`color-mix(in srgb, ${rc.color} 15%, transparent)`,border:`1px solid color-mix(in srgb, ${rc.color} 30%, transparent)`,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
             <User size={13} color={rc.color}/>
           </div>
           <div style={{flex:1,minWidth:0}}>
@@ -125,24 +134,24 @@ export function Sidebar() {
 }
 
 export function Navbar() {
-  const {user,page,setPage,setNotifOpen,sidebarOpen,setSidebarOpen,logout} = useApp();
+  const {user,page,setPage,setNotifOpen,sidebarOpen,setSidebarOpen,logout,theme,toggleTheme} = useApp();
   const [menuOpen,setMenuOpen] = useState(false);
   if (!user) return null;
   const unread = mockNotifications.filter(n=>!n.read).length;
   const rc = RC[user.role] || RC.admin;
   const pageTitle = (navMap[user.role]||[]).find(n=>n.id===page)?.label || (page==='settings'?'Settings':page==='profile'?'Profile':'Dashboard');
 
-  const iconBtn = (onClick, children) => (
-    <button onClick={onClick} style={{background:'rgba(255,255,255,0.04)',border:`1px solid ${T.border}`,borderRadius:9,padding:8,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',transition:'all 0.15s'}}
-      onMouseEnter={e=>{e.currentTarget.style.borderColor=`rgba(45,212,191,0.35)`;e.currentTarget.style.background='rgba(45,212,191,0.06)';}}
-      onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.background='rgba(255,255,255,0.04)';}}>
+  const iconBtn = (onClick, children, title) => (
+    <button onClick={onClick} title={title} style={{background:'var(--glass2, rgba(255,255,255,0.04))',border:`1px solid ${T.border}`,borderRadius:9,padding:8,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',transition:'all 0.15s'}}
+      onMouseEnter={e=>{e.currentTarget.style.borderColor=T.teal;e.currentTarget.style.background='color-mix(in srgb, var(--teal) 10%, transparent)';}}
+      onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.background='var(--glass2, rgba(255,255,255,0.04))';}}>
       {children}
     </button>
   );
 
   return (
-    <div style={{height:58,background:'rgba(4,5,8,0.9)',backdropFilter:'blur(20px)',borderBottom:`1px solid ${T.border}`,display:'flex',alignItems:'center',padding:'0 20px',gap:10,position:'sticky',top:0,zIndex:100}}>
-      {!sidebarOpen && iconBtn(()=>setSidebarOpen(true), <Menu size={15} color={T.teal}/>)}
+    <div className="no-print" style={{height:58,background:'var(--topbar-bg, rgba(4,5,8,0.9))',backdropFilter:'blur(20px)',borderBottom:`1px solid ${T.border}`,display:'flex',alignItems:'center',padding:'0 20px',gap:10,position:'sticky',top:0,zIndex:100}}>
+      {!sidebarOpen && iconBtn(()=>setSidebarOpen(true), <Menu size={15} color={T.teal}/>, 'Open Menu')}
 
       <div style={{flex:1,display:'flex',alignItems:'center',gap:6}}>
         <span style={{fontSize:12,color:T.t3}}>{rc.label}</span>
@@ -150,32 +159,39 @@ export function Navbar() {
         <span style={{fontSize:13,fontWeight:600,color:T.t2}}>{pageTitle}</span>
       </div>
 
+      {/* Theme Toggle (Dark / Light) */}
+      {iconBtn(
+        toggleTheme,
+        theme === 'light' ? <Moon size={15} color={T.violet} /> : <Sun size={15} color={T.goldL} />,
+        theme === 'light' ? 'Switch to Dark Mode' : 'Switch to Light Mode'
+      )}
+
       {/* Bell */}
       <div style={{position:'relative'}}>
-        {iconBtn(()=>setNotifOpen(true), <Bell size={15} color={T.teal}/>)}
+        {iconBtn(()=>setNotifOpen(true), <Bell size={15} color={T.teal}/>, 'Notifications')}
         {unread>0 && (
-          <div style={{position:'absolute',top:-3,right:-3,width:16,height:16,background:`linear-gradient(135deg,${T.rose},#dc2626)`,borderRadius:'50%',fontSize:9,fontWeight:800,color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',boxShadow:`0 2px 8px rgba(244,63,94,0.5), 0 0 0 2px #040508`}}>{unread}</div>
+          <div style={{position:'absolute',top:-3,right:-3,width:16,height:16,background:`linear-gradient(135deg,${T.rose},#dc2626)`,borderRadius:'50%',fontSize:9,fontWeight:800,color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',boxShadow:`0 2px 8px rgba(244,63,94,0.5), 0 0 0 2px var(--bg0)`}}>{unread}</div>
         )}
       </div>
 
-      {iconBtn(()=>setPage('settings'), <Settings size={15} color={T.teal}/>)}
+      {iconBtn(()=>setPage('settings'), <Settings size={15} color={T.teal}/>, 'Settings')}
 
       {/* User menu */}
       <div style={{position:'relative'}}>
         <button onClick={()=>setMenuOpen(!menuOpen)} style={{background:rc.bg,border:`1px solid ${rc.border}`,borderRadius:9,padding:'6px 13px',cursor:'pointer',display:'flex',alignItems:'center',gap:8,transition:'all 0.15s'}}>
-          <div style={{width:22,height:22,borderRadius:'50%',background:`${rc.color}1a`,display:'flex',alignItems:'center',justifyContent:'center'}}>
+          <div style={{width:22,height:22,borderRadius:'50%',background:`color-mix(in srgb, ${rc.color} 15%, transparent)`,display:'flex',alignItems:'center',justifyContent:'center'}}>
             <User size={11} color={rc.color}/>
           </div>
           <span style={{fontSize:12,fontWeight:700,color:rc.color}}>{user.name.split(' ')[0]}</span>
         </button>
         {menuOpen && (
-          <div style={{position:'absolute',right:0,top:'calc(100% + 8px)',background:'#090c18',border:`1px solid ${T.border2}`,borderRadius:12,padding:7,minWidth:175,zIndex:200,boxShadow:'0 16px 48px rgba(0,0,0,0.6)'}}>
+          <div style={{position:'absolute',right:0,top:'calc(100% + 8px)',background:'var(--menu-bg, #090c18)',border:`1px solid ${T.border2}`,borderRadius:12,padding:7,minWidth:175,zIndex:200,boxShadow:'var(--shadow-modal)'}}>
             {[
               {label:'Profile',icon:User,color:T.t2,action:()=>{setPage('profile');setMenuOpen(false);}},
               {label:'Logout',icon:LogOut,color:T.roseL,action:logout},
             ].map(({label,icon:Icon,color,action})=>(
               <button key={label} onClick={action} style={{width:'100%',display:'flex',alignItems:'center',gap:8,padding:'9px 11px',background:'none',border:'none',color,cursor:'pointer',borderRadius:8,fontSize:13,fontFamily:'Plus Jakarta Sans,sans-serif',transition:'background 0.12s'}}
-                onMouseEnter={e=>e.currentTarget.style.background='rgba(255,255,255,0.05)'}
+                onMouseEnter={e=>e.currentTarget.style.background='var(--glass2, rgba(255,255,255,0.05))'}
                 onMouseLeave={e=>e.currentTarget.style.background='none'}>
                 <Icon size={13}/>{label}
               </button>
@@ -194,19 +210,19 @@ export function NotificationCenter() {
   const tc = {approval:T.emeraldL,warning:T.roseL,success:T.teal,info:T.skyL};
 
   return (
-    <div style={{position:'fixed',inset:0,background:'rgba(4,5,8,0.65)',backdropFilter:'blur(6px)',zIndex:500}}
+    <div className="no-print" style={{position:'fixed',inset:0,background:'var(--modal-backdrop, rgba(4,5,8,0.65))',backdropFilter:'blur(6px)',zIndex:500}}
       onClick={e=>e.target===e.currentTarget&&setNotifOpen(false)}>
-      <div style={{position:'absolute',right:18,top:68,width:370,background:'#090c18',border:`1px solid rgba(45,212,191,0.18)`,borderRadius:16,boxShadow:'0 24px 64px rgba(0,0,0,0.65)'}}>
+      <div style={{position:'absolute',right:18,top:68,width:370,background:'var(--menu-bg, #090c18)',border:`1px solid var(--border2)`,borderRadius:16,boxShadow:'var(--shadow-modal)'}}>
         <div style={{padding:'15px 18px',borderBottom:`1px solid ${T.border}`,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
           <span style={{fontWeight:700,color:T.t1,fontSize:14}}>Notifications</span>
-          <button onClick={()=>setNotifs(notifs.map(n=>({...n,read:true})))} style={{background:`rgba(45,212,191,0.08)`,border:`1px solid rgba(45,212,191,0.2)`,borderRadius:7,padding:'3px 10px',color:T.teal,cursor:'pointer',fontSize:11,fontWeight:700}}>Mark all read</button>
+          <button onClick={()=>setNotifs(notifs.map(n=>({...n,read:true})))} style={{background:`color-mix(in srgb, var(--teal) 10%, transparent)`,border:`1px solid color-mix(in srgb, var(--teal) 25%, transparent)`,borderRadius:7,padding:'3px 10px',color:T.teal,cursor:'pointer',fontSize:11,fontWeight:700}}>Mark all read</button>
         </div>
         <div style={{maxHeight:390,overflowY:'auto'}}>
           {notifs.map(n=>(
             <div key={n.id} onClick={()=>setNotifs(notifs.map(x=>x.id===n.id?{...x,read:true}:x))}
-              style={{padding:'13px 18px',borderBottom:`1px solid rgba(255,255,255,0.03)`,cursor:'pointer',background:n.read?'transparent':'rgba(45,212,191,0.025)',transition:'background 0.12s'}}
-              onMouseEnter={e=>e.currentTarget.style.background='rgba(255,255,255,0.025)'}
-              onMouseLeave={e=>e.currentTarget.style.background=n.read?'transparent':'rgba(45,212,191,0.025)'}>
+              style={{padding:'13px 18px',borderBottom:`1px solid var(--border)`,cursor:'pointer',background:n.read?'transparent':'color-mix(in srgb, var(--teal) 4%, transparent)',transition:'background 0.12s'}}
+              onMouseEnter={e=>e.currentTarget.style.background='var(--glass2, rgba(255,255,255,0.025))'}
+              onMouseLeave={e=>e.currentTarget.style.background=n.read?'transparent':'color-mix(in srgb, var(--teal) 4%, transparent)'}>
               <div style={{display:'flex',gap:10,alignItems:'flex-start'}}>
                 <div style={{width:6,height:6,borderRadius:'50%',background:n.read?'transparent':tc[n.type],marginTop:5,flexShrink:0,boxShadow:n.read?'none':`0 0 6px ${tc[n.type]}`}}/>
                 <div>

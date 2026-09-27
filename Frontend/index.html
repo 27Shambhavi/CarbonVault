@@ -5,11 +5,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>CarbonVault — Carbon Intelligence Platform</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Cal+Sans&family=Fraunces:opsz,wght@9..144,300;9..144,700;9..144,900&display=swap" rel="stylesheet">
+    <script>
+      (function() {
+        try {
+          var t = localStorage.getItem('carbonvault_theme');
+          document.documentElement.setAttribute('data-theme', t === 'light' ? 'light' : 'dark');
+        } catch(e) {}
+      })();
+    </script>
     <style>
       *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-      :root {
+      /* ── Default Dark Theme ──────────────────────────── */
+      :root, [data-theme="dark"] {
         --bg0: #040508;
         --bg1: #080b12;
         --bg2: #0d1120;
@@ -61,6 +69,87 @@
         --shadow-card: 0 1px 3px rgba(0,0,0,0.4), 0 8px 32px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.06);
         --shadow-glow-teal: 0 0 40px rgba(45,212,191,0.12), 0 0 80px rgba(45,212,191,0.06);
         --shadow-modal: 0 25px 80px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.06);
+
+        --card-bg: rgba(13,17,32,0.72);
+        --modal-bg: #0c1020;
+        --modal-border: rgba(45,212,191,0.18);
+        --modal-backdrop: rgba(4,5,8,0.85);
+        --sidebar-bg: rgba(4,5,8,0.96);
+        --topbar-bg: rgba(4,5,8,0.9);
+        --menu-bg: #090c18;
+        --input-bg: rgba(255,255,255,0.04);
+        --input-border: rgba(255,255,255,0.07);
+        --table-header-bg: rgba(255,255,255,0.02);
+        --table-hover: rgba(45,212,191,0.03);
+        --table-border: rgba(255,255,255,0.03);
+        --badge-alpha: 0.12;
+      }
+
+      /* ── Polished Light Theme ────────────────────────── */
+      [data-theme="light"] {
+        --bg0: #f8fafc;
+        --bg1: #ffffff;
+        --bg2: #f1f5f9;
+        --bg3: #e2e8f0;
+        --bg4: #cbd5e1;
+        --glass: rgba(15,23,42,0.025);
+        --glass2: rgba(15,23,42,0.05);
+        --border: rgba(15,23,42,0.08);
+        --border2: rgba(15,23,42,0.16);
+
+        /* Teal/Cyan — primary (deepened for optimal contrast on white) */
+        --teal: #0d9488;
+        --teal-d: #0f766e;
+        --teal-dd: #115e59;
+        --teal-l: #14b8a6;
+        --teal-glow: rgba(13,148,136,0.15);
+
+        /* Gold — accent */
+        --gold: #d97706;
+        --gold-l: #b45309;
+        --gold-ll: #78350f;
+        --gold-glow: rgba(217,119,6,0.12);
+
+        /* Rose — danger */
+        --rose: #e11d48;
+        --rose-l: #be123c;
+
+        /* Violet — secondary */
+        --violet: #6d28d9;
+        --violet-l: #5b21b6;
+        --violet-ll: #4c1d95;
+
+        /* Sky — info */
+        --sky: #0284c7;
+        --sky-l: #0369a1;
+
+        /* Emerald — success */
+        --emerald: #059669;
+        --emerald-l: #047857;
+
+        /* Text: ultra-crisp slate palette */
+        --t1: #0f172a;
+        --t2: #334155;
+        --t3: #64748b;
+        --t4: #94a3b8;
+
+        --shadow-card: 0 1px 3px rgba(0,0,0,0.05), 0 10px 25px -5px rgba(0,0,0,0.04), inset 0 1px 0 rgba(255,255,255,0.8);
+        --shadow-glow-teal: 0 0 30px rgba(13,148,136,0.08);
+        --shadow-modal: 0 20px 50px rgba(0,0,0,0.12), 0 0 0 1px rgba(15,23,42,0.08);
+
+        --card-bg: #ffffff;
+        --modal-bg: #ffffff;
+        --modal-border: rgba(13,148,136,0.25);
+        --modal-backdrop: rgba(15,23,42,0.5);
+        --sidebar-bg: #ffffff;
+        --topbar-bg: rgba(255,255,255,0.92);
+        --menu-bg: #ffffff;
+        --input-bg: #f8fafc;
+        --input-border: #cbd5e1;
+        --table-header-bg: #f8fafc;
+        --table-hover: rgba(13,148,136,0.04);
+        --table-border: rgba(15,23,42,0.04);
+        --badge-alpha: 0.1;
       }
 
       body {
@@ -69,6 +158,7 @@
         color: var(--t1);
         min-height: 100vh;
         overflow-x: hidden;
+        transition: background-color 0.25s ease, color 0.25s ease;
       }
 
       /* Global mesh gradient */
@@ -81,6 +171,13 @@
           radial-gradient(ellipse 40% 35% at 60% 40%, rgba(245,158,11,0.03) 0%, transparent 60%);
       }
 
+      [data-theme="light"] body::before {
+        background:
+          radial-gradient(ellipse 70% 50% at 10% 0%, rgba(13,148,136,0.05) 0%, transparent 55%),
+          radial-gradient(ellipse 50% 40% at 90% 100%, rgba(109,40,217,0.04) 0%, transparent 55%),
+          radial-gradient(ellipse 40% 35% at 60% 40%, rgba(217,119,6,0.02) 0%, transparent 60%);
+      }
+
       /* Dot grid overlay */
       body::after {
         content: '';
@@ -90,6 +187,11 @@
         mask-image: radial-gradient(ellipse 80% 80% at center, black 30%, transparent 100%);
       }
 
+      [data-theme="light"] body::after {
+        opacity: 0.2;
+        background-image: radial-gradient(circle, rgba(15,23,42,0.4) 1px, transparent 1px);
+      }
+
       #root { position: relative; z-index: 1; }
 
       ::-webkit-scrollbar { width: 4px; }
@@ -97,13 +199,58 @@
       ::-webkit-scrollbar-thumb { background: rgba(45,212,191,0.3); border-radius: 4px; }
       ::-webkit-scrollbar-thumb:hover { background: rgba(45,212,191,0.55); }
 
+      [data-theme="light"] ::-webkit-scrollbar-thumb {
+        background: rgba(13,148,136,0.3);
+      }
+      [data-theme="light"] ::-webkit-scrollbar-thumb:hover {
+        background: rgba(13,148,136,0.55);
+      }
+
       input, textarea, select {
         font-family: 'Plus Jakarta Sans', sans-serif !important;
+        background-color: var(--input-bg);
+        color: var(--t1);
+        border: 1px solid var(--border);
       }
       input:focus, textarea:focus, select:focus {
-        border-color: rgba(45,212,191,0.5) !important;
-        box-shadow: 0 0 0 3px rgba(45,212,191,0.1) !important;
+        border-color: var(--teal) !important;
+        box-shadow: 0 0 0 3px var(--teal-glow) !important;
         outline: none !important;
+      }
+      select option {
+        background-color: var(--menu-bg);
+        color: var(--t1);
+      }
+
+      /* Leaflet map styles: sleek Dark Mode tiles via scoped raster filter (polygons, markers, popups & legends are un-filtered) */
+      [data-theme="dark"] .leaflet-tile-pane {
+        filter: brightness(0.65) invert(1) contrast(1.7) hue-rotate(200deg) saturate(0.35);
+      }
+      [data-theme="light"] .leaflet-tile-pane {
+        filter: none;
+      }
+      [data-theme="dark"] .leaflet-control-zoom a {
+        background-color: var(--bg2) !important;
+        color: var(--t1) !important;
+        border-color: var(--border) !important;
+      }
+      [data-theme="dark"] .leaflet-control-zoom a:hover {
+        background-color: var(--bg3) !important;
+        color: var(--teal) !important;
+      }
+      [data-theme="dark"] .leaflet-control-attribution {
+        background-color: rgba(12, 16, 32, 0.75) !important;
+        color: var(--t3) !important;
+      }
+      [data-theme="dark"] .leaflet-control-attribution a {
+        color: var(--teal-l) !important;
+      }
+      [data-theme="light"] .leaflet-control-attribution {
+        background-color: rgba(255, 255, 255, 0.8) !important;
+        color: var(--t3) !important;
+      }
+      [data-theme="light"] .leaflet-control-attribution a {
+        color: var(--teal) !important;
       }
 
       @keyframes float {
@@ -121,6 +268,31 @@
       @keyframes pulse-ring {
         0% { transform: scale(1); opacity: 0.6; }
         100% { transform: scale(1.8); opacity: 0; }
+      }
+
+      @media print {
+        body {
+          background: #ffffff !important;
+          color: #0f172a !important;
+        }
+        body::before, body::after {
+          display: none !important;
+        }
+        .no-print, header, nav, aside {
+          display: none !important;
+        }
+        #root, main, div[style*="overflow"] {
+          overflow: visible !important;
+          width: 100% !important;
+          margin: 0 !important;
+          padding: 0 !important;
+        }
+        .report-section {
+          page-break-inside: avoid;
+        }
+        .chart-container {
+          page-break-inside: avoid;
+        }
       }
     </style>
   </head>

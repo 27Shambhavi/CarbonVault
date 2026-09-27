@@ -1,20 +1,35 @@
 # app/services/Media_Validator.py
 """
 Media validation: GPS geo-check, duplicate detection, and image integrity.
-
-Key fixes applied:
-  - Relative imports for package compatibility
-  - Structured output with media_risk, message, gps fields
-  - Logging for debugging
+Works across PostgreSQL + PostGIS and SQLite with Shapely.
 """
+import os
 import logging
 from sqlalchemy import text
+from pathlib import Path
 
 from ..db.database import SessionLocal
 from ..utils.image_hash import compute_image_hash, hashes_are_similar
 from ..utils.exif_utils import extract_lat_lon
+from credit_calculation.credits_module.db_models import Project as UnifiedProject
 
 logger = logging.getLogger(__name__)
+
+
+def _resolve_image_path(image_path: str) -> str:
+    """Resolve image path to an absolute path if given relative."""
+    if not image_path:
+        return ""
+    p = Path(image_path)
+    if p.is_file():
+        return str(p.resolve())
+    
+    # Try resolving in Backend/uploads
+    backend_uploads = Path(__file__).resolve().parent.parent.parent / "uploads" / p.name
+    if backend_uploads.is_file():
+        return str(backend_uploads.resolve())
+
+    return image_path
 
 
 # ─────────────────────────────────────────────
@@ -24,64 +39,76 @@ logger = logging.getLogger(__name__)
 def media_geo_risk_check(project_id: str, image_path: str) -> dict:
     """
     Checks whether the GPS location embedded in the image lies
-    inside the project's registered land polygon.
+    inside the project's registered land polygon or close to project coordinates.
 
     Returns dict with media_risk (0-1), message, and gps location.
     """
+    resolved_path = _resolve_image_path(image_path)
     db = SessionLocal()
     try:
         # 1. Extract GPS from image EXIF
-        lat, lon = extract_lat_lon(image_path)
+        lat, lon = extract_lat_lon(resolved_path)
 
         if lat is None:
-            logger.warning("No GPS data in image: %s", image_path)
+            logger.info("No GPS EXIF in image: %s (using safe risk assessment)", resolved_path)
             return {
-                "media_risk": 0.5,
-                "message": "No GPS data found in image",
+                "media_risk": 0.25,
+                "message": "No GPS metadata found in image (moderate risk)",
                 "gps": None,
+                "inside_project_area": None,
             }
 
         logger.info("Image GPS: lat=%.6f, lon=%.6f", lat, lon)
 
-        # 2. Check if point is inside the project polygon.
-        #    Cast geography -> geometry for ST_Contains.
-        check_query = text("""
-            SELECT ST_Contains(
-                land::geometry,
-                ST_SetSRID(ST_Point(:lon, :lat), 4326)
-            )
-            FROM projects
-            WHERE id = :project_id
-        """)
+        # 2. Find project in unified table
+        project = db.query(UnifiedProject).filter(
+            (UnifiedProject.project_id == project_id) | (UnifiedProject.id == project_id if str(project_id).isdigit() else False)
+        ).first()
 
-        row = db.execute(check_query, {
-            "project_id": project_id,
-            "lat": lat,
-            "lon": lon,
-        }).fetchone()
+        inside = False
+        dist_km = None
 
-        if not row:
-            return {
-                "media_risk": 0.0,
-                "message": "Project not found",
-                "gps": {"lat": lat, "lon": lon},
-            }
+        if project and project.polygon_wkt and "POLYGON" in project.polygon_wkt.upper():
+            try:
+                from shapely.wkt import loads as shapely_loads
+                from shapely.geometry import Point
+                poly = shapely_loads(project.polygon_wkt.strip())
+                if not poly.is_valid:
+                    poly = poly.buffer(0)
+                pt = Point(lon, lat)
+                inside = poly.contains(pt) or poly.touches(pt)
+            except Exception as e:
+                logger.debug("Shapely point-in-polygon failed: %s", e)
 
-        inside = bool(row[0])
-        risk = 0.0 if inside else 0.9
+        # Also check proximity to project lat/long if available
+        if project and project.latitude and project.longitude:
+            # Approximate Euclidean distance in degrees
+            deg_dist = ((lat - project.latitude)**2 + (lon - project.longitude)**2)**0.5
+            dist_km = deg_dist * 111.32
+            if not inside and dist_km < 5.0:
+                inside = True  # Within 5km buffer of project coordinates
 
-        logger.info("Image %s project area (risk=%.1f)", "INSIDE" if inside else "OUTSIDE", risk)
+        if inside:
+            risk = 0.05
+            msg = "Image coordinates verified within project boundary"
+        elif dist_km is not None and dist_km < 25.0:
+            risk = 0.35
+            msg = f"Image coordinates near project area ({dist_km:.1f} km away)"
+        else:
+            risk = 0.85
+            msg = "Image coordinates lie OUTSIDE registered project boundary"
 
         return {
             "media_risk": risk,
-            "message": "Image within project area" if inside else "Image OUTSIDE project area",
+            "message": msg,
             "gps": {"lat": lat, "lon": lon},
             "inside_project_area": inside,
+            "distance_km": round(dist_km, 2) if dist_km is not None else None,
         }
 
     except Exception as e:
         logger.exception("media_geo_risk_check failed for project %s", project_id)
-        return {"media_risk": 0.0, "error": str(e), "gps": None}
+        return {"media_risk": 0.2, "error": str(e), "gps": None}
 
     finally:
         db.close()
@@ -92,30 +119,13 @@ def media_geo_risk_check(project_id: str, image_path: str) -> dict:
 # ─────────────────────────────────────────────
 
 def store_media(project_id: str, image_path: str) -> dict:
-    """
-    Computes the perceptual hash of an image and stores it in media_records.
-    Call this when a new image is uploaded for a project.
-    """
-    db = SessionLocal()
+    """Computes perceptual hash of an image."""
     try:
-        file_hash = compute_image_hash(image_path)
-
-        query = text("""
-            INSERT INTO media_records (id, project_id, file_hash, created_at)
-            VALUES (gen_random_uuid(), :project_id, :file_hash, NOW())
-        """)
-        db.execute(query, {"project_id": project_id, "file_hash": file_hash})
-        db.commit()
-
-        return {"message": "Image stored successfully", "file_hash": file_hash}
-
+        resolved = _resolve_image_path(image_path)
+        file_hash = compute_image_hash(resolved)
+        return {"message": "Image hashed successfully", "file_hash": file_hash}
     except Exception as e:
-        db.rollback()
-        logger.exception("store_media failed")
         return {"error": str(e)}
-
-    finally:
-        db.close()
 
 
 # ─────────────────────────────────────────────
@@ -123,41 +133,44 @@ def store_media(project_id: str, image_path: str) -> dict:
 # ─────────────────────────────────────────────
 
 def media_risk_check(project_id: str) -> dict:
-    """
-    Checks whether any images uploaded for this project are duplicates
-    (identical or perceptually similar pHash).
-    """
+    """Checks whether images are duplicates across projects."""
     db = SessionLocal()
     try:
-        query = text("""
-            SELECT file_hash
-            FROM media_records
-            WHERE project_id = :project_id
-        """)
-        results = db.execute(query, {"project_id": project_id}).fetchall()
+        project = db.query(UnifiedProject).filter(
+            (UnifiedProject.project_id == project_id) | (UnifiedProject.id == project_id if str(project_id).isdigit() else False)
+        ).first()
 
-        if not results:
-            return {"media_risk": 0.0, "message": "No images uploaded"}
+        if not project or not project.evidence_image:
+            return {"media_risk": 0.0, "message": "No evidence image to check"}
 
-        hashes = [row[0] for row in results]
+        img_path = _resolve_image_path(project.evidence_image)
+        if not os.path.isfile(img_path):
+            return {"media_risk": 0.1, "message": "Evidence image file not located"}
+
+        current_hash = compute_image_hash(img_path)
+        all_projects = db.query(UnifiedProject).filter(UnifiedProject.project_id != project.project_id).all()
         duplicates = 0
 
-        for i in range(len(hashes)):
-            for j in range(i + 1, len(hashes)):
-                if hashes_are_similar(hashes[i], hashes[j], threshold=10):
-                    duplicates += 1
+        for other in all_projects:
+            if other.evidence_image:
+                other_path = _resolve_image_path(other.evidence_image)
+                if os.path.isfile(other_path):
+                    try:
+                        other_hash = compute_image_hash(other_path)
+                        if hashes_are_similar(current_hash, other_hash, threshold=8):
+                            duplicates += 1
+                    except Exception:
+                        pass
 
-        risk = 0.7 if duplicates > 0 else 0.0
-
+        risk = 0.85 if duplicates > 0 else 0.05
         return {
             "media_risk": risk,
             "duplicate_images": duplicates,
-            "total_images": len(hashes),
+            "file_hash": current_hash,
+            "message": f"Found {duplicates} duplicate images across projects" if duplicates else "Unique image verified",
         }
-
     except Exception as e:
         logger.exception("media_risk_check failed")
         return {"media_risk": 0.0, "error": str(e)}
-
     finally:
         db.close()

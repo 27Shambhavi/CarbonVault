@@ -21,7 +21,7 @@ const PLANTATION_TYPES = [
   { value: 'mixed',      label: '⚡ Mixed Plantation', co2: '10–25+ credits/acre/year' },
 ];
 
-const inp = { background:'rgba(255,255,255,0.04)', border:`1px solid ${T.border}`, borderRadius:9, padding:'10px 14px', color:T.t1, fontSize:14, outline:'none', width:'100%', fontFamily:'Plus Jakarta Sans, sans-serif' };
+const inp = { background:'var(--input-bg, rgba(255,255,255,0.04))', border:`1px solid ${T.border}`, borderRadius:9, padding:'10px 14px', color:T.t1, fontSize:14, outline:'none', width:'100%', fontFamily:'Plus Jakarta Sans, sans-serif' };
 const lbl = { fontSize:10, color:T.t3, fontWeight:700, letterSpacing:'0.7px', textTransform:'uppercase', marginBottom:7, display:'block' };
 
 // ── Toast Notification ──────────────────────────────────────────────────────────

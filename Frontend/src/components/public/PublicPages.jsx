@@ -1,8 +1,22 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { mockResilienceData } from '../../data/mockData.js';
-const mockPublicLeaderboard = [];
-const mockAuditLogs = [];
+import { fetchLeaderboard } from '../../services/api.js';
+
+const mockPublicLeaderboard = [
+  { rank: 1, name: 'Microsoft Sustainability', type: 'buyer', credits: 49400, points: 9850, badge: 'approved' },
+  { rank: 2, name: 'EcoGuard Brazil', role: 'ngo', type: 'ngo', credits: 34600, points: 8940, badge: 'approved' },
+  { rank: 3, name: 'Google Carbon Team', type: 'buyer', credits: 28000, points: 8420, badge: 'approved' },
+  { rank: 4, name: 'CongoCare', role: 'ngo', type: 'ngo', credits: 22000, points: 7650, badge: 'approved' },
+  { rank: 5, name: 'Shell Renewables', type: 'buyer', credits: 18000, points: 6840, badge: 'approved' },
+];
+
+const mockAuditLogs = [
+  { id: 1, action: 'mint', name: 'PRJ-MAN-AMAZON', time: '10m ago', detail: 'Minted 12,400 verified credits with satellite NDVI verification', user: 'Admin System' },
+  { id: 2, action: 'approve', name: 'PRJ-TEK-CONGO1', time: '2h ago', detail: 'Project approved with GRS quality score of 91/100', user: 'Alex Mercer (Admin)' },
+  { id: 3, action: 'create', name: 'PRJ-MAN-SUNDAR', time: '5h ago', detail: 'New mangrove restoration project submitted with boundary polygon', user: 'Green Delta' },
+  { id: 4, action: 'update', name: 'Pricing Multipliers', time: '1d ago', detail: 'Dynamic demand multiplier updated to 1.12x', user: 'Admin System' },
+];
 import { Card, SectionHeader, Table, Badge, KPICard } from '../UI.jsx';
 import { Globe, Trophy, FileSearch, Award, Activity, Leaf, Zap } from 'lucide-react';
 

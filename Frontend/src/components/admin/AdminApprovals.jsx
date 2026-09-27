@@ -1,10 +1,8 @@
 import { useState, useEffect } from 'react';
-import { fetchAllProjects, fetchMapProjects, fetchMapPendingProjects, updateProjectStatus } from '../../services/api.js';
+import { fetchAllProjects, fetchMapProjects, fetchMapPendingProjects, updateProjectStatus, getImageUrl } from '../../services/api.js';
 import { Card, SectionHeader, Badge, MRVScore, Modal, Btn, T } from '../UI.jsx';
 import { ProjectMap } from '../GoogleMap.jsx';
 import { CheckCircle, XCircle, MessageSquare, AlertTriangle, ImageOff, ZoomIn, Leaf, DollarSign } from 'lucide-react';
-
-const API_BASE = '/api';
 
 export default function AdminApprovals() {
   const [projects, setProjects] = useState([]);
@@ -48,11 +46,7 @@ export default function AdminApprovals() {
   // Build the evidence image URL from backend data
   const getEvidenceUrl = (project) => {
     if (!project) return null;
-    // Backend returns evidence_image like "/uploads/PRJ-MAN-XXXX.jpg"
-    if (project.evidence_image) {
-      return `${API_BASE}${project.evidence_image}`;
-    }
-    return null;
+    return getImageUrl(project.evidence_image);
   };
 
   const handleApprove = async () => {

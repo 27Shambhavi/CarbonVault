@@ -17,6 +17,9 @@ import { NGODashboard, NGOProjects, NGONewProject, NGOSiteSuitability, NGOMarket
 // Corporate
 import { CorporateDashboard, CorporateMarketplace, CorporateWallet, CorporateESG } from './components/corporate/CorporatePages.jsx';
 
+// Public
+import { PublicDashboard, PublicLeaderboard, PublicAudit, PublicCertificates, PublicClimate } from './components/public/PublicPages.jsx';
+
 function PageRouter() {
   const { user, page } = useApp();
   if (!user) return null;
@@ -49,9 +52,19 @@ function PageRouter() {
     return <CorporateDashboard />;
   }
 
+  if (user.role === 'public') {
+    if (page === 'dashboard')    return <PublicDashboard />;
+    if (page === 'leaderboard')  return <PublicLeaderboard />;
+    if (page === 'audit')        return <PublicAudit />;
+    if (page === 'certificates') return <PublicCertificates />;
+    if (page === 'climate')      return <PublicClimate />;
+    if (page === 'projects')     return <CorporateMarketplace />;
+    return <PublicDashboard />;
+  }
+
   return (
     <div style={{ padding: 28, color: T.t2, fontSize: 14 }}>
-      No dashboard for role &quot;{String(user.role)}&quot;. Use Admin, NGO, or Corporate on the login screen.
+      No dashboard for role &quot;{String(user.role)}&quot;. Use Admin, NGO, Corporate, or Public Explorer on the login screen.
     </div>
   );
 }
@@ -77,8 +90,10 @@ function AppShell() {
 
 export default function App() {
   return (
-    <AppProvider>
-      <AppShell />
-    </AppProvider>
+    <ErrorBoundary>
+      <AppProvider>
+        <AppShell />
+      </AppProvider>
+    </ErrorBoundary>
   );
 }

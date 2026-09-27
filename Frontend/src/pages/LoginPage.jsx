@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useApp } from '../AppContext.jsx';
-import { T } from '../components/UI.jsx';
-import { Leaf, ShieldCheck, BarChart3, Eye, EyeOff, Zap, TrendingUp, Award, TreePine, Building2 } from 'lucide-react';
+import { T, withAlpha } from '../components/UI.jsx';
+import { Leaf, ShieldCheck, BarChart3, Eye, EyeOff, Zap, TrendingUp, Award, TreePine, Building2, Globe, Sun, Moon } from 'lucide-react';
 
 // Animated floating particle
 function Particle({ x, y, size, opacity, duration }) {
@@ -18,10 +18,10 @@ function Particle({ x, y, size, opacity, duration }) {
 }
 
 export default function LoginPage() {
-  const {login} = useApp();
+  const {login, theme, toggleTheme} = useApp();
   const [activeRole, setActiveRole] = useState('admin');
   const [email, setEmail] = useState('admin@carbonvault.com');
-  const [password, setPassword] = useState('demo1234');
+  const [password, setPassword] = useState('demo@123');
   const [showPass, setShowPass] = useState(false);
   const [loaded, setLoaded] = useState(false);
 
@@ -128,9 +128,26 @@ export default function LoginPage() {
       </div>
 
       {/* RIGHT LOGIN PANEL */}
-      <div style={{width:490,display:'flex',flexDirection:'column',justifyContent:'center',padding:'48px 44px',background:'rgba(8,11,18,0.97)',backdropFilter:'blur(24px)',borderLeft:`1px solid ${T.border}`,position:'relative',zIndex:1,opacity:loaded?1:0,transition:'opacity 0.8s ease',transitionDelay:'0.2s'}}>
+      <div style={{width:490,display:'flex',flexDirection:'column',justifyContent:'center',padding:'48px 44px',background:'var(--sidebar-bg, rgba(8,11,18,0.97))',backdropFilter:'blur(24px)',borderLeft:`1px solid ${T.border}`,position:'relative',zIndex:1,opacity:loaded?1:0,transition:'opacity 0.8s ease',transitionDelay:'0.2s'}}>
         {/* Animated top shimmer */}
-        <div style={{position:'absolute',top:0,left:0,right:0,height:2,background:`linear-gradient(90deg, transparent, ${T.teal}70, ${T.tealL}90, ${T.teal}70, transparent)`,backgroundSize:'200% auto',animation:'shimmerLine 3s linear infinite'}}/>
+        <div style={{position:'absolute',top:0,left:0,right:0,height:2,background:`linear-gradient(90deg, transparent, ${withAlpha(T.teal, '70', 70)}, ${withAlpha(T.tealL, '90', 80)}, ${withAlpha(T.teal, '70', 70)}, transparent)`,backgroundSize:'200% auto',animation:'shimmerLine 3s linear infinite'}}/>
+
+        {/* Theme Toggle Button */}
+        <div style={{position:'absolute',top:20,right:24,zIndex:10}}>
+          <button
+            onClick={toggleTheme}
+            title={theme === 'light' ? 'Switch to Dark Mode' : 'Switch to Light Mode'}
+            style={{
+              background:'var(--glass2, rgba(255,255,255,0.06))',
+              border:`1px solid ${T.border}`,
+              borderRadius:9,width:34,height:34,
+              display:'flex',alignItems:'center',justifyContent:'center',
+              cursor:'pointer',transition:'all 0.15s'
+            }}
+          >
+            {theme === 'light' ? <Moon size={15} color={T.violet} /> : <Sun size={15} color={T.goldL} />}
+          </button>
+        </div>
 
         {/* Scanline effect */}
         <div style={{position:'absolute',left:0,right:0,height:40,background:`linear-gradient(180deg, transparent, rgba(45,212,191,0.02), transparent)`,animation:'scanline 6s linear infinite',pointerEvents:'none'}}/>
@@ -142,17 +159,17 @@ export default function LoginPage() {
 
         {/* Role cards */}
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:24}}>
-          {roles.map(({role,label,desc,icon:Icon,color})=>{
+          {roles.map(({role,label,desc,icon:Icon,color,email:roleEmail})=>{
             const active=activeRole===role;
             return(
-              <button key={role} onClick={()=>{setActiveRole(role);setEmail(demoAccounts.find?.(a=>a.role===role)?.email||email);}}
-                style={{background:active?`${color}10`:'rgba(255,255,255,0.025)',border:`1px solid ${active?`${color}44`:T.border}`,borderRadius:11,padding:'12px 10px',cursor:'pointer',textAlign:'left',transition:'all 0.18s',position:'relative',overflow:'hidden'}}>
+              <button key={role} onClick={()=>{setActiveRole(role);setEmail(roleEmail);}}
+                style={{background:active?`color-mix(in srgb, ${color} 14%, transparent)`:'var(--glass, rgba(255,255,255,0.025))',border:`1px solid ${active?color:T.border}`,borderRadius:11,padding:'12px 10px',cursor:'pointer',textAlign:'left',transition:'all 0.18s',position:'relative',overflow:'hidden'}}>
                 {active&&<div style={{position:'absolute',top:0,left:0,right:0,height:2,background:`linear-gradient(90deg,transparent,${color},transparent)`}}/>}
-                <div style={{width:28,height:28,borderRadius:8,background:`${color}18`,border:`1px solid ${color}28`,display:'flex',alignItems:'center',justifyContent:'center',marginBottom:7}}>
+                <div style={{width:28,height:28,borderRadius:8,background:`color-mix(in srgb, ${color} 18%, transparent)`,border:`1px solid color-mix(in srgb, ${color} 28%, transparent)`,display:'flex',alignItems:'center',justifyContent:'center',marginBottom:7}}>
                   <Icon size={13} color={color}/>
                 </div>
                 <div style={{fontSize:12,fontWeight:700,color:active?T.t1:T.t2}}>{label}</div>
-                <div style={{fontSize:10,color:active?`${color}bb`:T.t3,marginTop:1,lineHeight:1.3}}>{desc}</div>
+                <div style={{fontSize:10,color:active?T.t2:T.t3,marginTop:1,lineHeight:1.3}}>{desc}</div>
               </button>
             );
           })}
@@ -167,8 +184,8 @@ export default function LoginPage() {
               type={i===1?(showPass?'text':'password'):'text'}
               value={i===0?email:password}
               onChange={e=>{i===0?setEmail(e.target.value):setPassword(e.target.value);}}
-              style={{background:'rgba(255,255,255,0.04)',border:`1px solid ${T.border}`,borderRadius:10,padding:`11px ${i===1?'44px':'15px'} 11px 15px`,color:T.t1,fontSize:14,outline:'none',width:'100%',transition:'border-color 0.2s',fontFamily:'Plus Jakarta Sans,sans-serif'}}
-              onFocus={e=>e.target.style.borderColor='rgba(45,212,191,0.45)'}
+              style={{background:'var(--input-bg, rgba(255,255,255,0.04))',border:`1px solid ${T.border}`,borderRadius:10,padding:`11px ${i===1?'44px':'15px'} 11px 15px`,color:T.t1,fontSize:14,outline:'none',width:'100%',transition:'border-color 0.2s',fontFamily:'Plus Jakarta Sans,sans-serif'}}
+              onFocus={e=>e.target.style.borderColor=T.teal}
               onBlur={e=>e.target.style.borderColor=T.border}
             />
             {i===1&&(
@@ -187,6 +204,15 @@ export default function LoginPage() {
           onMouseLeave={e=>{e.currentTarget.style.transform='translateY(0)';e.currentTarget.style.boxShadow=`0 6px 24px rgba(45,212,191,0.35), inset 0 1px 0 rgba(255,255,255,0.2)`;}}>
           Access Dashboard →
         </button>
+
+        <div style={{marginTop:16,textAlign:'center'}}>
+          <button onClick={()=>login('public')}
+            style={{background:'transparent',border:`1px solid ${T.border}`,borderRadius:10,padding:'10px 14px',color:T.teal,fontSize:13,fontWeight:600,cursor:'pointer',width:'100%',display:'flex',alignItems:'center',justifyContent:'center',gap:8,transition:'all 0.15s'}}
+            onMouseEnter={e=>{e.currentTarget.style.borderColor='rgba(45,212,191,0.4)';e.currentTarget.style.background='rgba(45,212,191,0.05)';}}
+            onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.background='transparent';}}>
+            <Globe size={14} color={T.teal}/> Explore Public Transparency Portal (No Login)
+          </button>
+        </div>
 
         <div style={{position:'absolute',bottom:0,left:0,right:0,height:1,background:`linear-gradient(90deg,transparent,rgba(45,212,191,0.3),transparent)`}}/>
         

@@ -4,15 +4,12 @@ import os
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
 
-# Load .env if python-dotenv available
 try:
-    from dotenv import load_dotenv
-    load_dotenv(os.path.join(os.path.dirname(__file__), '..', '..', '.env'))
+    from core.config import DATABASE_URL
 except ImportError:
-    pass
-
-# PostgreSQL via env var, SQLite fallback
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./carbonvault.db")
+    from pathlib import Path
+    _base = Path(__file__).resolve().parent.parent.parent
+    DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{(_base / 'carbon_vault.db').as_posix()}")
 
 # SQLite needs check_same_thread=False; PostgreSQL does not
 connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}

@@ -7,7 +7,19 @@ import {
   mockUsers, mockGRSData, mockCreditsOverTime, mockCreditsByType
 } from '../data/mockData.js';
 
-const API_BASE = '/api';
+const RAW_BASE = import.meta.env.VITE_API_BASE_URL;
+export const API_BASE = RAW_BASE ? RAW_BASE.replace(/\/$/, '') : '/api';
+
+/** Helper to get full image URL whether in dev or production */
+export function getImageUrl(path) {
+  if (!path) return null;
+  if (path.startsWith('http://') || path.startsWith('https://')) return path;
+  const cleanPath = path.startsWith('/') ? path : `/${path}`;
+  if (API_BASE === '/api') {
+    return cleanPath;
+  }
+  return `${API_BASE}${cleanPath}`;
+}
 
 // ── Backend availability tracking ──────────────────────────────────────────
 let _backendOnline = null; // null = unknown, true/false = tested
