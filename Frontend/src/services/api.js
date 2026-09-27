@@ -27,7 +27,8 @@ let _backendOnline = null; // null = unknown, true/false = tested
 async function checkBackend() {
   try {
     const res = await fetch(`${API_BASE}/`, { signal: AbortSignal.timeout(3000) });
-    _backendOnline = res.ok;
+    const ctype = res.headers.get('content-type') || '';
+    _backendOnline = res.ok && !ctype.includes('text/html');
   } catch {
     _backendOnline = false;
   }
@@ -44,7 +45,12 @@ export function isBackendOnline() { return _backendOnline; }
 async function request(url, options = {}) {
   try {
     const res = await fetch(url, options);
+    const ctype = res.headers.get('content-type') || '';
     const text = await res.text();
+    if (ctype.includes('text/html') || text.trim().startsWith('<!DOCTYPE') || text.trim().startsWith('<html')) {
+      _backendOnline = false;
+      return { data: null, error: 'Endpoint returned HTML instead of API response' };
+    }
     let data;
     try { data = JSON.parse(text); } catch { data = text; }
     if (!res.ok) {

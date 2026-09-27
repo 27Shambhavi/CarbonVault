@@ -65,7 +65,7 @@ UPLOAD_DIR = (BASE_DIR / "uploads").resolve()
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 # Currency conversion
-INR_USD_RATE = float(os.getenv("INR_USD_RATE", "83.5"))
+INR_USD_RATE = float(os.getenv("INR_USD_RATE", "96.0"))
 
 # Copernicus / Sentinel Hub
 SH_CLIENT_ID = os.getenv("SH_CLIENT_ID", "")
