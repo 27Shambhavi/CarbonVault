@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useApp } from '../../AppContext.jsx';
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { mockTransactions, mockGRSData, mockMarketplace, mockESGReport, generateMockESGReport } from '../../data/mockData.js';
 import { fetchAllProjects, fetchMapProjects, fetchMarketplaceListings, createBuyRequest, createOrder, buyCredits, fetchTransactions, fetchWallet, generateESGReport } from '../../services/api.js';
@@ -9,6 +10,7 @@ import { Package, FileText, Wallet as WalletIcon, TrendingUp, MapPin, Download, 
 const inp = { background:'var(--input-bg, rgba(255,255,255,0.04))', border:`1px solid ${T.border}`, borderRadius:9, padding:'10px 14px', color:T.t1, fontSize:14, outline:'none', width:'100%', fontFamily:'Plus Jakarta Sans, sans-serif' };
 
 export function CorporateDashboard() {
+  const { refreshKey } = useApp();
   const [projects, setProjects] = useState([]);
   const [mapFeatures, setMapFeatures] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -27,7 +29,7 @@ export function CorporateDashboard() {
         }
       })
       .finally(() => setLoading(false));
-  }, []);
+  }, [refreshKey]);
 
   // Calculate real totals from backend data
   const realTotalCredits = projects.reduce((s, p) => s + (p.credits || 0), 0);
@@ -97,10 +99,11 @@ export function CorporateDashboard() {
 }
 
 export function CorporateMarketplace() {
+  const { refreshKey, triggerRefresh } = useApp();
   const [listings, setListings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [buyModal,setBuyModal] = useState(null);
-  const [qty,setQty]           = useState(500);
+  const [qty,setQty]           = useState(25);
   const [purchased,setPurchased] = useState({});
   const [filter,setFilter]     = useState('all');
   const [buying, setBuying]    = useState(false);
@@ -116,7 +119,7 @@ export function CorporateMarketplace() {
         }
       })
       .finally(() => setLoading(false));
-  }, []);
+  }, [refreshKey]);
 
   const filtered = filter==='all'?listings:listings.filter(p=>(p.type||'').toLowerCase()===filter);
   const types = ['all',...new Set(listings.map(p=>(p.type||'').toLowerCase()).filter(Boolean))];
@@ -128,6 +131,12 @@ export function CorporateMarketplace() {
       // 1. Calculate amount in INR — price is per credit in USD, convert to INR
       const amountUSD = item.price * quantity;
       const amountINR = Math.round(amountUSD * 83.5);
+
+      if (amountINR > 500000) {
+        alert(`Notice: Razorpay Test Mode allows a maximum of ₹5,00,000 per order. Current total is ₹${amountINR.toLocaleString('en-IN')}. Please lower the quantity to test successfully.`);
+        setBuying(false);
+        return;
+      }
 
       // 2. Create order on backend (backend converts INR -> paise, NO double conversion)
       const orderRes = await createOrder(amountINR, 'INR', item.id, 'Microsoft Sustainability');
@@ -182,6 +191,7 @@ export function CorporateMarketplace() {
           if (!buyRes.error) {
             setPurchased({...purchased, [item.id]: (purchased[item.id]||0) + quantity});
             alert(`Payment successful! ${quantity} credits purchased.`);
+            triggerRefresh();
           } else {
             alert('Payment recorded but save failed: ' + buyRes.error);
           }
@@ -249,7 +259,7 @@ export function CorporateMarketplace() {
                 <div style={{color:T.goldL,fontWeight:700,fontSize:14}}>${item.price}</div>
                 <div style={{color:T.t3,fontSize:10}}>{inrAmount(item.price)}</div>
               </div>,
-              item.credits>0?(<button onClick={()=>{setBuyModal(item);setQty(Math.min(500, item.credits));}} style={{background:`linear-gradient(135deg,${T.teal},${T.tealDD || T.teal})`,border:'none',borderRadius:8,padding:'7px 15px',color:'#021a17',fontSize:12,fontWeight:800,cursor:'pointer',transition:'all 0.15s',whiteSpace:'nowrap'}} onMouseEnter={e=>{e.currentTarget.style.opacity='0.85';}} onMouseLeave={e=>{e.currentTarget.style.opacity='1';}}>Buy</button>)
+              item.credits>0?(<button onClick={()=>{setBuyModal(item);setQty(Math.min(25, item.credits));}} style={{background:`linear-gradient(135deg,${T.teal},${T.tealDD || T.teal})`,border:'none',borderRadius:8,padding:'7px 15px',color:'#021a17',fontSize:12,fontWeight:800,cursor:'pointer',transition:'all 0.15s',whiteSpace:'nowrap'}} onMouseEnter={e=>{e.currentTarget.style.opacity='0.85';}} onMouseLeave={e=>{e.currentTarget.style.opacity='1';}}>Buy</button>)
               :(<span style={{color:T.roseL,fontSize:12,fontWeight:700}}>Sold Out</span>),
             ])}
           />
@@ -274,8 +284,13 @@ export function CorporateMarketplace() {
                 </div>
               ))}
             </div>
+            {Math.round(qty * buyModal.price * 83.5) > 500000 && (
+              <div style={{background:'rgba(245,158,11,0.1)',border:'1px solid rgba(245,158,11,0.3)',borderRadius:8,padding:'8px 12px',marginBottom:14,fontSize:11,color:T.goldL,lineHeight:1.5}}>
+                ⚠️ Order exceeds Razorpay test mode limit (₹5,00,000). Please decrease quantity for testing.
+              </div>
+            )}
             <Btn style={{width:'100%',justifyContent:'center',background:'linear-gradient(135deg,#072654,#1a56db)',color:'#fff',boxShadow:'0 4px 16px rgba(26,86,219,0.35)',border:'none'}}
-              onClick={()=>handleRazorPay(buyModal,qty)} disabled={buying}>
+              onClick={()=>handleRazorPay(buyModal,qty)} disabled={buying || Math.round(qty * buyModal.price * 83.5) > 500000}>
               {buying ? 'Processing…' : `💳 Pay ${inrAmount(qty*buyModal.price)} via Razorpay`}
             </Btn>
           </div>
@@ -286,6 +301,7 @@ export function CorporateMarketplace() {
 }
 
 export function CorporateWallet() {
+  const { refreshKey } = useApp();
   const [transactions, setTransactions] = useState([]);
   const [walletData, setWalletData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -302,7 +318,7 @@ export function CorporateWallet() {
       if (!txRes.error && Array.isArray(txRes.data)) setTransactions(txRes.data);
       if (!walRes.error && walRes.data) setWalletData(walRes.data);
     }).finally(() => setLoading(false));
-  }, []);
+  }, [refreshKey]);
 
   const realCredits = walletData?.total_credits || 0;
   const realSpentINR = walletData?.total_spent_inr || 0;

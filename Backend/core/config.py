@@ -29,6 +29,10 @@ DEFAULT_DB_URL = f"sqlite:///{DEFAULT_DB_FILE.as_posix()}"
 # Database URL
 DATABASE_URL = os.getenv("DATABASE_URL", DEFAULT_DB_URL)
 
+# Fix Render Postgres URL prefix (Render supplies postgres://, SQLAlchemy requires postgresql://)
+if DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+
 # If DATABASE_URL is a relative sqlite URL like "sqlite:///carbon_vault.db", resolve to absolute path in BASE_DIR
 if DATABASE_URL.startswith("sqlite:///") and not DATABASE_URL.startswith("sqlite:////"):
     rel_path = DATABASE_URL.replace("sqlite:///", "").lstrip("./")

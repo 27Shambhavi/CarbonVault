@@ -272,14 +272,25 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# CORS Middleware (allows configured dev and production origins)
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"] if DEBUG else CORS_ORIGINS,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# CORS Middleware (allows configured dev and production origins + all Vercel deployments)
+cors_origins = CORS_ORIGINS
+if "*" in cors_origins:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=False,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+else:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=cors_origins,
+        allow_origin_regex=r"^https:\/\/.*\.vercel\.app$",
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
 # Static file serving for uploads (evidence images)
 app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")

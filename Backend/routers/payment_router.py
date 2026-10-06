@@ -80,8 +80,16 @@ def create_order(req: CreateOrderRequest):
     if req.amount <= 0:
         raise HTTPException(status_code=400, detail="Amount must be greater than 0")
 
-    # Convert to paise (smallest INR unit) — ONE conversion only
-    amount_paise = int(req.amount * 100)
+    # Razorpay test mode has a hard per-transaction limit of ₹5,00,000 (50,000,000 paise)
+    is_test_mode = (RAZORPAY_KEY_ID or "").startswith("rzp_test_")
+    if is_test_mode and amount_paise > 50000000:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Razorpay Test Mode limit reached: The maximum single-order amount allowed in test mode is ₹5,00,000 (INR 5 Lakhs). "
+                f"Your order total is ₹{req.amount:,.2f}. Please reduce the quantity (e.g., 25–50 tonnes) to complete a test payment."
+            )
+        )
 
     if razorpay_client:
         try:
@@ -104,8 +112,17 @@ def create_order(req: CreateOrderRequest):
                 "key_id": RAZORPAY_KEY_ID,        # safe to send — this is the public key
             }
         except Exception as e:
-            logger.exception("Razorpay order creation failed")
-            raise HTTPException(status_code=500, detail=f"Payment gateway error: {str(e)}")
+            logger.exception("Razorpay order creation failed: %s", e)
+            error_msg = str(e)
+            if hasattr(e, "error") and isinstance(e.error, dict):
+                error_msg = e.error.get("description", error_msg)
+            elif "Amount exceeds maximum amount allowed" in error_msg:
+                error_msg = (
+                    f"Razorpay limit reached: The amount ₹{req.amount:,.2f} exceeds the maximum permitted by your Razorpay account. "
+                    f"In test mode, maximum order amount is ₹5,00,000."
+                )
+            status_code = 400 if ("limit" in error_msg.lower() or "amount" in error_msg.lower() or "exceeds" in error_msg.lower()) else 500
+            raise HTTPException(status_code=status_code, detail=f"Payment gateway error: {error_msg}")
     else:
         # Fallback for demo/testing when Razorpay SDK not available
         import uuid

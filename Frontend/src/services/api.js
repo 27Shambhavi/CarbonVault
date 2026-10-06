@@ -22,11 +22,11 @@ export function getImageUrl(path) {
 }
 
 // ── Backend availability tracking ──────────────────────────────────────────
-let _backendOnline = null; // null = unknown, true/false = tested
+let _backendOnline = true; // Default optimistic so requests are always attempted
 
-async function checkBackend() {
+export async function checkBackend() {
   try {
-    const res = await fetch(`${API_BASE}/`, { signal: AbortSignal.timeout(3000) });
+    const res = await fetch(`${API_BASE}/health`, { signal: AbortSignal.timeout(5000) });
     const ctype = res.headers.get('content-type') || '';
     _backendOnline = res.ok && !ctype.includes('text/html');
   } catch {
@@ -35,27 +35,42 @@ async function checkBackend() {
   return _backendOnline;
 }
 
-// Check once on load
-checkBackend();
+// Background check on load
+checkBackend().catch(() => {});
 
-/** Re-check backend status (called after errors to update state) */
+/** Re-check backend status */
 export function isBackendOnline() { return _backendOnline; }
 
 // ── Generic fetch wrapper ──────────────────────────────────────────────────
 async function request(url, options = {}) {
   try {
-    const res = await fetch(url, options);
+    // Add default 15s timeout if signal is not set
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
+    const fetchOptions = {
+      ...options,
+      signal: options.signal || controller.signal,
+    };
+
+    const res = await fetch(url, fetchOptions);
+    clearTimeout(timeoutId);
+
     const ctype = res.headers.get('content-type') || '';
     const text = await res.text();
+
     if (ctype.includes('text/html') || text.trim().startsWith('<!DOCTYPE') || text.trim().startsWith('<html')) {
       _backendOnline = false;
-      return { data: null, error: 'Endpoint returned HTML instead of API response' };
+      return { data: null, error: 'Endpoint returned HTML instead of API response. Check VITE_API_BASE_URL.' };
     }
+
     let data;
     try { data = JSON.parse(text); } catch { data = text; }
+
     if (!res.ok) {
       return { data: null, error: (data && data.detail) || `Request failed (${res.status})` };
     }
+
+    _backendOnline = true;
     return { data, error: null };
   } catch (err) {
     _backendOnline = false;
@@ -65,18 +80,13 @@ async function request(url, options = {}) {
 
 /**
  * Try backend first; if it fails, return mock fallback data.
- * @param {string} url - API endpoint
- * @param {object} options - fetch options
- * @param {*} fallback - mock data to return if backend is unavailable
+ * ALWAYS attempts the live backend first.
  */
 async function requestWithFallback(url, options = {}, fallback = null) {
-  // If we already know backend is offline, skip the network call
-  if (_backendOnline === false && fallback !== null) {
-    return { data: fallback, error: null, fromMock: true };
-  }
   const result = await request(url, options);
   if (result.error && fallback !== null) {
-    return { data: fallback, error: null, fromMock: true };
+    console.warn(`[CarbonVault API] Backend request failed (${url}): ${result.error}. Using fallback.`);
+    return { data: fallback, error: null, fromMock: true, backendError: result.error };
   }
   return { ...result, fromMock: false };
 }

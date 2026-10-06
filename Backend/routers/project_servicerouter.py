@@ -23,6 +23,14 @@ except ImportError:
     UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.dirname(__file__)), "uploads")
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
+def _get_evidence_url(evidence_image: Optional[str]) -> Optional[str]:
+    if not evidence_image:
+        return None
+    if evidence_image.startswith("http://") or evidence_image.startswith("https://") or evidence_image.startswith("/uploads/"):
+        return evidence_image
+    base = os.path.basename(evidence_image)
+    return f"/uploads/{base}"
+
 # Credit calculator instance
 credit_calculator = CreditCalculator()
 
@@ -418,7 +426,8 @@ async def create_project(
         project_id = generate_project_id(plantation_type)
 
         # Save Image — unique filename to prevent overwriting
-        file_extension = evidence_image.filename.split(".")[-1]
+        orig_name = getattr(evidence_image, "filename", "") or "evidence.jpg"
+        file_extension = orig_name.split(".")[-1].lower() if "." in orig_name else "jpg"
         unique_suffix = str(uuid.uuid4())[:8]
         file_name = f"{project_id}_{unique_suffix}.{file_extension}"
         file_path = os.path.join(UPLOAD_FOLDER, file_name)
@@ -531,9 +540,7 @@ def get_projects(ngo_id: int):
             fraud = p.fraud_risk
             env = p.env_score
             # Build evidence image URL
-            img_url = None
-            if p.evidence_image and os.path.isfile(p.evidence_image):
-                img_url = "/uploads/" + os.path.basename(p.evidence_image)
+            img_url = _get_evidence_url(p.evidence_image)
             pgj, psqm, pha = wkt_to_geojson_and_area(p.polygon_wkt)
             result.append({
                 "project_id": p.project_id,
@@ -672,9 +679,7 @@ def get_all_projects():
             fraud = p.fraud_risk
             env = p.env_score
             # Build evidence image URL
-            img_url = None
-            if p.evidence_image and os.path.isfile(p.evidence_image):
-                img_url = "/uploads/" + os.path.basename(p.evidence_image)
+            img_url = _get_evidence_url(p.evidence_image)
             pgj, psqm, pha = wkt_to_geojson_and_area(p.polygon_wkt)
             result.append({
                 "project_id": p.project_id,

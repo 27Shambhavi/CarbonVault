@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react';
+import { useApp } from '../../AppContext.jsx';
 import { fetchAllProjects, fetchMapProjects, fetchMapPendingProjects, updateProjectStatus, getImageUrl } from '../../services/api.js';
 import { Card, SectionHeader, Badge, MRVScore, Modal, Btn, T } from '../UI.jsx';
 import { ProjectMap } from '../GoogleMap.jsx';
 import { CheckCircle, XCircle, MessageSquare, AlertTriangle, ImageOff, ZoomIn, Leaf, DollarSign } from 'lucide-react';
 
 export default function AdminApprovals() {
+  const { refreshKey, triggerRefresh } = useApp();
   const [projects, setProjects] = useState([]);
   const [mapFeatures, setMapFeatures] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -36,7 +38,7 @@ export default function AdminApprovals() {
       .finally(() => setLoading(false));
   };
 
-  useEffect(() => { loadProjects(); }, []);
+  useEffect(() => { loadProjects(); }, [refreshKey]);
 
   // Derive selected project from list (always in sync)
   const sel = projects.find(p => (p.project_id || p.id) === selId) || null;
@@ -72,6 +74,7 @@ export default function AdminApprovals() {
       ));
       // Reload all projects to get fully updated data
       setTimeout(loadProjects, 500);
+      triggerRefresh();
     }
   };
 
@@ -88,6 +91,7 @@ export default function AdminApprovals() {
           ? { ...p, status: 'rejected' }
           : p
       ));
+      triggerRefresh();
     }
   };
 

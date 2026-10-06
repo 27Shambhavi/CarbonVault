@@ -28,6 +28,7 @@ class Project(Base):
     start_date = Column(Date)
     status = Column(String, default="pending")  # pending, approved, rejected
     evidence_image = Column(String)  # path to image
+    evidence_images = Column(Text, nullable=True)  # JSON or comma-separated paths
     polygon_wkt = Column(Text, nullable=True)  # WKT polygon of plantation area
 
     # Scores (persisted on creation, updated on fraud checks)

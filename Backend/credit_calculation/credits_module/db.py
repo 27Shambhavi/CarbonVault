@@ -11,10 +11,14 @@ except ImportError:
     _base = Path(__file__).resolve().parent.parent.parent
     DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{(_base / 'carbon_vault.db').as_posix()}")
 
+# Fix Render postgres:// prefix if loaded without core.config
+if DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+
 # SQLite needs check_same_thread=False; PostgreSQL does not
 connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
 
-engine = create_engine(DATABASE_URL, connect_args=connect_args)
+engine = create_engine(DATABASE_URL, pool_pre_ping=True, connect_args=connect_args)
 
 SessionLocal = sessionmaker(
     autocommit=False,
