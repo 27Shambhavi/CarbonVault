@@ -44,9 +44,9 @@ export function isBackendOnline() { return _backendOnline; }
 // ── Generic fetch wrapper ──────────────────────────────────────────────────
 async function request(url, options = {}) {
   try {
-    // Add default 15s timeout if signal is not set
+    // Default 60s timeout to accommodate Render free-tier cold starts
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000);
+    const timeoutId = setTimeout(() => controller.abort(), 60000);
     const fetchOptions = {
       ...options,
       signal: options.signal || controller.signal,
