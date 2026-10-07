@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useApp } from '../AppContext.jsx';
+import { fetchPlatformStats } from '../services/api.js';
 import { T, withAlpha } from '../components/UI.jsx';
 import { Leaf, ShieldCheck, BarChart3, Eye, EyeOff, Zap, TrendingUp, Award, TreePine, Building2, Globe, Sun, Moon } from 'lucide-react';
 
@@ -24,8 +25,14 @@ export default function LoginPage() {
   const [password, setPassword] = useState('demo@123');
   const [showPass, setShowPass] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const [platformStats, setPlatformStats] = useState(null);
 
-  useEffect(() => { setTimeout(()=>setLoaded(true), 80); }, []);
+  useEffect(() => {
+    setTimeout(()=>setLoaded(true), 80);
+    fetchPlatformStats().then(res => {
+      if (res.data) setPlatformStats(res.data);
+    }).catch(()=>{});
+  }, []);
 
   const roles = [
     {role:'admin',     label:'Admin',      desc:'Platform HQ',         icon:ShieldCheck, color:T.goldL,    email:'admin@carbonvault.com'},
@@ -39,11 +46,15 @@ export default function LoginPage() {
     duration: 5+Math.random()*8,
   }));
 
+  const activeProjectsCount = platformStats ? platformStats.active_projects : 3;
+  const verifiedCreditsCount = platformStats ? `${(platformStats.total_credits || 0).toLocaleString()}` : '41,200';
+  const fundingText = platformStats && platformStats.total_funding_usd ? `$${Math.round(platformStats.total_funding_usd/1000)}K` : '$580K';
+
   const stats = [
-    {n:'107,600', l:'Credits Verified',   icon:Award,     color:T.teal},
-    {n:'8',       l:'Active Projects',    icon:TreePine,  color:T.skyL},
-    {n:'$580K',   l:'Transactions',       icon:TrendingUp,color:T.goldL},
-    {n:'97%',     l:'Uptime SLA',         icon:Zap,       color:T.emeraldL},
+    {n: verifiedCreditsCount, l:'Credits Verified',   icon:Award,     color:T.teal},
+    {n: `${activeProjectsCount}`, l:'Active Projects',    icon:TreePine,  color:T.skyL},
+    {n: fundingText,         l:'Transactions',       icon:TrendingUp,color:T.goldL},
+    {n:'99.9%',              l:'AI MRV Uptime',      icon:Zap,       color:T.emeraldL},
   ];
 
   return (

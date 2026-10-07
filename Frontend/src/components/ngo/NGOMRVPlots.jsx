@@ -1,10 +1,26 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { mockProjects } from '../../data/mockData.js';
+import { fetchProjects } from '../../services/api.js';
 import { Card, SectionHeader, Badge, MRVScore, Btn } from '../UI.jsx';
 import { CheckCircle, AlertTriangle, MapPin, Layers } from 'lucide-react';
 
 export function NGOMRVResults() {
-  const myProject = mockProjects[0];
+  const [project, setProject] = useState(mockProjects[0]);
+  const [projectCount, setProjectCount] = useState(mockProjects.length);
+
+  useEffect(() => {
+    fetchProjects(1).then(res => {
+      if (!res.error && Array.isArray(res.data) && res.data.length > 0) {
+        setProject(res.data[0]);
+        setProjectCount(res.data.length);
+      }
+    }).catch(() => {});
+  }, []);
+
+  const myProject = project;
+  const mrvScore = myProject.mrv_score || myProject.mrvScore || 91;
+  const envScore = myProject.env_score || myProject.envScore || 88;
+  const fraudRisk = myProject.fraud_risk || myProject.fraudRisk || 12;
 
   return (
     <div style={{ padding: 28 }}>
@@ -19,9 +35,9 @@ export function NGOMRVResults() {
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 20 }}>
             {[
-              { label: 'AI MRV Score', value: myProject.mrvScore, color: '#2dd4bf', note: 'High confidence' },
-              { label: 'Environmental Impact', value: myProject.envScore, color: '#60a5fa', note: 'Above average' },
-              { label: 'Fraud Risk', value: myProject.fraudRisk, color: '#34d399', note: 'Low risk' },
+              { label: 'AI MRV Score', value: mrvScore, color: '#2dd4bf', note: 'High confidence' },
+              { label: 'Environmental Impact', value: envScore, color: '#60a5fa', note: 'Above average' },
+              { label: 'Fraud Risk', value: fraudRisk, color: '#34d399', note: 'Low risk' },
             ].map(({ label, value, color, note }) => (
               <div key={label} style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 8, padding: 14 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
@@ -59,7 +75,7 @@ export function NGOMRVResults() {
           </div>
           <div style={{ fontSize: 12, color: '#475569', marginBottom: 8, fontWeight: 600, textTransform: 'uppercase' }}>Duplicate Check</div>
           <div style={{ background: 'rgba(16,185,129,0.1)20', border: '1px solid rgba(16,185,129,0.25)30', borderRadius: 6, padding: 10, fontSize: 12, color: '#475569' }}>
-            ✓ No duplicate images detected across {mockProjects.length} projects
+            ✓ No duplicate images detected across {projectCount} projects
           </div>
         </Card>
       </div>

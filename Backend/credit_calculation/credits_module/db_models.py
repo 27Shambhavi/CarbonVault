@@ -1,6 +1,6 @@
 # credits_module/db_models.py
 
-from sqlalchemy import Column, Integer, Float, String, Date, Text, ForeignKey
+from sqlalchemy import Column, Integer, Float, String, Date, DateTime, Text, ForeignKey
 from sqlalchemy.orm import relationship
 from .db import Base
 
@@ -115,3 +115,47 @@ class Wallet(Base):
     total_credits = Column(Float, default=0)
     total_spent_inr = Column(Float, default=0)
     last_purchase_date = Column(Date, nullable=True)
+
+
+class AuditLog(Base):
+    __tablename__ = "audit_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    action = Column(String)  # create, approve, reject, mint, payment
+    name = Column(String)    # Project ID or reference
+    detail = Column(Text)
+    user = Column(String)
+    timestamp = Column(DateTime)
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, index=True)
+    email = Column(String, unique=True, index=True)
+    role = Column(String)  # 'admin', 'ngo', 'buyer'
+    projects = Column(Integer, default=0)
+    credits = Column(Float, default=0.0)
+    status = Column(String, default="active")  # 'active', 'suspended'
+    joined = Column(String)  # e.g. '2024-01-15'
+
+
+class PricingConfig(Base):
+    __tablename__ = "pricing_config"
+
+    id = Column(Integer, primary_key=True, index=True)
+    base = Column(Float, default=28.50)
+    demand = Column(Float, default=1.12)
+    supply = Column(Float, default=0.98)
+    living = Column(Float, default=1.08)
+    updated_at = Column(DateTime)
+
+
+class PriceHistory(Base):
+    __tablename__ = "price_history"
+
+    id = Column(Integer, primary_key=True, index=True)
+    month = Column(String)
+    price = Column(Float)
+    recorded_at = Column(DateTime)

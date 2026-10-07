@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 from credit_calculation.credits_module.db import SessionLocal
-from credit_calculation.credits_module.db_models import Project, FundingDetails, Transaction, Wallet
+from credit_calculation.credits_module.db_models import Project, FundingDetails, Transaction, Wallet, ProjectCredits, CorporateRequest
 
 # ── Razorpay SDK setup ──────────────────────────────────────────────────
 # ── Razorpay SDK setup ──────────────────────────────────────────────────
@@ -79,6 +79,8 @@ def create_order(req: CreateOrderRequest):
     """
     if req.amount <= 0:
         raise HTTPException(status_code=400, detail="Amount must be greater than 0")
+
+    amount_paise = int(round(req.amount * 100))
 
     # Razorpay test mode has a hard per-transaction limit of ₹5,00,000 (50,000,000 paise)
     is_test_mode = (RAZORPAY_KEY_ID or "").startswith("rzp_test_")
@@ -188,9 +190,22 @@ def buy_credits(req: BuyCreditsRequest):
         ).first()
         price_per_ton = funding.price_per_ton if funding else project.price or 12.0
 
-        # Deduct purchased credits from project
+        # Deduct purchased credits from project and ProjectCredits
         if project.credits is not None:
             project.credits = max(0.0, float(project.credits) - float(req.quantity))
+
+        project_credits = db.query(ProjectCredits).filter(ProjectCredits.project_id == req.project_id).first()
+        if project_credits and project_credits.verified_credits is not None:
+            project_credits.verified_credits = max(0.0, float(project_credits.verified_credits) - float(req.quantity))
+
+        # Update matching pending CorporateRequest to completed if exists
+        corp_req = db.query(CorporateRequest).filter(
+            CorporateRequest.project_id == req.project_id,
+            CorporateRequest.corporate_name == req.corporate_name,
+            CorporateRequest.status == "pending"
+        ).first()
+        if corp_req:
+            corp_req.status = "completed"
 
         # Create transaction record
         txn = Transaction(
@@ -226,6 +241,21 @@ def buy_credits(req: BuyCreditsRequest):
             db.add(wallet)
 
         db.commit()
+
+        # Record audit log
+        try:
+            from credit_calculation.credits_module.db_models import AuditLog
+            audit_entry = AuditLog(
+                action="payment",
+                name=req.project_id,
+                detail=f"{req.corporate_name} purchased {req.quantity:,.0f} credits of '{project.name}' for ₹{req.amount:,.2f}",
+                user=req.corporate_name,
+                timestamp=datetime.utcnow()
+            )
+            db.add(audit_entry)
+            db.commit()
+        except Exception as e:
+            logger.warning("Failed to record audit log for payment: %s", e)
 
         logger.info(
             "Transaction recorded: %s bought %.2f credits of %s for ₹%.2f",

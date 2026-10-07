@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
+import { useApp } from '../../AppContext.jsx';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
 import { mockCreditsByType } from '../../data/mockData.js';
-import { fetchAllProjects, fetchMapProjects, fetchMapPendingProjects } from '../../services/api.js';
+import { fetchPlatformStats, fetchAllProjects, fetchMapProjects, fetchMapPendingProjects } from '../../services/api.js';
 import { KPICard, Card, SectionHeader, Table, Badge, MRVScore, Btn, T } from '../UI.jsx';
 import { ProjectMap } from '../GoogleMap.jsx';
 import { Layers, FolderCheck, Clock, AlertTriangle, Download } from 'lucide-react';
@@ -17,14 +18,17 @@ const CT = ({active,payload,label}) => {
 };
 
 export default function AdminDashboard() {
+  const { refreshKey } = useApp();
+  const [stats, setStats] = useState(null);
   const [projects, setProjects] = useState([]);
   const [mapFeatures, setMapFeatures] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     setLoading(true);
-    Promise.all([fetchAllProjects(), fetchMapProjects(), fetchMapPendingProjects()])
-      .then(([allRes, mapRes, pendRes]) => {
+    Promise.all([fetchPlatformStats(), fetchAllProjects(), fetchMapProjects(), fetchMapPendingProjects()])
+      .then(([statsRes, allRes, mapRes, pendRes]) => {
+        if (statsRes.data) setStats(statsRes.data);
         if (!allRes.error && Array.isArray(allRes.data)) {
           setProjects(allRes.data);
         }
@@ -33,11 +37,12 @@ export default function AdminDashboard() {
         setMapFeatures([...approved, ...pending]);
       })
       .finally(() => setLoading(false));
-  }, []);
+  }, [refreshKey]);
 
-  const pending = projects.filter(p => p.status === 'pending').length;
+  const activeCount = stats?.active_projects ?? projects.filter(p => p.status === 'approved').length;
+  const pendingCount = stats?.pending_projects ?? projects.filter(p => p.status === 'pending').length;
   const flagged = projects.filter(p => (p.fraudRisk || 0) > 50).length;
-  const total   = projects.reduce((s, p) => s + (p.credits || 0), 0);
+  const total = stats?.total_credits ?? projects.reduce((s, p) => s + (p.credits || 0), 0);
   const pieColors = [T.emerald, T.sky, T.goldL, T.violetL];
 
   // Build pie data from actual projects
@@ -69,9 +74,9 @@ export default function AdminDashboard() {
 
       {/* KPIs */}
       <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:15,marginBottom:28}}>
-        <KPICard icon={Layers}        label="Total Credits Minted" value={total.toLocaleString()} sub="+12% this month"        trend="up"   color={T.teal}/>
-        <KPICard icon={FolderCheck}   label="Active Projects"      value={projects.filter(p=>p.status==='approved').length} sub={`${projects.length} total`} trend="up" color={T.violetL}/>
-        <KPICard icon={Clock}         label="Pending Reviews"       value={pending}                sub="Avg 2.1 days"           trend="down" color={T.goldL}/>
+        <KPICard icon={Layers}        label="Total Credits Minted" value={Math.round(total).toLocaleString()} sub="+12% this month"        trend="up"   color={T.teal}/>
+        <KPICard icon={FolderCheck}   label="Active Projects"      value={activeCount} sub={`${projects.length || stats?.total_projects || 0} total`} trend="up" color={T.violetL}/>
+        <KPICard icon={Clock}         label="Pending Reviews"       value={pendingCount}                sub="Avg 2.1 days"           trend="down" color={T.goldL}/>
         <KPICard icon={AlertTriangle} label="Fraud Flags"           value={flagged}                sub={`${flagged} flagged`}   trend="up"   color={T.roseL}/>
       </div>
 
@@ -131,7 +136,7 @@ export default function AdminDashboard() {
         {[
           {label:'Approval Rate', value: projects.length > 0 ? `${Math.round(projects.filter(p=>p.status==='approved').length/projects.length*100)}%` : '—', desc:`${projects.filter(p=>p.status==='approved').length} of ${projects.length} projects approved`, color:T.emeraldL},
           {label:'Avg Processing Time',  value:'2.1 days', desc:'Submission to decision',       color:T.teal},
-          {label:'Pending Reviews', value: String(pending), desc:`${pending} awaiting admin review`, color:T.goldL},
+          {label:'Pending Reviews', value: String(pendingCount), desc:`${pendingCount} awaiting admin review`, color:T.goldL},
         ].map(({label,value,desc,color})=>(
           <Card key={label} style={{textAlign:'center',position:'relative',overflow:'hidden'}}>
             <div style={{position:'absolute',top:0,left:0,right:0,height:2,background:`linear-gradient(90deg, transparent, ${color}60, transparent)`}}/>

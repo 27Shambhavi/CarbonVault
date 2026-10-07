@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { useApp } from '../../AppContext.jsx';
-import { createProject, fetchProjects, fetchDashboard, fetchMapProjects, fetchMarketplaceRequests, checkSiteSuitability, acceptBuyRequest } from '../../services/api.js';
+import { createProject, fetchProjects, fetchDashboard, fetchMapProjects, fetchMarketplaceRequests, checkSiteSuitability, acceptBuyRequest, createOrder, buyCredits, loadRazorpayScript } from '../../services/api.js';
 import { Card, SectionHeader, Table, Badge, MRVScore, KPICard, Modal, Btn, T } from '../UI.jsx';
 import { ProjectMap } from '../GoogleMap.jsx';
 import { TreePine, Layers, ShoppingCart, Plus, MapPin, Upload, CheckCircle, Clock, TrendingUp, Search, Filter, Star, AlertCircle, X, Leaf, DollarSign } from 'lucide-react';
@@ -672,11 +672,13 @@ export function NGOSiteSuitability() {
 
 // ── NGO Marketplace ─────────────────────────────────────────────────────────────
 export function NGOMarketplace() {
+  const { triggerRefresh } = useApp();
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [payModal,setPayModal] = useState(null);
   const [paid,setPaid]       = useState({});
+  const [paying, setPaying]  = useState(false);
   const { showToast, ToastEl } = useToast();
 
   useEffect(() => {
@@ -700,9 +702,100 @@ export function NGOMarketplace() {
   };
 
   const handleRazorPay = async (req) => {
-    setPaid({...paid,[req.id]:true});
-    setPayModal(null);
-    showToast(`Payment received for ${req.project_name || req.project_id}!`);
+    setPaying(true);
+    try {
+      await loadRazorpayScript();
+      const amountUSD = req.total || 0;
+      const amountINR = Math.round(amountUSD * 83.5);
+
+      if (amountINR > 500000) {
+        showToast(`Razorpay test mode limit is ₹5,00,000 per transaction. (Current: ₹${amountINR.toLocaleString('en-IN')})`, 'error');
+        setPaying(false);
+        return;
+      }
+
+      // Create order on backend (using configured test keys)
+      const orderRes = await createOrder(amountINR, 'INR', req.project_id || 'PRJ-MAN-AMAZON', req.buyer || 'Corporate Buyer');
+      if (orderRes.error) {
+        showToast('Failed to create Razorpay order: ' + orderRes.error, 'error');
+        setPaying(false);
+        return;
+      }
+      const order = orderRes.data;
+
+      // In demo mode if keys are unavailable, complete gracefully
+      if (order.demo_mode) {
+        await buyCredits({
+          razorpay_order_id: order.id,
+          razorpay_payment_id: "pay_demo_" + Math.random().toString(36).substring(7),
+          razorpay_signature: "demo_signature",
+          project_id: req.project_id || 'PRJ-MAN-AMAZON',
+          corporate_name: req.buyer || 'Corporate Buyer',
+          quantity: req.tons || 100,
+          amount: amountINR,
+        });
+        setPaid(prev => ({ ...prev, [req.id]: true }));
+        setPaying(false);
+        setPayModal(null);
+        showToast(`Payment of ₹${amountINR.toLocaleString('en-IN')} received successfully!`);
+        triggerRefresh();
+        return;
+      }
+
+      // Open Razorpay hosted checkout popup
+      const options = {
+        key: order.key_id,
+        amount: order.amount,
+        currency: order.currency || 'INR',
+        name: 'CarbonVault',
+        description: `Payment for ${(req.tons || 0).toLocaleString()}t credits - ${req.project_name || req.project_id}`,
+        order_id: order.id,
+        handler: async function (response) {
+          const buyRes = await buyCredits({
+            razorpay_order_id: response.razorpay_order_id,
+            razorpay_payment_id: response.razorpay_payment_id,
+            razorpay_signature: response.razorpay_signature,
+            project_id: req.project_id || 'PRJ-MAN-AMAZON',
+            corporate_name: req.buyer || 'Corporate Buyer',
+            quantity: req.tons || 100,
+            amount: amountINR,
+          });
+
+          setPaid(prev => ({ ...prev, [req.id]: true }));
+          setPaying(false);
+          setPayModal(null);
+          showToast(`Payment of ₹${amountINR.toLocaleString('en-IN')} verified successfully via Razorpay!`);
+          triggerRefresh();
+        },
+        modal: {
+          ondismiss: function () {
+            setPaying(false);
+          }
+        },
+        prefill: {
+          name: req.buyer || 'Corporate Buyer',
+          email: 'buyer@carbonvault.com',
+          contact: '9999999999'
+        },
+        theme: { color: '#2dd4bf' }
+      };
+
+      if (!window.Razorpay) {
+        showToast('Razorpay SDK failed to load. Please verify network connection.', 'error');
+        setPaying(false);
+        return;
+      }
+
+      const rzp = new window.Razorpay(options);
+      rzp.on('payment.failed', function (resp) {
+        showToast('Payment failed: ' + (resp.error?.description || 'Cancelled'), 'error');
+        setPaying(false);
+      });
+      rzp.open();
+    } catch (err) {
+      showToast('Payment error: ' + err.message, 'error');
+      setPaying(false);
+    }
   };
 
   const inrAmount = (usd) => `₹${(usd*83.5).toLocaleString('en-IN',{maximumFractionDigits:0})}`;
@@ -786,11 +879,11 @@ export function NGOMarketplace() {
       </Card>
 
       {/* Razorpay Modal */}
-      <Modal open={!!payModal} onClose={()=>setPayModal(null)} title="Razorpay Payment" width={440}>
+      <Modal open={!!payModal} onClose={()=>setPayModal(null)} title="Razorpay Checkout" width={460}>
         {payModal && (
           <div>
             <div style={{background:'rgba(45,212,191,0.06)',border:'1px solid rgba(45,212,191,0.18)',borderRadius:12,padding:20,marginBottom:20}}>
-              <div style={{fontSize:11,color:T.teal,textTransform:'uppercase',letterSpacing:'0.8px',marginBottom:8}}>Payment Summary</div>
+              <div style={{fontSize:11,color:T.teal,textTransform:'uppercase',letterSpacing:'0.8px',marginBottom:8}}>Order & Settlement Summary</div>
               <div style={{display:'flex',flexDirection:'column',gap:7}}>
                 {[['Buyer',payModal.buyer],['Project',payModal.project_name||payModal.project_id],['Credits',(payModal.tons||0).toLocaleString()+'t'],['Amount (USD)',`$${(payModal.total||0).toLocaleString()}`],['Amount (INR)',inrAmount(payModal.total||0)]].map(([k,v])=>(
                   <div key={k} style={{display:'flex',justifyContent:'space-between',fontSize:13,padding:'5px 0',borderBottom:`1px solid rgba(255,255,255,0.04)`}}>
@@ -799,11 +892,15 @@ export function NGOMarketplace() {
                 ))}
               </div>
             </div>
-            <div style={{background:'rgba(245,158,11,0.06)',border:'1px solid rgba(245,158,11,0.2)',borderRadius:10,padding:14,marginBottom:20,fontSize:12,color:T.t3,lineHeight:1.6}}>
-              <strong style={{color:T.goldL}}>Razorpay Integration:</strong> In production, clicking below opens the Razorpay checkout with <code style={{color:T.teal}}>rzp_test_...</code> key. This demo simulates the payment flow.
+            <div style={{background:'rgba(45,212,191,0.06)',border:'1px solid rgba(45,212,191,0.2)',borderRadius:10,padding:14,marginBottom:20,fontSize:12,color:T.t2,lineHeight:1.6}}>
+              <strong style={{color:T.teal}}>Live Razorpay Gateway:</strong> Clicking below generates an official order and opens Razorpay's secure hosted payment modal. Use test card <code style={{color:T.goldL,fontWeight:700}}>4111 1111 1111 1111</code> to complete payment.
             </div>
-            <Btn style={{width:'100%',justifyContent:'center',background:'linear-gradient(135deg,#00BAF2,#0099cc)',color:'#fff',boxShadow:'0 4px 16px rgba(0,186,242,0.3)'}} onClick={()=>handleRazorPay(payModal)}>
-              💳 Pay via Razorpay — {inrAmount(payModal.total||0)}
+            <Btn
+              style={{width:'100%',justifyContent:'center',background:'linear-gradient(135deg,#00BAF2,#0099cc)',color:'#fff',boxShadow:'0 4px 16px rgba(0,186,242,0.3)'}}
+              onClick={()=>handleRazorPay(payModal)}
+              disabled={paying}
+            >
+              {paying ? 'Connecting to Razorpay…' : `💳 Pay via Razorpay — ${inrAmount(payModal.total||0)}`}
             </Btn>
           </div>
         )}

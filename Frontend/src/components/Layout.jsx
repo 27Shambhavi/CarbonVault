@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useApp } from '../AppContext.jsx';
 import { mockNotifications } from '../data/mockData.js';
+import { fetchNotifications } from '../services/api.js';
 import { T, gc } from './UI.jsx';
 import {
   Leaf, Bell, Settings, User, LogOut, ChevronRight, X, Menu,
@@ -136,8 +137,16 @@ export function Sidebar() {
 export function Navbar() {
   const {user,page,setPage,setNotifOpen,sidebarOpen,setSidebarOpen,logout,theme,toggleTheme} = useApp();
   const [menuOpen,setMenuOpen] = useState(false);
+  const [notifs, setNotifs] = useState(mockNotifications);
+
+  useEffect(() => {
+    fetchNotifications().then(res => {
+      if (Array.isArray(res.data) && res.data.length > 0) setNotifs(res.data);
+    }).catch(() => {});
+  }, []);
+
   if (!user) return null;
-  const unread = mockNotifications.filter(n=>!n.read).length;
+  const unread = notifs.filter(n=>!n.read).length;
   const rc = RC[user.role] || RC.admin;
   const pageTitle = (navMap[user.role]||[]).find(n=>n.id===page)?.label || (page==='settings'?'Settings':page==='profile'?'Profile':'Dashboard');
 
@@ -206,6 +215,17 @@ export function Navbar() {
 export function NotificationCenter() {
   const {notifOpen,setNotifOpen} = useApp();
   const [notifs,setNotifs] = useState(mockNotifications);
+
+  useEffect(() => {
+    if (notifOpen) {
+      fetchNotifications().then(res => {
+        if (Array.isArray(res.data) && res.data.length > 0) {
+          setNotifs(res.data);
+        }
+      }).catch(() => {});
+    }
+  }, [notifOpen]);
+
   if (!notifOpen) return null;
   const tc = {approval:T.emeraldL,warning:T.roseL,success:T.teal,info:T.skyL};
 

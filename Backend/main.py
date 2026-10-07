@@ -3,7 +3,7 @@ import sys
 import logging
 import sqlite3
 from contextlib import asynccontextmanager
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -20,9 +20,11 @@ logger = logging.getLogger("carbonvault")
 
 # DB Models & Engine
 from credit_calculation.credits_module.db_models import (
-    Base, Project, NGO, CorporateRequest, Transaction, Wallet, ProjectCredits, FundingDetails
+    Base, Project, NGO, CorporateRequest, Transaction, Wallet, ProjectCredits, FundingDetails, AuditLog,
+    User, PricingConfig, PriceHistory
 )
 from credit_calculation.credits_module.db import engine, SessionLocal
+Base.metadata.create_all(bind=engine)
 
 # Import Routers
 from routers.project_servicerouter import router as project_router
@@ -73,6 +75,77 @@ def seed_initial_data():
     """Seed initial projects, NGOs, and demo transactions if database is fresh."""
     db = SessionLocal()
     try:
+        # Seed Audit Logs if empty
+        if not db.query(AuditLog).first():
+            now = datetime.utcnow()
+            a1 = AuditLog(
+                action="mint",
+                name="PRJ-MAN-AMAZON",
+                detail="Minted 12,400 verified credits with satellite NDVI verification",
+                user="Admin System",
+                timestamp=now - timedelta(minutes=14)
+            )
+            a2 = AuditLog(
+                action="approve",
+                name="PRJ-TEK-CONGO1",
+                detail="Project approved with GRS quality score of 91/100",
+                user="Alex Mercer (Admin)",
+                timestamp=now - timedelta(hours=2)
+            )
+            a3 = AuditLog(
+                action="create",
+                name="PRJ-MAN-SUNDAR",
+                detail="New mangrove restoration project submitted with boundary polygon",
+                user="Green Delta",
+                timestamp=now - timedelta(hours=5)
+            )
+            a4 = AuditLog(
+                action="payment",
+                name="PRJ-MAN-AMAZON",
+                detail="Microsoft Sustainability purchased 2,000 credits for ₹4,75,950.00",
+                user="Microsoft Sustainability",
+                timestamp=now - timedelta(days=1)
+            )
+            db.add_all([a1, a2, a3, a4])
+            db.commit()
+
+        # Seed Users if empty
+        if not db.query(User).first():
+            default_users = [
+                User(name="EcoGuard Brazil", email="contact@ecoguard.org", role="ngo", projects=3, credits=34600, joined="2023-06-12", status="active"),
+                User(name="Microsoft Sustainability", email="carbon@microsoft.com", role="buyer", projects=0, credits=15200, joined="2023-09-01", status="active"),
+                User(name="Google Carbon Team", email="sustainability@google.com", role="buyer", projects=0, credits=28000, joined="2023-07-14", status="active"),
+                User(name="Green Delta", email="info@greendelta.org", role="ngo", projects=2, credits=8200, joined="2024-01-05", status="active"),
+                User(name="Shell Renewables", email="offsets@shell.com", role="buyer", projects=0, credits=42000, joined="2023-04-22", status="active"),
+                User(name="Borneo Earth", email="team@borneoearth.org", role="ngo", projects=1, credits=0, joined="2024-03-08", status="suspended"),
+                User(name="HSBC Green Finance", email="carbon@hsbc.com", role="buyer", projects=0, credits=9800, joined="2024-02-17", status="active"),
+                User(name="CongoCare", email="ops@congocare.org", role="ngo", projects=2, credits=22000, joined="2023-11-30", status="active"),
+            ]
+            db.add_all(default_users)
+            db.commit()
+
+        # Seed Pricing Config if empty
+        if not db.query(PricingConfig).first():
+            cfg = PricingConfig(
+                base=28.50,
+                demand=1.12,
+                supply=0.98,
+                living=1.08,
+                updated_at=datetime.utcnow()
+            )
+            db.add(cfg)
+            
+            history = [
+                PriceHistory(month="Jul", price=24.0, recorded_at=datetime.utcnow() - timedelta(days=150)),
+                PriceHistory(month="Aug", price=24.8, recorded_at=datetime.utcnow() - timedelta(days=120)),
+                PriceHistory(month="Sep", price=25.6, recorded_at=datetime.utcnow() - timedelta(days=90)),
+                PriceHistory(month="Oct", price=26.4, recorded_at=datetime.utcnow() - timedelta(days=60)),
+                PriceHistory(month="Nov", price=27.2, recorded_at=datetime.utcnow() - timedelta(days=30)),
+                PriceHistory(month="Dec", price=28.5, recorded_at=datetime.utcnow()),
+            ]
+            db.add_all(history)
+            db.commit()
+
         # Check if projects already exist
         if db.query(Project).first():
             return
@@ -246,6 +319,41 @@ def seed_initial_data():
         )
         db.add(t1)
         db.commit()
+
+        # 5. Audit Logs
+        if not db.query(AuditLog).first():
+            now = datetime.utcnow()
+            a1 = AuditLog(
+                action="mint",
+                name="PRJ-MAN-AMAZON",
+                detail="Minted 12,400 verified credits with satellite NDVI verification",
+                user="Admin System",
+                timestamp=now - timedelta(minutes=14)
+            )
+            a2 = AuditLog(
+                action="approve",
+                name="PRJ-TEK-CONGO1",
+                detail="Project approved with GRS quality score of 91/100",
+                user="Alex Mercer (Admin)",
+                timestamp=now - timedelta(hours=2)
+            )
+            a3 = AuditLog(
+                action="create",
+                name="PRJ-MAN-SUNDAR",
+                detail="New mangrove restoration project submitted with boundary polygon",
+                user="Green Delta",
+                timestamp=now - timedelta(hours=5)
+            )
+            a4 = AuditLog(
+                action="payment",
+                name="PRJ-MAN-AMAZON",
+                detail="Microsoft purchased 2,000 tonnes (₹4,75,950.00)",
+                user="Microsoft Sustainability",
+                timestamp=now - timedelta(days=1)
+            )
+            db.add_all([a1, a2, a3, a4])
+            db.commit()
+
         logger.info("[OK] Initial demo data seeded successfully")
 
     except Exception as e:
@@ -297,6 +405,7 @@ app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
 
 # Include Routers
 app.include_router(project_router, prefix="/projects", tags=["Projects"])
+app.include_router(project_router, prefix="", tags=["Projects-Root"])
 app.include_router(grs_router, prefix="/grs", tags=["GRS"])
 app.include_router(suitability_router, tags=["Site Suitability"])
 app.include_router(marketplace_router, prefix="/marketplace", tags=["Marketplace"])

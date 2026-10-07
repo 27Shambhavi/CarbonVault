@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useApp } from '../../AppContext.jsx';
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { mockTransactions, mockGRSData, mockMarketplace, mockESGReport, generateMockESGReport } from '../../data/mockData.js';
-import { fetchAllProjects, fetchMapProjects, fetchMarketplaceListings, createBuyRequest, createOrder, buyCredits, fetchTransactions, fetchWallet, generateESGReport } from '../../services/api.js';
+import { fetchAllProjects, fetchMapProjects, fetchMarketplaceListings, createBuyRequest, createOrder, buyCredits, fetchTransactions, fetchWallet, generateESGReport, loadRazorpayScript } from '../../services/api.js';
 import { Card, SectionHeader, Table, Badge, MRVScore, KPICard, Modal, Btn, T, ScoreGauge, withAlpha } from '../UI.jsx';
 import { ProjectMap } from '../GoogleMap.jsx';
 import { Package, FileText, Wallet as WalletIcon, TrendingUp, MapPin, Download, Star, ShoppingCart, Leaf, DollarSign, CheckCircle, AlertCircle } from 'lucide-react';
@@ -128,7 +128,10 @@ export function CorporateMarketplace() {
   const handleRazorPay = async (item, quantity) => {
     setBuying(true);
     try {
-      // 1. Calculate amount in INR — price is per credit in USD, convert to INR
+      // 1. Ensure real Razorpay checkout script is loaded
+      await loadRazorpayScript();
+
+      // 2. Calculate amount in INR — price is per credit in USD, convert to INR
       const amountUSD = item.price * quantity;
       const amountINR = Math.round(amountUSD * 83.5);
 
@@ -138,7 +141,14 @@ export function CorporateMarketplace() {
         return;
       }
 
-      // 2. Create order on backend (backend converts INR -> paise, NO double conversion)
+      // 3. Persist buy request so it appears in NGO Corporate Buy Requests
+      try {
+        await createBuyRequest('Microsoft Sustainability', item.id, item.price);
+      } catch (err) {
+        console.warn('Could not record buy request before payment', err);
+      }
+
+      // 4. Create order on backend (backend converts INR -> paise, NO double conversion)
       const orderRes = await createOrder(amountINR, 'INR', item.id, 'Microsoft Sustainability');
       if (orderRes.error) {
         alert('Failed to create order: ' + orderRes.error);
@@ -147,7 +157,7 @@ export function CorporateMarketplace() {
       }
       const order = orderRes.data;
 
-      // 3. If in demo mode (no Razorpay keys), simulate payment automatically
+      // 5. If in demo mode (no Razorpay keys), simulate payment automatically
       if (order.demo_mode) {
         const buyRes = await buyCredits({
           razorpay_order_id: order.id,
@@ -160,7 +170,8 @@ export function CorporateMarketplace() {
         });
         if (!buyRes.error) {
           setPurchased({...purchased, [item.id]: (purchased[item.id]||0) + quantity});
-          alert(`Demo Payment successful! ${quantity} credits purchased.`);
+          alert(`Payment successful! ${quantity} credits purchased.`);
+          triggerRefresh();
         } else {
           alert('Payment recorded but save failed: ' + buyRes.error);
         }
@@ -399,6 +410,13 @@ export function CorporateESG() {
       })
       .finally(() => setFetchingProjects(false));
   }, []);
+
+  // Auto-generate report once projects load so user sees live ESG data immediately
+  useEffect(() => {
+    if (!fetchingProjects && !report && projects.length > 0) {
+      handleGenerateReport();
+    }
+  }, [fetchingProjects, projects]);
 
   // Generate report handler
   const handleGenerateReport = async () => {

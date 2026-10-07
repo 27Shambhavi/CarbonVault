@@ -324,3 +324,154 @@ export async function generateESGReport(corporateName, projectId = null) {
     }),
   });
 }
+
+// ══════════════════════════════════════════════════════════════════════════════
+// STATS & AUDIT LOG APIs
+// ══════════════════════════════════════════════════════════════════════════════
+
+/** Platform-wide aggregate stats for all dashboards & login screen */
+export async function fetchPlatformStats() {
+  const approved = mockProjects.filter(p => p.status === 'approved');
+  const mockFallback = {
+    total_projects: mockProjects.length,
+    active_projects: approved.length,
+    pending_projects: mockProjects.filter(p => p.status === 'pending').length,
+    rejected_projects: mockProjects.filter(p => p.status === 'rejected').length,
+    total_credits: approved.reduce((s, p) => s + (p.credits || 0), 0),
+    total_shadow_credits: 0,
+    total_funding_usd: 580000,
+    total_transactions: mockTransactions.length,
+    total_transaction_value_inr: 3625000,
+    total_transaction_value_usd: 43400,
+    certificates_issued: 24,
+    audits_conducted: 48,
+    avg_mrv_score: 86.4,
+    fraud_detection_rate: '12.5%',
+    approval_rate: '75%',
+    co2_removed_tons: 43400,
+    countries_active: 5,
+  };
+  return requestWithFallback(`${API_BASE}/projects/stats`, {}, mockFallback);
+}
+
+/** Fetch immutable audit trail */
+export async function fetchAuditLogs() {
+  const mockFallback = [
+    { id: 1, action: 'mint', name: 'PRJ-MAN-AMAZON', timestamp: new Date(Date.now() - 14 * 60000).toISOString(), detail: 'Minted 12,400 verified credits with satellite NDVI verification', user: 'Admin System' },
+    { id: 2, action: 'approve', name: 'PRJ-TEK-CONGO1', timestamp: new Date(Date.now() - 2 * 3600000).toISOString(), detail: 'Project approved with GRS quality score of 91/100', user: 'Alex Mercer (Admin)' },
+    { id: 3, action: 'create', name: 'PRJ-MAN-SUNDAR', timestamp: new Date(Date.now() - 5 * 3600000).toISOString(), detail: 'New mangrove restoration project submitted with boundary polygon', user: 'Green Delta' },
+    { id: 4, action: 'payment', name: 'PRJ-MAN-AMAZON', timestamp: new Date(Date.now() - 24 * 3600000).toISOString(), detail: 'Microsoft purchased 2,000 tonnes (₹4,75,950.00)', user: 'Microsoft Sustainability' },
+  ];
+  return requestWithFallback(`${API_BASE}/projects/audit-logs`, {}, mockFallback);
+}
+
+/** Calculate real-time human-friendly relative time (e.g. '10m ago') from ISO timestamp */
+export function timeAgo(timestamp) {
+  if (!timestamp) return 'recently';
+  const date = new Date(timestamp);
+  if (isNaN(date.getTime())) return String(timestamp);
+  const now = new Date();
+  const diffSec = Math.max(0, Math.floor((now.getTime() - date.getTime()) / 1000));
+  if (diffSec < 10) return 'just now';
+  if (diffSec < 60) return `${diffSec}s ago`;
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffHours = Math.floor(diffMin / 60);
+  if (diffHours < 24) return `${diffHours}h ago`;
+  const diffDays = Math.floor(diffHours / 24);
+  if (diffDays < 30) return `${diffDays}d ago`;
+  return date.toLocaleDateString();
+}
+
+/** Dynamically ensure Razorpay checkout script is loaded */
+export function loadRazorpayScript() {
+  return new Promise((resolve) => {
+    if (window.Razorpay) {
+      resolve(true);
+      return;
+    }
+    const script = document.createElement('script');
+    script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+    script.onload = () => resolve(true);
+    script.onerror = () => resolve(false);
+    document.body.appendChild(script);
+  });
+}
+
+/** Verification Certificates Registry API */
+export async function fetchCertificates() {
+  const mockFallback = [
+    { certificate_id: 'CV-2024-001', project_name: 'Amazon Reforestation Initiative', credits: 12400, issuance_date: '2024-12-15', status: 'VERIFIED', plantation_type: 'Mixed' },
+    { certificate_id: 'CV-2024-002', project_name: 'Congo Basin Forest Shield', credits: 22000, issuance_date: '2024-12-14', status: 'VERIFIED', plantation_type: 'Teak' },
+    { certificate_id: 'CV-2024-003', project_name: 'Vietnamese Coastal Mangrove', credits: 6800, issuance_date: '2024-12-10', status: 'VERIFIED', plantation_type: 'Mangrove' },
+    { certificate_id: 'CV-2024-004', project_name: 'Sundarbans Mangrove Restoration', credits: 8200, issuance_date: '2024-12-08', status: 'VERIFIED', plantation_type: 'Mangrove' },
+  ];
+  return requestWithFallback(`${API_BASE}/projects/certificates`, {}, mockFallback);
+}
+
+/** Climate Resilience & Co-Benefits API */
+export async function fetchClimateAnalytics() {
+  const mockFallback = {
+    co2_removed_tons: 43400,
+    forest_area_ha: 14500,
+    renewable_energy_gwh: 89.2,
+    co_benefits: [
+      { metric: 'Flood Control', value: 78 },
+      { metric: 'Biodiversity', value: 85 },
+      { metric: 'Fisheries', value: 62 },
+      { metric: 'Coastal Prot.', value: 71 },
+      { metric: 'Carbon Seq.', value: 93 },
+      { metric: 'Livelihood', value: 67 },
+    ],
+  };
+  return requestWithFallback(`${API_BASE}/projects/climate-analytics`, {}, mockFallback);
+}
+
+/** Pricing Engine Configuration API */
+export async function fetchPricingConfig() {
+  const mockFallback = {
+    base: 28.50,
+    demand: 1.12,
+    supply: 0.98,
+    living: 1.08,
+    final_price: 33.78,
+    history: mockCreditsOverTime.map((d, i) => ({ month: d.month, price: 24 + i * 0.8 })),
+  };
+  return requestWithFallback(`${API_BASE}/pricing`, {}, mockFallback);
+}
+
+/** Save Pricing Engine Configuration */
+export async function savePricingConfig(config) {
+  return request(`${API_BASE}/pricing`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(config),
+  });
+}
+
+/** User Management API */
+export async function fetchUsers() {
+  return requestWithFallback(`${API_BASE}/users`, {}, mockUsers);
+}
+
+/** Invite New User */
+export async function inviteUser(userData) {
+  return request(`${API_BASE}/users/invite`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(userData),
+  });
+}
+
+/** Update User Status (active / suspended) */
+export async function updateUserStatus(userId, status) {
+  return request(`${API_BASE}/users/${userId}/status?status=${encodeURIComponent(status)}`, {
+    method: 'PATCH',
+  });
+}
+
+/** Dynamic Notifications API */
+export async function fetchNotifications() {
+  return requestWithFallback(`${API_BASE}/notifications`, {}, mockNotifications);
+}
+
