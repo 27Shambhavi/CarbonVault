@@ -78,7 +78,7 @@ function AppShell() {
       <div style={{ flex:1, display:'flex', flexDirection:'column', minWidth:0 }}>
         <Navbar />
         <main style={{ flex:1, overflowY:'auto' }}>
-          <ErrorBoundary>
+          <ErrorBoundary key={`${user?.role}-${page}`} resetKey={`${user?.role}-${page}`}>
             <PageRouter />
           </ErrorBoundary>
         </main>

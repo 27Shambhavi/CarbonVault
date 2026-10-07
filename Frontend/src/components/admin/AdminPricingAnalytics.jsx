@@ -165,8 +165,9 @@ export function AdminAnalytics() {
   }, []);
 
   // Compute live type distribution
+  const approvedProjects = projects.filter(p => !p.status || p.status === 'approved');
   const typeMap = {};
-  projects.forEach(p => {
+  approvedProjects.forEach(p => {
     const type = (p.plantation_type || p.type || 'Other').replace('_', ' ').replace(/\b\w/g, c => c.toUpperCase());
     typeMap[type] = (typeMap[type] || 0) + (p.credits || 0);
   });

@@ -239,13 +239,18 @@ export function PublicCertificates() {
     }).finally(() => setLoading(false));
   }, []);
 
-  const displayCerts = certs.length > 0 ? certs : [
-    { certificate_id: 'CV-2024-001', project_name: 'Amazon Reforestation', credits: 12400, issuance_date: 'Dec 15, 2024' },
-    { certificate_id: 'CV-2024-002', project_name: 'Sahel Wind Energy', credits: 22000, issuance_date: 'Dec 14, 2024' },
-    { certificate_id: 'CV-2024-003', project_name: 'Congo Basin Forest', credits: 22000, issuance_date: 'Dec 12, 2024' },
-    { certificate_id: 'CV-2024-004', project_name: 'Vietnamese Mangrove', credits: 6800, issuance_date: 'Dec 10, 2024' },
-    { certificate_id: 'CV-2024-005', project_name: 'Chilean Solar', credits: 9400, issuance_date: 'Dec 8, 2024' },
-  ];
+  if (loading) {
+    return (
+      <div style={{ padding: 28, display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '40vh' }}>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ width: 36, height: 36, border: '3px solid rgba(45,212,191,0.15)', borderTop: '3px solid #2dd4bf', borderRadius: '50%', margin: '0 auto 12px', animation: 'spinSlow 0.8s linear infinite' }} />
+          <div style={{ fontSize: 13, color: '#94a3b8' }}>Loading certificates…</div>
+        </div>
+      </div>
+    );
+  }
+
+  const displayCerts = certs;
 
   return (
     <div style={{ padding: 28 }}>

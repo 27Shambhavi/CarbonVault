@@ -121,6 +121,46 @@ def generate_esg_report(req: ESGReportRequest):
         communities = max(1, int(round(24 * scale_ratio)))
         jobs = max(10, int(round(1850 * scale_ratio)))
 
+        # Dynamic Governance, Risk & ESG Scores computed from project MRV & fraud data
+        if single_project:
+            p_mrv = float(single_project.mrv_score or 88.0)
+            p_env = float(single_project.env_score or (p_mrv * 0.96))
+            p_fraud = float(single_project.fraud_risk or 6.0)
+            comp_score = round(min(0.99, max(0.70, (p_mrv / 100.0) * (1.0 - (p_fraud / 250.0)))), 2)
+            r_score = round(max(0.02, min(0.35, p_fraud / 100.0)), 2)
+            r_level = "Low" if r_score < 0.12 else ("Medium" if r_score < 0.25 else "High")
+            conf_level = round(min(0.98, max(0.80, (p_mrv / 100.0) * 0.98)), 2)
+            env_score = int(round(p_env))
+            soc_score = int(round(max(60, min(96, p_env * 0.92 + 5))))
+            gov_score = int(round(comp_score * 100))
+            
+            p_type = (single_project.plantation_type or "").lower()
+            if "mangrove" in p_type:
+                certs = ["ISO 14001", "Blue Carbon Standard", "GRI 305 Standard", "TCFD Aligned"]
+            elif "teak" in p_type or "forest" in p_type:
+                certs = ["ISO 14001", "Verra VCS Aligned", "GRI 305 Standard", "TCFD Aligned"]
+            elif "methane" in p_type or "solar" in p_type or "wind" in p_type:
+                certs = ["ISO 14064", "Gold Standard", "GRI 305 Standard", "ISSB IFRS S2 Ready"]
+            else:
+                certs = ["ISO 14001", "GRI 305 Standard", "ISSB IFRS S2 Ready", "TCFD Aligned"]
+        else:
+            all_approved = db.query(Project).filter(Project.status == "approved").all()
+            if all_approved:
+                avg_mrv = sum(float(p.mrv_score or 88.0) for p in all_approved) / len(all_approved)
+                avg_env = sum(float(p.env_score or 85.0) for p in all_approved) / len(all_approved)
+                avg_fraud = sum(float(p.fraud_risk or 6.0) for p in all_approved) / len(all_approved)
+            else:
+                avg_mrv, avg_env, avg_fraud = 88.5, 86.0, 7.2
+
+            comp_score = round(min(0.99, max(0.70, (avg_mrv / 100.0) * (1.0 - (avg_fraud / 250.0)))), 2)
+            r_score = round(max(0.02, min(0.35, avg_fraud / 100.0)), 2)
+            r_level = "Low" if r_score < 0.12 else ("Medium" if r_score < 0.25 else "High")
+            conf_level = round(min(0.98, max(0.80, (avg_mrv / 100.0) * 0.98)), 2)
+            env_score = int(round(avg_env))
+            soc_score = int(round(avg_env * 0.94))
+            gov_score = int(round(comp_score * 100))
+            certs = ["ISO 14001", "GRI 305 Standard", "ISSB IFRS S2 Ready", "TCFD Aligned"]
+
         report = {
             "meta": {
                 "company": corporate,
@@ -151,23 +191,24 @@ def generate_esg_report(req: ESGReportRequest):
                 "csr_beneficiaries": int(communities * 1875),
             },
             "governance": {
-                "compliance_score": 0.95,
+                "compliance_score": comp_score,
                 "audit_status": "Verified",
-                "risk_score": 0.08,
-                "risk_level": "Low",
-                "certifications": ["ISO 14001", "GRI 305 Standard", "ISSB IFRS S2 Ready", "TCFD Aligned"],
+                "risk_score": r_score,
+                "risk_level": r_level,
+                "certifications": certs,
             },
             "carbon_by_project": carbon_by_project,
             "esg_scores": {
-                "environmental": 88,
-                "social": 84,
-                "governance": 92,
+                "environmental": env_score,
+                "social": soc_score,
+                "governance": gov_score,
             },
             "methodology": {
                 "verification_method": "Satellite analysis (NDVI & LST proxies)",
                 "engine": "MRV-engine derived estimates",
                 "standards": ["GRI 305-1", "ISSB IFRS S2", "TCFD Framework"],
-                "confidence_level": 0.94,
+                "confidence_level": conf_level,
+                "methodology_note": "Governance & Compliance metrics are dynamically computed from verified MRV scores and fraud risk quotients of the selected projects.",
             },
         }
 

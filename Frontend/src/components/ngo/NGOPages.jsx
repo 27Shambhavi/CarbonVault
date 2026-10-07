@@ -309,24 +309,27 @@ export function NGONewProject() {
     if (!form.area) { showToast('Please enter the area in hectares', 'error'); return; }
     if (!form.trees) { showToast('Please enter the number of trees', 'error'); return; }
     if (!form.startDate) { showToast('Please select a start date', 'error'); return; }
-    if (!images.length) { showToast('Please upload at least one evidence image before submitting.', 'error'); return; }
-    if (!form.polygon.trim() || !form.polygon.toUpperCase().includes('POLYGON')) {
-      showToast('Please provide a valid WKT polygon for the plantation area. Use "Auto Generate" or enter manually.', 'error');
-      return;
+
+    let finalPolygon = (form.polygon || '').trim();
+    if (!finalPolygon || !finalPolygon.toUpperCase().includes('POLYGON')) {
+      finalPolygon = generatePolygonWKT(parseFloat(form.lat), parseFloat(form.lng), parseFloat(form.area));
+      f('polygon', finalPolygon);
     }
 
     setSubmitting(true);
     const formData = new FormData();
     formData.append('project_name', form.name.trim());
-    formData.append('ngo_name', form.ngo.trim());
+    formData.append('ngo_name', form.ngo.trim() || 'EcoGuard Brazil');
     formData.append('latitude', parseFloat(form.lat));
     formData.append('longitude', parseFloat(form.lng));
     formData.append('plantation_type', form.plantType.toLowerCase());
     formData.append('area_hectares', parseFloat(form.area));
     formData.append('number_of_trees', parseInt(form.trees, 10));
     formData.append('start_date', form.startDate);
-    formData.append('polygon_wkt', form.polygon.trim());
-    formData.append('evidence_image', images[0].file); // actual File object
+    formData.append('polygon_wkt', finalPolygon);
+    if (images.length > 0 && images[0].file) {
+      formData.append('evidence_image', images[0].file);
+    }
 
     const { data, error } = await createProject(formData);
     setSubmitting(false);
@@ -697,6 +700,8 @@ export function NGOMarketplace() {
     const { error } = await acceptBuyRequest(req.id);
     if (error) {
       showToast(`Failed to accept request: ${error}`, 'error');
+    } else {
+      setRequests(prev => prev.map(r => r.id === req.id ? { ...r, status: 'accepted' } : r));
     }
     setPayModal(req);
   };
@@ -735,6 +740,7 @@ export function NGOMarketplace() {
           amount: amountINR,
         });
         setPaid(prev => ({ ...prev, [req.id]: true }));
+        setRequests(prev => prev.map(r => r.id === req.id ? { ...r, status: 'accepted' } : r));
         setPaying(false);
         setPayModal(null);
         showToast(`Payment of ₹${amountINR.toLocaleString('en-IN')} received successfully!`);
@@ -762,6 +768,7 @@ export function NGOMarketplace() {
           });
 
           setPaid(prev => ({ ...prev, [req.id]: true }));
+          setRequests(prev => prev.map(r => r.id === req.id ? { ...r, status: 'accepted' } : r));
           setPaying(false);
           setPayModal(null);
           showToast(`Payment of ₹${amountINR.toLocaleString('en-IN')} verified successfully via Razorpay!`);
@@ -825,9 +832,9 @@ export function NGOMarketplace() {
       {/* Stats */}
       <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:14,marginBottom:22}}>
         {[
-          {l:'Open Requests',  v:requests.filter(r=>r.status==='pending').length, c:T.goldL},
-          {l:'Total Offer Value',v:inrAmount(requests.reduce((s,r)=>s+(r.total||0),0)),c:T.emeraldL},
-          {l:'Completed Sales', v:requests.filter(r=>r.status==='accepted').length,c:T.teal},
+          {l:'Open Requests',  v:requests.filter(r=>r.status==='pending' && !paid[r.id]).length, c:T.goldL},
+          {l:'Total Offer Value',v:inrAmount(requests.filter(r=>r.status==='pending' && !paid[r.id]).reduce((s,r)=>s+(r.total||0),0)),c:T.emeraldL},
+          {l:'Completed Sales', v:requests.filter(r=>r.status==='accepted' || paid[r.id]).length,c:T.teal},
         ].map(({l,v,c})=>(
           <div key={l} style={{background:'rgba(255,255,255,0.03)',border:`1px solid ${T.border}`,borderRadius:12,padding:'16px 20px',position:'relative',overflow:'hidden'}}>
             <div style={{position:'absolute',top:0,left:0,right:0,height:1,background:`linear-gradient(90deg,transparent,${c}50,transparent)`}}/>

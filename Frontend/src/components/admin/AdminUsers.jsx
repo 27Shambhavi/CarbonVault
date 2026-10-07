@@ -58,7 +58,7 @@ export default function AdminUsers() {
     }
   };
 
-  const displayUsers = users.length > 0 ? users : mockUsers;
+  const displayUsers = users;
 
   const filtered = displayUsers.filter(u =>
     (filter === 'all' || u.role === filter) &&

@@ -88,51 +88,48 @@ export default function LoginPage() {
       </div>
 
       {/* LEFT PANEL */}
-      <div style={{flex:1,display:'flex',flexDirection:'column',justifyContent:'center',padding:'60px 72px',position:'relative',zIndex:1,opacity:loaded?1:0,transform:loaded?'translateY(0)':'translateY(20px)',transition:'all 0.7s cubic-bezier(0.4,0,0.2,1)'}}>
+      <div style={{flex:1,display:'flex',flexDirection:'column',justifyContent:'center',padding:'32px 56px',position:'relative',zIndex:1}}>
         {/* Logo */}
-        <div style={{display:'flex',alignItems:'center',gap:13,marginBottom:56}}>
-          <div style={{width:48,height:48,background:`linear-gradient(135deg, ${T.teal}, ${T.tealDD})`,borderRadius:14,display:'flex',alignItems:'center',justifyContent:'center',boxShadow:`0 6px 28px rgba(45,212,191,0.45), inset 0 1px 0 rgba(255,255,255,0.25)`,flexShrink:0}}>
-            <Leaf size={22} color="#021a17" strokeWidth={2.5}/>
+        <div style={{display:'flex',alignItems:'center',gap:13,marginBottom:28}}>
+          <div style={{width:44,height:44,background:`linear-gradient(135deg, ${T.teal}, ${T.tealDD})`,borderRadius:14,display:'flex',alignItems:'center',justifyContent:'center',boxShadow:`0 6px 28px rgba(45,212,191,0.45), inset 0 1px 0 rgba(255,255,255,0.25)`,flexShrink:0}}>
+            <Leaf size={20} color="#021a17" strokeWidth={2.5}/>
           </div>
           <div>
-            <div style={{fontFamily:'Fraunces, serif',fontWeight:900,fontSize:24,color:T.t1,letterSpacing:'-0.5px'}}>CarbonVault</div>
+            <div style={{fontFamily:'Fraunces, serif',fontWeight:900,fontSize:22,color:T.t1,letterSpacing:'-0.5px'}}>CarbonVault</div>
             <div style={{fontSize:9.5,color:T.teal,fontWeight:800,letterSpacing:'2px',textTransform:'uppercase',marginTop:1}}>Carbon Intelligence Platform</div>
           </div>
         </div>
 
         {/* Headline */}
-        <h1 style={{fontFamily:'Fraunces, serif',fontSize:52,fontWeight:900,color:T.t1,lineHeight:1.05,letterSpacing:'-1.5px',marginBottom:20}}>
+        <h1 style={{fontFamily:'Fraunces, serif',fontSize:44,fontWeight:900,color:T.t1,lineHeight:1.1,letterSpacing:'-1.5px',marginBottom:16}}>
           Track Carbon.<br/>
           <span style={{background:`linear-gradient(135deg, ${T.teal} 0%, ${T.tealL} 40%, ${T.skyL} 100%)`,WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent',backgroundClip:'text',backgroundSize:'200% auto',animation:'shimmerLine 4s linear infinite'}}>
             Verify Impact.
           </span><br/>
           Build Trust.
         </h1>
-        <p style={{color:T.t3,fontSize:15,maxWidth:390,lineHeight:1.85,marginBottom:48}}>
+        <p style={{color:T.t3,fontSize:14,maxWidth:400,lineHeight:1.75,marginBottom:28}}>
           AI-powered MRV verification, real-time fraud detection, and immutable audit trails for the voluntary carbon market.
         </p>
 
         {/* Stats */}
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:13,maxWidth:420}}>
-          {stats.map(({n,l,icon:Icon,color},i)=>(
-            <div key={l} style={{background:'rgba(255,255,255,0.03)',border:`1px solid ${T.border}`,borderRadius:13,padding:'16px 18px',display:'flex',alignItems:'center',gap:13,transition:'all 0.22s',cursor:'default',opacity:loaded?1:0,transform:loaded?'translateY(0)':'translateY(16px)',transitionDelay:`${0.4+i*0.08}s`}}
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,maxWidth:420}}>
+          {stats.map(({n,l,icon:Icon,color})=>(
+            <div key={l} style={{background:'rgba(255,255,255,0.03)',border:`1px solid ${T.border}`,borderRadius:12,padding:'14px 16px',display:'flex',alignItems:'center',gap:12,transition:'all 0.22s',cursor:'default'}}
               onMouseEnter={e=>{e.currentTarget.style.borderColor=`${color}38`;e.currentTarget.style.background='rgba(255,255,255,0.055)';e.currentTarget.style.transform='translateY(-2px)';}}
               onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.background='rgba(255,255,255,0.03)';e.currentTarget.style.transform='translateY(0)';}}>
-              <div style={{width:38,height:38,borderRadius:10,background:`${color}14`,border:`1px solid ${color}25`,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+              <div style={{width:36,height:36,borderRadius:10,background:`${color}14`,border:`1px solid ${color}25`,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
                 <Icon size={16} color={color}/>
               </div>
               <div>
-                <div style={{fontSize:21,fontWeight:800,color:T.t1,fontFamily:'Fraunces, serif',lineHeight:1}}>{n}</div>
+                <div style={{fontSize:19,fontWeight:800,color:T.t1,fontFamily:'Fraunces, serif',lineHeight:1}}>{n}</div>
                 <div style={{fontSize:10,color:T.t3,fontWeight:600,textTransform:'uppercase',letterSpacing:'0.5px',marginTop:3}}>{l}</div>
               </div>
             </div>
           ))}
         </div>
-        <div style={{position:'absolute',bottom:16,left:0,right:0,display:'flex',justifyContent:'center'}}>
-          <div style={{fontSize:10,color:T.t4,fontWeight:600,letterSpacing:'1px'}}>Made by Shubh Jain, Sakshi Sharma, Shambhavi Jha, Vaibhav Soni</div>
-        </div>
 
-        <div style={{marginTop:44,display:'flex',alignItems:'center',gap:14}}>
+        <div style={{marginTop:28,display:'flex',alignItems:'center',gap:14}}>
           <div style={{height:1,flex:1,background:`linear-gradient(90deg, rgba(45,212,191,0.4), transparent)`}}/>
           <span style={{fontSize:11,color:T.t4,fontWeight:600,letterSpacing:'0.8px',textTransform:'uppercase',whiteSpace:'nowrap'}}>Trusted by 48+ organizations</span>
         </div>

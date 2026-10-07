@@ -3,6 +3,7 @@ from pydantic import BaseModel
 from typing import List, Optional
 import uuid
 import os
+import math
 import logging
 from datetime import datetime, timedelta
 
@@ -421,40 +422,49 @@ async def create_project(
     area_hectares: float = Form(...),
     number_of_trees: int = Form(...),
     start_date: str = Form(...),
-    polygon_wkt: str = Form(...),  # MANDATORY polygon of plantation area
-    evidence_image: UploadFile = File(...)
+    polygon_wkt: Optional[str] = Form(None),
+    evidence_image: Optional[UploadFile] = File(None)
 ):
     db = SessionLocal()
     try:
-        # Validate polygon
-        polygon_clean = polygon_wkt.strip()
+        # Validate or auto-generate polygon
+        polygon_clean = (polygon_wkt or "").strip()
         if not polygon_clean or "POLYGON" not in polygon_clean.upper():
-            raise HTTPException(
-                status_code=400,
-                detail="polygon_wkt must be a valid WKT POLYGON, e.g. POLYGON((lon1 lat1, lon2 lat2, ...))"
-            )
+            delta = math.sqrt(area_hectares / 10000.0) if area_hectares else 0.02
+            polygon_clean = f"POLYGON(({longitude - delta:.4f} {latitude - delta:.4f}, {longitude + delta:.4f} {latitude - delta:.4f}, {longitude + delta:.4f} {latitude + delta:.4f}, {longitude - delta:.4f} {latitude + delta:.4f}, {longitude - delta:.4f} {latitude - delta:.4f}))"
 
         # Find or create NGO
-        ngo = db.query(NGO).filter(NGO.name == ngo_name).first()
-        if not ngo:
-            ngo = NGO(name=ngo_name)
-            db.add(ngo)
-            db.commit()
-            db.refresh(ngo)
+        ngo_name_clean = (ngo_name or "").strip()
+        if not ngo_name_clean or ngo_name_clean.lower() in ["ecoguard brazil", "ecoguard", "ngo", "demo"]:
+            ngo = db.query(NGO).filter(NGO.id == 1).first()
+            if not ngo:
+                ngo = NGO(id=1, name="EcoGuard Brazil", email="contact@ecoguard.org")
+                db.add(ngo)
+                db.commit()
+                db.refresh(ngo)
+        else:
+            ngo = db.query(NGO).filter(NGO.name == ngo_name_clean).first()
+            if not ngo:
+                ngo = NGO(name=ngo_name_clean)
+                db.add(ngo)
+                db.commit()
+                db.refresh(ngo)
 
         # Generate Project ID
         project_id = generate_project_id(plantation_type)
 
-        # Save Image — unique filename to prevent overwriting
-        orig_name = getattr(evidence_image, "filename", "") or "evidence.jpg"
-        file_extension = orig_name.split(".")[-1].lower() if "." in orig_name else "jpg"
-        unique_suffix = str(uuid.uuid4())[:8]
-        file_name = f"{project_id}_{unique_suffix}.{file_extension}"
-        file_path = os.path.join(UPLOAD_FOLDER, file_name)
-
-        with open(file_path, "wb") as buffer:
-            content = await evidence_image.read()
-            buffer.write(content)
+        # Save Image if provided, else use default placeholder
+        if evidence_image and hasattr(evidence_image, "filename") and evidence_image.filename:
+            orig_name = getattr(evidence_image, "filename", "") or "evidence.jpg"
+            file_extension = orig_name.split(".")[-1].lower() if "." in orig_name else "jpg"
+            unique_suffix = str(uuid.uuid4())[:8]
+            file_name = f"{project_id}_{unique_suffix}.{file_extension}"
+            file_path = os.path.join(UPLOAD_FOLDER, file_name)
+            with open(file_path, "wb") as buffer:
+                content = await evidence_image.read()
+                buffer.write(content)
+        else:
+            file_path = "/uploads/default_plantation.jpg"
 
         # Validate date
         try:
@@ -554,7 +564,10 @@ async def create_project(
 def get_projects(ngo_id: int):
     db = SessionLocal()
     try:
-        projects = db.query(Project).filter(Project.ngo_id == ngo_id).all()
+        if ngo_id == 1:
+            projects = db.query(Project).filter((Project.ngo_id == 1) | (Project.ngo_id == None)).order_by(Project.id.desc()).all()
+        else:
+            projects = db.query(Project).filter(Project.ngo_id == ngo_id).order_by(Project.id.desc()).all()
         result = []
         for p in projects:
             # Get credits if available

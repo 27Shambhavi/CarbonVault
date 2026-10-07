@@ -411,13 +411,6 @@ export function CorporateESG() {
       .finally(() => setFetchingProjects(false));
   }, []);
 
-  // Auto-generate report once projects load so user sees live ESG data immediately
-  useEffect(() => {
-    if (!fetchingProjects && !report && projects.length > 0) {
-      handleGenerateReport();
-    }
-  }, [fetchingProjects, projects]);
-
   // Generate report handler
   const handleGenerateReport = async () => {
     setLoading(true);

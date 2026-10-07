@@ -67,6 +67,13 @@ def migrate_db():
         except sqlite3.OperationalError:
             pass  # Column already exists
 
+    # Ensure PRJ-MAN-SUNDAR belongs to demo NGO (EcoGuard Brazil, id 1) and audit trail reflects it
+    try:
+        cursor.execute("UPDATE projects SET ngo_id = 1 WHERE project_id = 'PRJ-MAN-SUNDAR'")
+        cursor.execute("UPDATE audit_logs SET user = 'EcoGuard Brazil' WHERE name = 'PRJ-MAN-SUNDAR'")
+    except Exception:
+        pass
+
     conn.commit()
     conn.close()
 
@@ -96,7 +103,7 @@ def seed_initial_data():
                 action="create",
                 name="PRJ-MAN-SUNDAR",
                 detail="New mangrove restoration project submitted with boundary polygon",
-                user="Green Delta",
+                user="EcoGuard Brazil",
                 timestamp=now - timedelta(hours=5)
             )
             a4 = AuditLog(
@@ -189,7 +196,7 @@ def seed_initial_data():
 
         p2 = Project(
             project_id="PRJ-MAN-SUNDAR",
-            ngo_id=ngo_delta.id,
+            ngo_id=ngo_brazil.id,
             name="Sundarbans Mangrove Restoration",
             latitude=21.9497,
             longitude=88.9468,
@@ -341,7 +348,7 @@ def seed_initial_data():
                 action="create",
                 name="PRJ-MAN-SUNDAR",
                 detail="New mangrove restoration project submitted with boundary polygon",
-                user="Green Delta",
+                user="EcoGuard Brazil",
                 timestamp=now - timedelta(hours=5)
             )
             a4 = AuditLog(

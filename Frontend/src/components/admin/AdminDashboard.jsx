@@ -42,18 +42,19 @@ export default function AdminDashboard() {
   const activeCount = stats?.active_projects ?? projects.filter(p => p.status === 'approved').length;
   const pendingCount = stats?.pending_projects ?? projects.filter(p => p.status === 'pending').length;
   const flagged = projects.filter(p => (p.fraudRisk || 0) > 50).length;
-  const total = stats?.total_credits ?? projects.reduce((s, p) => s + (p.credits || 0), 0);
+  const approvedProjects = projects.filter(p => p.status === 'approved');
+  const total = stats?.total_credits ?? approvedProjects.reduce((s, p) => s + (p.credits || 0), 0);
   const pieColors = [T.emerald, T.sky, T.goldL, T.violetL];
 
-  // Build pie data from actual projects
+  // Build pie data from approved projects (consistent with Total Credits Minted)
   const typeMap = {};
-  projects.forEach(p => {
+  approvedProjects.forEach(p => {
     const type = (p.plantation_type || p.type || 'Other').replace('_', ' ').replace(/\b\w/g, c => c.toUpperCase());
     typeMap[type] = (typeMap[type] || 0) + (p.credits || 0);
   });
   const pieData = Object.keys(typeMap).length > 0
     ? Object.entries(typeMap).map(([name, value]) => ({ name, value }))
-    : mockCreditsByType;
+    : [{ name: 'Mixed', value: total }];
 
   if (loading) return (
     <div style={{padding:28, display:'flex', justifyContent:'center', alignItems:'center', minHeight:'40vh'}}>

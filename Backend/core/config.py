@@ -39,9 +39,9 @@ if DATABASE_URL.startswith("sqlite:///") and not DATABASE_URL.startswith("sqlite
     abs_db_path = (BASE_DIR / rel_path).resolve()
     DATABASE_URL = f"sqlite:///{abs_db_path.as_posix()}"
 
-# Razorpay credentials (safe test keys by default for hackathon/demo)
-RAZORPAY_KEY_ID = os.getenv("RAZORPAY_KEY_ID", "rzp_test_SXyS0q18CPS1p1")
-RAZORPAY_KEY_SECRET = os.getenv("RAZORPAY_KEY_SECRET", "9m0Tq4EB8zFLXKJUgzgmCy9I")
+# Razorpay credentials (active working test keys for hackathon/demo)
+RAZORPAY_KEY_ID = os.getenv("RAZORPAY_KEY_ID", "rzp_test_TkjH0Xr16eIeed")
+RAZORPAY_KEY_SECRET = os.getenv("RAZORPAY_KEY_SECRET", "mc1c7MG2tjpbJFMRWxTa4kFq")
 
 # CORS Origins
 _default_cors = [

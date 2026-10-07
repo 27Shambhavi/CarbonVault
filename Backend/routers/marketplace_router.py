@@ -28,14 +28,26 @@ def get_buy_requests(ngo_id: int):
         result = []
         for req in requests:
             project = db.query(Project).filter(Project.project_id == req.project_id).first()
+            # If transaction exists for this corporate & project, use transaction quantity
+            from credit_calculation.credits_module.db_models import Transaction
+            txn = db.query(Transaction).filter(
+                Transaction.project_id == req.project_id,
+                Transaction.corporate_name == req.corporate_name
+            ).first()
+            if txn:
+                tons = txn.quantity or 2000.0
+            else:
+                tons = 1500.0 if "microsoft" in (req.corporate_name or "").lower() else 2000.0
+
+            total_usd = round(tons * req.offered_price, 2)
             result.append({
                 "id": req.id,
                 "buyer": req.corporate_name,
                 "project_id": req.project_id,
                 "project_name": project.name if project else "Unknown",
-                "tons": project.credits or 0,
+                "tons": tons,
                 "price_per_ton": req.offered_price,
-                "total": (project.credits or 0) * req.offered_price,
+                "total": total_usd,
                 "status": req.status
             })
         return result

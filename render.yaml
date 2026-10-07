@@ -11,9 +11,9 @@ services:
       - key: DATABASE_URL
         sync: false
       - key: RAZORPAY_KEY_ID
-        value: rzp_test_SXyS0q18CPS1p1
+        value: rzp_test_TkjH0Xr16eIeed
       - key: RAZORPAY_KEY_SECRET
-        value: 9m0Tq4EB8zFLXKJUgzgmCy9I
+        value: mc1c7MG2tjpbJFMRWxTa4kFq
       - key: CORS_ORIGINS
         value: https://final-carbon-vault.vercel.app,http://localhost:5173,http://127.0.0.1:5173
       - key: DEBUG

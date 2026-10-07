@@ -114,7 +114,7 @@ def create_order(req: CreateOrderRequest):
                 "key_id": RAZORPAY_KEY_ID,        # safe to send — this is the public key
             }
         except Exception as e:
-            logger.exception("Razorpay order creation failed: %s", e)
+            logger.exception("Razorpay order creation failed: %s | type=%s | args=%s", e, type(e), getattr(e, 'args', None))
             error_msg = str(e)
             if hasattr(e, "error") and isinstance(e.error, dict):
                 error_msg = e.error.get("description", error_msg)

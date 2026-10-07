@@ -359,7 +359,7 @@ export async function fetchAuditLogs() {
   const mockFallback = [
     { id: 1, action: 'mint', name: 'PRJ-MAN-AMAZON', timestamp: new Date(Date.now() - 14 * 60000).toISOString(), detail: 'Minted 12,400 verified credits with satellite NDVI verification', user: 'Admin System' },
     { id: 2, action: 'approve', name: 'PRJ-TEK-CONGO1', timestamp: new Date(Date.now() - 2 * 3600000).toISOString(), detail: 'Project approved with GRS quality score of 91/100', user: 'Alex Mercer (Admin)' },
-    { id: 3, action: 'create', name: 'PRJ-MAN-SUNDAR', timestamp: new Date(Date.now() - 5 * 3600000).toISOString(), detail: 'New mangrove restoration project submitted with boundary polygon', user: 'Green Delta' },
+    { id: 3, action: 'create', name: 'PRJ-MAN-SUNDAR', timestamp: new Date(Date.now() - 5 * 3600000).toISOString(), detail: 'New mangrove restoration project submitted with boundary polygon', user: 'EcoGuard Brazil' },
     { id: 4, action: 'payment', name: 'PRJ-MAN-AMAZON', timestamp: new Date(Date.now() - 24 * 3600000).toISOString(), detail: 'Microsoft purchased 2,000 tonnes (₹4,75,950.00)', user: 'Microsoft Sustainability' },
   ];
   return requestWithFallback(`${API_BASE}/projects/audit-logs`, {}, mockFallback);
@@ -400,13 +400,7 @@ export function loadRazorpayScript() {
 
 /** Verification Certificates Registry API */
 export async function fetchCertificates() {
-  const mockFallback = [
-    { certificate_id: 'CV-2024-001', project_name: 'Amazon Reforestation Initiative', credits: 12400, issuance_date: '2024-12-15', status: 'VERIFIED', plantation_type: 'Mixed' },
-    { certificate_id: 'CV-2024-002', project_name: 'Congo Basin Forest Shield', credits: 22000, issuance_date: '2024-12-14', status: 'VERIFIED', plantation_type: 'Teak' },
-    { certificate_id: 'CV-2024-003', project_name: 'Vietnamese Coastal Mangrove', credits: 6800, issuance_date: '2024-12-10', status: 'VERIFIED', plantation_type: 'Mangrove' },
-    { certificate_id: 'CV-2024-004', project_name: 'Sundarbans Mangrove Restoration', credits: 8200, issuance_date: '2024-12-08', status: 'VERIFIED', plantation_type: 'Mangrove' },
-  ];
-  return requestWithFallback(`${API_BASE}/projects/certificates`, {}, mockFallback);
+  return request(`${API_BASE}/projects/certificates`);
 }
 
 /** Climate Resilience & Co-Benefits API */
