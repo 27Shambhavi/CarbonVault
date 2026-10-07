@@ -70,7 +70,7 @@ function PageRouter() {
 }
 
 function AppShell() {
-  const { user } = useApp();
+  const { user, page } = useApp();
   if (!user) return <LoginPage />;
   return (
     <div style={{ display:'flex', minHeight:'100vh', background: T.bg0 }}>
