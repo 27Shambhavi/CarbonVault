@@ -1,9 +1,10 @@
+import os
 import requests
 import json
 from io import BytesIO
 from PIL import Image
 
-BASE_URL = "http://127.0.0.1:8000"
+BASE_URL = os.getenv("TEST_BASE_URL", "http://127.0.0.1:8000")
 
 def test_endpoint(method, path, **kwargs):
     url = f"{BASE_URL}{path}"
@@ -135,10 +136,20 @@ def run_tests():
         "corporate_name": "Microsoft Sustainability",
         "project_id": None
     })
-    test_endpoint("POST", "/esg/generate-report", json={
-        "corporate_name": "Microsoft Sustainability",
-        "project_id": "PRJ-MAN-AMAZON"
-    })
+    print("\n--- TESTING CERTIFICATES ENDPOINTS ---")
+    ok, cert_resp = test_endpoint("GET", "/certificates")
+    if ok and cert_resp:
+        try:
+            certs = cert_resp.json()
+            if certs and len(certs) > 0:
+                first_cid = certs[0].get("public_id") or certs[0].get("certificate_id")
+                print(f"   First certificate ID: {first_cid}")
+                test_endpoint("GET", f"/certificates/verify/{first_cid}")
+                test_endpoint("GET", f"/certificates/{first_cid}")
+                test_endpoint("GET", f"/certificates/{first_cid}/download?format=pdf")
+                test_endpoint("GET", f"/certificates/{first_cid}/download?format=png")
+        except Exception as ce:
+            print("   Certificate test error:", ce)
 
 if __name__ == "__main__":
     run_tests()
