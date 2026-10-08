@@ -5,7 +5,6 @@ NGOs register projects, admins verify them with AI-based checks, corporates buy 
 Razorpay, and the public can audit everything.
 
 **Live app:** https://final-carbon-vault.vercel.app
-**API docs (Swagger):** `<your-render-url>/docs`
 
 > One credit = 1 tonne of CO₂ removed.
 
@@ -285,9 +284,5 @@ Razorpay Test Mode card: `4111 1111 1111 1111`, any future expiry, any CVV.
 - **Test Mode**: Razorpay sandbox with fake cards and no real money.
 
 ---
-
-## Team
-
-Shubh Jain · Sakshi Sharma · Shambhavi Jha · Vaibhav Soni
 
 License: MIT
