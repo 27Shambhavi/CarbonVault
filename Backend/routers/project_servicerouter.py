@@ -17,7 +17,8 @@ from reportlab.lib.pagesizes import letter
 
 from credit_calculation.credits_module.db_models import (
     Project, ProjectCredits, FundingDetails, NGO, AuditLog, Transaction,
-    User, PricingConfig, PriceHistory, ProjectStatusHistory, ProjectProgressUpdate
+    User, PricingConfig, PriceHistory, ProjectStatusHistory, ProjectProgressUpdate,
+    Certificate
 )
 from credit_calculation.credits_module.db import SessionLocal
 from credit_calculation.credits_module.calculator import CreditCalculator
@@ -370,12 +371,48 @@ def calculate_and_store_credits(project, db):
         db.query(ProjectCredits).filter(ProjectCredits.project_id == project.project_id).delete()
         db.query(FundingDetails).filter(FundingDetails.project_id == project.project_id).delete()
 
+        now = datetime.utcnow()
+        from routers.certificate_router import generate_certificate_public_id, compute_certificate_hash
+
+        # Create or update project_verification certificate in certificates table
+        ngo = db.query(NGO).filter(NGO.id == project.ngo_id).first() if project.ngo_id else None
+        beneficiary = ngo.name if ngo else "Registered Project Developer"
+        credits_val = float(result["live_credit_data"]["verified_credits"])
+
+        existing_cert = db.query(Certificate).filter(
+            Certificate.project_id == project.project_id,
+            Certificate.type == "project_verification"
+        ).first()
+
+        if existing_cert:
+            existing_cert.tonnes = credits_val
+            existing_cert.sha256_hash = compute_certificate_hash(
+                existing_cert.public_id, project.project_id, credits_val, existing_cert.issued_at, beneficiary
+            )
+            cert_pub_id = existing_cert.public_id
+        else:
+            cert_pub_id = generate_certificate_public_id(now)
+            cert_hash = compute_certificate_hash(
+                cert_pub_id, project.project_id, credits_val, now, beneficiary
+            )
+            new_cert = Certificate(
+                public_id=cert_pub_id,
+                project_id=project.project_id,
+                transaction_id=None,
+                buyer_name=None,
+                tonnes=credits_val,
+                issued_at=now,
+                sha256_hash=cert_hash,
+                type="project_verification"
+            )
+            db.add(new_cert)
+
         # Save ProjectCredits entry
         credit_entry = ProjectCredits(
             project_id=project.project_id,
             total_shadow_credits=result["shadow_credits_first_5_years"],
             verified_credits=result["live_credit_data"]["verified_credits"],
-            certificate_id=result["live_credit_data"]["certificate_id"],
+            certificate_id=cert_pub_id,
             issuance_date=result["live_credit_data"]["issuance_date"],
             expiry_date=result["live_credit_data"]["expiry_date"],
         )
@@ -1376,19 +1413,6 @@ def get_audit_logs():
         db.close()
 
 
-# -------------------------
-# Verification Certificates Registry API
-# -------------------------
-
-@router.get("/certificates")
-def get_certificates():
-    """Retrieve verified certificates from certificate_router (real DB transactions & project credits)."""
-    from routers.certificate_router import list_certificates
-    db = SessionLocal()
-    try:
-        return list_certificates(db=db)
-    finally:
-        db.close()
 
 
 # -------------------------

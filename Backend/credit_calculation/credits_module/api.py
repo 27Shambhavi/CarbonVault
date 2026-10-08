@@ -111,8 +111,42 @@ def mint_credits(req: MintCreditsRequest, db: Session = Depends(get_db)):
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    cert_id = req.certificate_id or f"CV-{datetime.utcnow().year}-{uuid.uuid4().hex[:6].upper()}"
-    today = datetime.utcnow().date()
+    from routers.certificate_router import generate_certificate_public_id, compute_certificate_hash
+    from credit_calculation.credits_module.db_models import Certificate, NGO
+
+    now_dt = datetime.utcnow()
+    ngo = db.query(NGO).filter(NGO.id == project.ngo_id).first() if project.ngo_id else None
+    beneficiary = ngo.name if ngo else "Registered Project Developer"
+
+    existing_cert = db.query(Certificate).filter(
+        Certificate.project_id == project.project_id,
+        Certificate.type == "project_verification"
+    ).first()
+
+    if existing_cert:
+        existing_cert.tonnes = (existing_cert.tonnes or 0.0) + float(req.credits)
+        existing_cert.sha256_hash = compute_certificate_hash(
+            existing_cert.public_id, project.project_id, existing_cert.tonnes, existing_cert.issued_at, beneficiary
+        )
+        cert_id = existing_cert.public_id
+    else:
+        cert_id = req.certificate_id or generate_certificate_public_id(now_dt)
+        cert_hash = compute_certificate_hash(
+            cert_id, project.project_id, float(req.credits), now_dt, beneficiary
+        )
+        new_cert = Certificate(
+            public_id=cert_id,
+            project_id=project.project_id,
+            transaction_id=None,
+            buyer_name=None,
+            tonnes=float(req.credits),
+            issued_at=now_dt,
+            sha256_hash=cert_hash,
+            type="project_verification"
+        )
+        db.add(new_cert)
+
+    today = now_dt.date()
 
     credit_entry = db.query(ProjectCredits).filter(ProjectCredits.project_id == req.project_id).first()
     if credit_entry:

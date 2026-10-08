@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 from credit_calculation.credits_module.db import SessionLocal
-from credit_calculation.credits_module.db_models import Project, FundingDetails, Transaction, Wallet, ProjectCredits, CorporateRequest
+from credit_calculation.credits_module.db_models import Project, FundingDetails, Transaction, Wallet, ProjectCredits, CorporateRequest, Certificate
 
 # ── Razorpay SDK setup ──────────────────────────────────────────────────
 # ── Razorpay SDK setup ──────────────────────────────────────────────────
@@ -211,8 +211,13 @@ def buy_credits(req: BuyCreditsRequest):
         if corp_req:
             corp_req.status = "completed"
 
-        # Generate unique verifiable certificate ID
-        cert_id = f"CV-OFF-{uuid.uuid4().hex[:8].upper()}"
+        # Generate unified certificate public_id and cryptographic ledger hash
+        now_dt = datetime.utcnow()
+        from routers.certificate_router import generate_certificate_public_id, compute_certificate_hash
+        cert_pub_id = generate_certificate_public_id(now_dt)
+        cert_hash = compute_certificate_hash(
+            cert_pub_id, req.project_id, float(req.quantity), now_dt, req.corporate_name
+        )
 
         # Create transaction record
         txn = Transaction(
@@ -226,10 +231,24 @@ def buy_credits(req: BuyCreditsRequest):
             amount_inr=req.amount,
             amount_usd=round(req.amount / float(os.getenv("INR_USD_RATE", "83.5")), 2),
             status="completed",
-            certificate_id=cert_id,
-            created_at=datetime.now().date(),
+            certificate_id=cert_pub_id,
+            created_at=now_dt.date(),
         )
         db.add(txn)
+        db.flush()
+
+        # Insert purchase certificate into unified certificates table
+        purchase_cert = Certificate(
+            public_id=cert_pub_id,
+            project_id=req.project_id,
+            transaction_id=txn.id,
+            buyer_name=req.corporate_name,
+            tonnes=float(req.quantity),
+            issued_at=now_dt,
+            sha256_hash=cert_hash,
+            type="purchase"
+        )
+        db.add(purchase_cert)
 
         # Update or create wallet
         wallet = db.query(Wallet).filter(
@@ -281,13 +300,13 @@ def buy_credits(req: BuyCreditsRequest):
 
         logger.info(
             "Transaction recorded: %s bought %.2f credits of %s for ₹%.2f (Cert: %s)",
-            req.corporate_name, req.quantity, req.project_id, req.amount, cert_id
+            req.corporate_name, req.quantity, req.project_id, req.amount, cert_pub_id
         )
 
         return {
             "message": "Payment successful — credits added to wallet and certificate issued",
             "transaction_id": txn.id,
-            "certificate_id": cert_id,
+            "certificate_id": cert_pub_id,
             "project_id": req.project_id,
             "project_name": project.name,
             "quantity": req.quantity,
@@ -316,8 +335,11 @@ def get_transactions(company: str):
             Transaction.corporate_name == company
         ).order_by(Transaction.id.desc()).all()
 
-        return [
-            {
+        results = []
+        for t in txns:
+            cert = db.query(Certificate).filter(Certificate.transaction_id == t.id).first()
+            cert_id = cert.public_id if cert else t.certificate_id
+            results.append({
                 "id": t.id,
                 "date": str(t.created_at) if t.created_at else None,
                 "project_id": t.project_id,
@@ -328,9 +350,9 @@ def get_transactions(company: str):
                 "amount_usd": t.amount_usd,
                 "status": t.status,
                 "razorpay_payment_id": t.razorpay_payment_id,
-            }
-            for t in txns
-        ]
+                "certificate_id": cert_id,
+            })
+        return results
     finally:
         db.close()
 
@@ -440,7 +462,13 @@ async def razorpay_webhook(
             quantity_from_notes = float(notes.get("quantity") or 0.0)
             quantity = quantity_from_notes if quantity_from_notes > 0 else round(amount_inr / (price_per_ton * 83.5), 2)
 
-            cert_id = f"CV-OFF-{uuid.uuid4().hex[:8].upper()}"
+            now_dt = datetime.utcnow()
+            from routers.certificate_router import generate_certificate_public_id, compute_certificate_hash
+            target_proj_id = project.project_id if project else project_id
+            cert_pub_id = generate_certificate_public_id(now_dt)
+            cert_hash = compute_certificate_hash(
+                cert_pub_id, target_proj_id, float(quantity), now_dt, corporate_name
+            )
 
             # Deduct credits from project
             if project and project.credits is not None:
@@ -450,7 +478,7 @@ async def razorpay_webhook(
             txn = Transaction(
                 razorpay_order_id=order_id,
                 razorpay_payment_id=payment_id,
-                project_id=project.project_id if project else project_id,
+                project_id=target_proj_id,
                 project_name=project.name if project else "Verified Ecological Reserve",
                 corporate_name=corporate_name,
                 quantity=quantity,
@@ -458,23 +486,37 @@ async def razorpay_webhook(
                 amount_inr=amount_inr,
                 amount_usd=round(amount_inr / 83.5, 2),
                 status="completed",
-                certificate_id=cert_id,
-                created_at=datetime.utcnow().date(),
+                certificate_id=cert_pub_id,
+                created_at=now_dt.date(),
             )
             db.add(txn)
+            db.flush()
+
+            # Insert purchase certificate into unified certificates table
+            purchase_cert = Certificate(
+                public_id=cert_pub_id,
+                project_id=target_proj_id,
+                transaction_id=txn.id,
+                buyer_name=corporate_name,
+                tonnes=float(quantity),
+                issued_at=now_dt,
+                sha256_hash=cert_hash,
+                type="purchase"
+            )
+            db.add(purchase_cert)
 
             # Update or create Wallet
             wallet = db.query(Wallet).filter(Wallet.corporate_name == corporate_name).first()
             if wallet:
                 wallet.total_credits = (wallet.total_credits or 0) + quantity
                 wallet.total_spent_inr = (wallet.total_spent_inr or 0) + amount_inr
-                wallet.last_purchase_date = datetime.utcnow().date()
+                wallet.last_purchase_date = now_dt.date()
             else:
                 wallet = Wallet(
                     corporate_name=corporate_name,
                     total_credits=quantity,
                     total_spent_inr=amount_inr,
-                    last_purchase_date=datetime.utcnow().date(),
+                    last_purchase_date=now_dt.date(),
                 )
                 db.add(wallet)
 
@@ -482,10 +524,10 @@ async def razorpay_webhook(
             from credit_calculation.credits_module.db_models import AuditLog
             audit_entry = AuditLog(
                 action="payment",
-                name=project.project_id if project else project_id,
-                detail=f"Webhook captured payment: {corporate_name} acquired {quantity:,.2f} credits for ₹{amount_inr:,.2f} (Cert: {cert_id})",
+                name=target_proj_id,
+                detail=f"Webhook captured payment: {corporate_name} acquired {quantity:,.2f} credits for ₹{amount_inr:,.2f} (Cert: {cert_pub_id})",
                 user="Razorpay Webhook",
-                timestamp=datetime.utcnow()
+                timestamp=now_dt
             )
             db.add(audit_entry)
             db.commit()
@@ -496,10 +538,10 @@ async def razorpay_webhook(
                 create_notification(
                     db=db,
                     title="Webhook Payment Captured",
-                    message=f"Razorpay webhook verified ₹{amount_inr:,.2f} payment from {corporate_name}. Impact Certificate {cert_id} generated.",
+                    message=f"Razorpay webhook verified ₹{amount_inr:,.2f} payment from {corporate_name}. Impact Certificate {cert_pub_id} generated.",
                     type="payment",
                     recipient_role="all",
-                    related_project_id=project.project_id if project else project_id
+                    related_project_id=target_proj_id
                 )
             except Exception as ne:
                 logger.warning("Could not emit webhook notification: %s", ne)
@@ -509,7 +551,7 @@ async def razorpay_webhook(
                 "processed": True,
                 "event": event,
                 "transaction_id": txn.id,
-                "certificate_id": cert_id
+                "certificate_id": cert_pub_id
             }
 
         elif event == "payment.failed":

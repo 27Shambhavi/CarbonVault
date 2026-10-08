@@ -219,3 +219,21 @@ class FootprintEstimate(Base):
     total_tonnes = Column(Float)
     inputs_json = Column(Text)
     created_at = Column(DateTime)
+
+
+class Certificate(Base):
+    __tablename__ = "certificates"
+
+    id = Column(Integer, primary_key=True, index=True)
+    public_id = Column(String, unique=True, index=True, nullable=False)
+    project_id = Column(String, ForeignKey("projects.project_id"), index=True, nullable=False)
+    transaction_id = Column(Integer, ForeignKey("transactions.id"), nullable=True, index=True)
+    buyer_name = Column(String, nullable=True)
+    tonnes = Column(Float, nullable=False)
+    issued_at = Column(DateTime, nullable=False)
+    sha256_hash = Column(String, nullable=False)
+    type = Column(String, nullable=False)  # "project_verification" or "purchase"
+
+    # Relationships
+    project = relationship("Project")
+    transaction = relationship("Transaction")

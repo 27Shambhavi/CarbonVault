@@ -633,7 +633,7 @@ export function CorporateWallet() {
         {transactions.length > 0 ? (
           <Table headers={['Date','Project','Project ID','Credit Tons','Price/t','Total (INR)','Status','Certificate']}
             rows={transactions.map(t=>{
-              const certId = t.certificate_id || `CV-OFF-${String(t.id).padStart(5, '0')}`;
+              const certId = t.certificate_id;
               return [
                 <span style={{color:T.t3,fontSize:12}}>{t.date || '—'}</span>,
                 <span style={{fontWeight:600,color:T.t1}}>{t.project_name || '—'}</span>,
@@ -642,25 +642,29 @@ export function CorporateWallet() {
                 <span style={{color:T.goldL}}>${t.price_per_ton || '—'}</span>,
                 <span style={{color:T.emeraldL,fontWeight:700}}>₹{(t.amount_inr||0).toLocaleString('en-IN')}</span>,
                 <Badge type={t.status === 'completed' ? 'approved' : 'pending'} label={t.status || 'completed'}/>,
-                <button
-                  onClick={() => setSelectedCert(certId)}
-                  style={{
-                    background: 'rgba(124,58,237,0.12)',
-                    border: '1px solid rgba(167,139,250,0.3)',
-                    borderRadius: 7,
-                    padding: '5px 11px',
-                    color: T.violetLL || '#a78bfa',
-                    fontSize: 12,
-                    cursor: 'pointer',
-                    fontWeight: 600,
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 5
-                  }}
-                  title={`View Certificate ${certId}`}
-                >
-                  <Award size={13} /> View Cert
-                </button>
+                certId ? (
+                  <button
+                    onClick={() => setSelectedCert(certId)}
+                    style={{
+                      background: 'rgba(124,58,237,0.12)',
+                      border: '1px solid rgba(167,139,250,0.3)',
+                      borderRadius: 7,
+                      padding: '5px 11px',
+                      color: T.violetLL || '#a78bfa',
+                      fontSize: 12,
+                      cursor: 'pointer',
+                      fontWeight: 600,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 5
+                    }}
+                    title={`View Certificate ${certId}`}
+                  >
+                    <Award size={13} /> View Cert
+                  </button>
+                ) : (
+                  <span style={{color: T.t3, fontSize: 12}}>—</span>
+                )
               ];
             })}
           />

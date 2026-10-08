@@ -22,7 +22,7 @@ logger = logging.getLogger("carbonvault")
 from credit_calculation.credits_module.db_models import (
     Base, Project, NGO, CorporateRequest, Transaction, Wallet, ProjectCredits, FundingDetails, AuditLog,
     User, PricingConfig, PriceHistory, Notification, ProjectStatusHistory, ProjectProgressUpdate,
-    FootprintEstimate
+    FootprintEstimate, Certificate
 )
 from credit_calculation.credits_module.db import engine, SessionLocal
 Base.metadata.create_all(bind=engine)
@@ -145,15 +145,29 @@ def migrate_db():
     except Exception as e:
         logger.warning("Error creating footprint_estimates table: %s", e)
 
+    # Ensure certificates table exists
+    try:
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS certificates (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                public_id TEXT UNIQUE NOT NULL,
+                project_id TEXT NOT NULL,
+                transaction_id INTEGER,
+                buyer_name TEXT,
+                tonnes REAL NOT NULL,
+                issued_at DATETIME NOT NULL,
+                sha256_hash TEXT NOT NULL,
+                type TEXT NOT NULL
+            )
+        """)
+        logger.info("Ensured certificates table exists")
+    except Exception as e:
+        logger.warning("Error creating certificates table: %s", e)
+
     # Ensure transactions table has certificate_id column
     try:
         cursor.execute("ALTER TABLE transactions ADD COLUMN certificate_id TEXT")
         logger.info("Added certificate_id column to transactions")
-    except Exception:
-        pass
-
-    try:
-        cursor.execute("UPDATE transactions SET certificate_id = 'CV-OFF-' || substr('00000' || id, -5, 5) WHERE certificate_id IS NULL OR certificate_id = ''")
     except Exception:
         pass
 
@@ -498,7 +512,7 @@ def seed_initial_data():
                 project_id=p.project_id,
                 total_shadow_credits=p.shadow_credits or 0.0,
                 verified_credits=p.credits or 0.0,
-                certificate_id=f"CV-2024-{p.project_id[-4:]}",
+                certificate_id=None,
                 issuance_date=today,
                 expiry_date=today.replace(year=today.year + 5)
             )
@@ -611,6 +625,13 @@ def seed_initial_data():
             db.add_all([fe1, fe2])
             db.commit()
 
+        # Run certificate backfill to populate unified certificates table
+        try:
+            from routers.certificate_router import backfill_certificates
+            backfill_certificates(db)
+        except Exception as be:
+            logger.warning("Error running certificate backfill during seed: %s", be)
+
         logger.info("[OK] Initial demo data seeded successfully")
 
     except Exception as e:
@@ -626,6 +647,15 @@ async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
     migrate_db()
     seed_initial_data()
+    try:
+        from routers.certificate_router import backfill_certificates
+        db = SessionLocal()
+        try:
+            backfill_certificates(db)
+        finally:
+            db.close()
+    except Exception as e:
+        logger.warning("Error running certificate backfill on startup: %s", e)
     logger.info("[OK] Database ready at: %s", DATABASE_URL)
     yield
 

@@ -1,19 +1,20 @@
 # routers/certificate_router.py
 """
 Certificate Router:
-Dynamic generation, cryptographic verification, and export (PNG/PDF) of
-real CarbonVault impact and retirement certificates.
-Zero mock data — 100% sourced from real DB transactions and project credits.
+Single source of truth for all CarbonVault impact and verification certificates.
+Backed exclusively by the `certificates` database table.
+Zero mock data, zero fragmented schemas, zero disconnected IDs.
 """
 
 import io
 import hashlib
+import secrets
+import string
 import logging
-from datetime import datetime
+from datetime import datetime, date
 from typing import Optional, List
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
-from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from PIL import Image, ImageDraw, ImageFont
@@ -22,7 +23,7 @@ from reportlab.pdfgen import canvas
 from reportlab.lib import colors
 
 from credit_calculation.credits_module.db import SessionLocal
-from credit_calculation.credits_module.db_models import Transaction, ProjectCredits, Project, NGO
+from credit_calculation.credits_module.db_models import Certificate, Transaction, ProjectCredits, Project, NGO
 
 logger = logging.getLogger("carbonvault")
 router = APIRouter()
@@ -36,189 +37,256 @@ def get_db():
         db.close()
 
 
-def generate_proof_hash(cert_id: str, tonnes: float, project_id: str, beneficiary: str) -> str:
-    raw = f"CARBONVAULT-VERIFIED-PROOF:{cert_id}:{tonnes:.2f}:{project_id}:{beneficiary}:SHA256"
-    return hashlib.sha256(raw.encode()).hexdigest()
+def generate_certificate_public_id(issued_at: datetime) -> str:
+    """
+    Generate public_id with format: CV-<YYYY of issued_at>-<6 random uppercase/digits>.
+    Year is dynamically extracted from issued_at, never hardcoded.
+    """
+    year = issued_at.year
+    alphabet = string.ascii_uppercase + string.digits
+    rand_part = ''.join(secrets.choice(alphabet) for _ in range(6))
+    return f"CV-{year}-{rand_part}"
+
+
+def compute_certificate_hash(public_id: str, project_id: str, tonnes: float, issued_at: datetime, beneficiary: str) -> str:
+    """Compute deterministic cryptographic SHA-256 hash for certificate ledger verification."""
+    raw = f"CARBONVAULT-PROOF:{public_id}:{project_id}:{tonnes:.2f}:{issued_at.isoformat()}:{beneficiary}:SHA256"
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
 def find_certificate_data(cert_id: str, db: Session):
-    """Locate either a Transaction offset certificate or a ProjectCredits issuance certificate."""
-    cert_id_clean = cert_id.strip()
+    """
+    Locate certificate data strictly from the `certificates` table joined with Project & NGO.
+    Accepts public_id (e.g. CV-2024-K8M9P2).
+    """
+    clean_id = cert_id.strip()
 
-    # 1. Search in Transactions
-    txn = db.query(Transaction).filter(
-        (Transaction.certificate_id == cert_id_clean) |
-        (Transaction.id == int(cert_id_clean) if cert_id_clean.isdigit() else False) |
-        (Transaction.certificate_id.ilike(f"%{cert_id_clean}%"))
+    cert = db.query(Certificate).filter(
+        (Certificate.public_id == clean_id) |
+        (Certificate.id == int(clean_id) if clean_id.isdigit() else False)
     ).first()
 
-    if txn:
-        project = db.query(Project).filter(Project.project_id == txn.project_id).first()
-        effective_cert_id = txn.certificate_id or f"CV-OFF-{txn.id:05d}"
-        proof = generate_proof_hash(effective_cert_id, txn.quantity or 0.0, txn.project_id or "PRJ", txn.corporate_name or "Corporate")
-        return {
-            "certificate_id": effective_cert_id,
-            "type": "Retirement & Impact Offset",
-            "title": "CERTIFICATE OF VERIFIED CARBON OFFSET",
-            "project_id": txn.project_id,
-            "project_name": txn.project_name or (project.name if project else "Verified Project"),
-            "beneficiary": txn.corporate_name,
-            "tonnes": round(txn.quantity or 0.0, 2),
-            "date": str(txn.created_at or datetime.utcnow().date()),
-            "status": "RETIRED / VERIFIED",
-            "proof_hash": proof,
-            "mrv_score": project.mrv_score if project else 88.0,
-            "plantation_type": project.plantation_type.title() if project and project.plantation_type else "Reforestation",
-            "amount_usd": txn.amount_usd or 0.0,
-            "standard": "CarbonVault GRS & Verra Aligned Standard"
-        }
+    if not cert:
+        return None
 
-    # 2. Search in ProjectCredits
-    pc = db.query(ProjectCredits).filter(
-        (ProjectCredits.certificate_id == cert_id_clean) |
-        (ProjectCredits.project_id == cert_id_clean)
-    ).first()
+    project = db.query(Project).filter(Project.project_id == cert.project_id).first()
+    ngo = db.query(NGO).filter(NGO.id == project.ngo_id).first() if project and project.ngo_id else None
 
-    if pc:
-        project = db.query(Project).filter(Project.project_id == pc.project_id).first()
-        ngo = db.query(NGO).filter(NGO.id == project.ngo_id).first() if project and project.ngo_id else None
-        effective_cert_id = pc.certificate_id or f"CV-MINT-{pc.project_id}"
-        credits_val = pc.verified_credits or (project.credits if project else 0.0)
-        beneficiary = ngo.name if ngo else "Registered Project Developer"
-        proof = generate_proof_hash(effective_cert_id, credits_val, pc.project_id, beneficiary)
-        return {
-            "certificate_id": effective_cert_id,
-            "type": "Carbon Credit Issuance",
-            "title": "CERTIFICATE OF CARBON CREDIT ISSUANCE",
-            "project_id": pc.project_id,
-            "project_name": project.name if project else pc.project_id,
-            "beneficiary": beneficiary,
-            "tonnes": round(credits_val, 2),
-            "date": str(pc.issuance_date or (project.created_at if project else datetime.utcnow().date())),
-            "status": "ISSUED / VERIFIED",
-            "proof_hash": proof,
-            "mrv_score": project.mrv_score if project else 85.0,
-            "plantation_type": project.plantation_type.title() if project and project.plantation_type else "Reforestation",
-            "amount_usd": round(credits_val * (project.price if project and project.price else 25.0), 2),
-            "standard": "CarbonVault GRS & Gold Standard Registry"
-        }
+    is_purchase = (cert.type == "purchase")
+    beneficiary = cert.buyer_name or (ngo.name if ngo else "Registered Project Developer")
+    ngo_name = ngo.name if ngo else "Registered NGO"
 
-    # 3. Fallback: Search in Project directly
-    project = db.query(Project).filter(
-        (Project.project_id == cert_id_clean) |
-        (Project.id == int(cert_id_clean) if cert_id_clean.isdigit() else False)
-    ).first()
-    if project and project.status == "approved":
-        effective_cert_id = f"CV-2024-{project.project_id[-6:]}"
-        credits_val = project.credits or 1000.0
-        ngo = db.query(NGO).filter(NGO.id == project.ngo_id).first() if project.ngo_id else None
-        beneficiary = ngo.name if ngo else "Community Restoration"
-        proof = generate_proof_hash(effective_cert_id, credits_val, project.project_id, beneficiary)
-        return {
-            "certificate_id": effective_cert_id,
-            "type": "Carbon Credit Issuance",
-            "title": "CERTIFICATE OF CARBON CREDIT ISSUANCE",
-            "project_id": project.project_id,
-            "project_name": project.name,
-            "beneficiary": beneficiary,
-            "tonnes": round(credits_val, 2),
-            "date": str(project.created_at or datetime.utcnow().date()),
-            "status": "ISSUED / VERIFIED",
-            "proof_hash": proof,
-            "mrv_score": project.mrv_score or 85.0,
-            "plantation_type": (project.plantation_type or "Reforestation").title(),
-            "amount_usd": round(credits_val * (project.price or 25.0), 2),
-            "standard": "CarbonVault Global Registry"
-        }
+    title = "CERTIFICATE OF VERIFIED CARBON OFFSET" if is_purchase else "CERTIFICATE OF CARBON CREDIT ISSUANCE"
+    type_display = "Retirement & Impact Offset" if is_purchase else "Carbon Credit Issuance"
+    status_display = "RETIRED / VERIFIED" if is_purchase else "ISSUED / VERIFIED"
 
-    return None
+    return {
+        "certificate_id": cert.public_id,
+        "public_id": cert.public_id,
+        "type": type_display,
+        "raw_type": cert.type,
+        "title": title,
+        "project_id": cert.project_id,
+        "project_name": project.name if project else cert.project_id,
+        "ngo_name": ngo_name,
+        "ngo": ngo_name,
+        "beneficiary": beneficiary,
+        "buyer_name": cert.buyer_name,
+        "tonnes": round(cert.tonnes, 2),
+        "credits": round(cert.tonnes, 2),
+        "date": cert.issued_at.strftime("%Y-%m-%d"),
+        "issued_at": cert.issued_at.isoformat(),
+        "issuance_date": cert.issued_at.strftime("%Y-%m-%d"),
+        "status": status_display,
+        "proof_hash": cert.sha256_hash,
+        "sha256_hash": cert.sha256_hash,
+        "hash": cert.sha256_hash,
+        "mrv_score": project.mrv_score if project and project.mrv_score else 88.0,
+        "plantation_type": (project.plantation_type or "Reforestation").replace("_", " ").title() if project else "Reforestation",
+        "amount_usd": round(cert.tonnes * (project.price if project and project.price else 25.0), 2),
+        "standard": "CarbonVault GRS & Verra Aligned Standard" if is_purchase else "CarbonVault GRS & Gold Standard Registry"
+    }
 
+
+def backfill_certificates(db: Session):
+    """
+    Backfill certificates table:
+    1. Every approved project without a project_verification certificate gets one.
+    2. Every completed transaction without a purchase certificate gets one.
+    """
+    now = datetime.utcnow()
+
+    # 1. Backfill approved projects
+    approved_projects = db.query(Project).filter(Project.status == "approved").all()
+    for p in approved_projects:
+        existing = db.query(Certificate).filter(
+            Certificate.project_id == p.project_id,
+            Certificate.type == "project_verification"
+        ).first()
+
+        if not existing:
+            issued_date = p.created_at or p.start_date
+            if issued_date:
+                issued_at = datetime.combine(issued_date, datetime.min.time()) if isinstance(issued_date, date) else issued_date
+            else:
+                issued_at = now
+
+            ngo = db.query(NGO).filter(NGO.id == p.ngo_id).first() if p.ngo_id else None
+            beneficiary = ngo.name if ngo else "Registered Project Developer"
+            tonnes = float(p.credits or 0.0)
+
+            pub_id = generate_certificate_public_id(issued_at)
+            cert_hash = compute_certificate_hash(pub_id, p.project_id, tonnes, issued_at, beneficiary)
+
+            cert = Certificate(
+                public_id=pub_id,
+                project_id=p.project_id,
+                transaction_id=None,
+                buyer_name=None,
+                tonnes=tonnes,
+                issued_at=issued_at,
+                sha256_hash=cert_hash,
+                type="project_verification"
+            )
+            db.add(cert)
+            db.flush()
+
+            # Sync ProjectCredits certificate_id
+            pc = db.query(ProjectCredits).filter(ProjectCredits.project_id == p.project_id).first()
+            if pc:
+                pc.certificate_id = pub_id
+            logger.info("Backfilled verification certificate %s for project %s", pub_id, p.project_id)
+
+    # 2. Backfill completed transactions
+    completed_txns = db.query(Transaction).filter(Transaction.status == "completed").all()
+    for txn in completed_txns:
+        existing = None
+        if txn.certificate_id and txn.certificate_id.startswith("CV-"):
+            existing = db.query(Certificate).filter(Certificate.public_id == txn.certificate_id).first()
+        if not existing:
+            existing = db.query(Certificate).filter(Certificate.transaction_id == txn.id).first()
+
+        if not existing:
+            issued_date = txn.created_at
+            if issued_date:
+                issued_at = datetime.combine(issued_date, datetime.min.time()) if isinstance(issued_date, date) else issued_date
+            else:
+                issued_at = now
+
+            pub_id = generate_certificate_public_id(issued_at)
+            tonnes = float(txn.quantity or 0.0)
+            beneficiary = txn.corporate_name or "Corporate Buyer"
+            cert_hash = compute_certificate_hash(pub_id, txn.project_id, tonnes, issued_at, beneficiary)
+
+            cert = Certificate(
+                public_id=pub_id,
+                project_id=txn.project_id,
+                transaction_id=txn.id,
+                buyer_name=txn.corporate_name,
+                tonnes=tonnes,
+                issued_at=issued_at,
+                sha256_hash=cert_hash,
+                type="purchase"
+            )
+            db.add(cert)
+            txn.certificate_id = pub_id
+            logger.info("Backfilled purchase certificate %s for transaction %s", pub_id, txn.id)
+
+    db.commit()
+
+
+# ── REST ENDPOINTS ────────────────────────────────────────────────────────────
 
 @router.get("")
 @router.get("/")
 def list_certificates(db: Session = Depends(get_db)):
     """
-    Retrieve all verified certificates (both retirement offsets and mint issuances) from the live database.
+    Retrieve all verified certificates from the certificates table.
+    Single source of truth for both Public Certificates and Corporate Wallet.
     """
+    # Ensure backfill has run
+    certs = db.query(Certificate).order_by(Certificate.issued_at.desc(), Certificate.id.desc()).all()
+    if not certs:
+        backfill_certificates(db)
+        certs = db.query(Certificate).order_by(Certificate.issued_at.desc(), Certificate.id.desc()).all()
+
     results = []
-
-    # 1. Transactions (Buyer Retirement Certificates)
-    txns = db.query(Transaction).filter(Transaction.status == "completed").order_by(Transaction.id.desc()).all()
-    for t in txns:
-        cid = t.certificate_id or f"CV-OFF-{t.id:05d}"
-        proof = generate_proof_hash(cid, t.quantity or 0.0, t.project_id or "PRJ", t.corporate_name or "Buyer")
-        results.append({
-            "certificate_id": cid,
-            "type": "Retirement & Impact Offset",
-            "project_id": t.project_id,
-            "project_name": t.project_name or t.project_id,
-            "beneficiary": t.corporate_name,
-            "credits": round(t.quantity or 0.0, 2),
-            "issuance_date": str(t.created_at or datetime.utcnow().date()),
-            "status": "RETIRED / VERIFIED",
-            "proof_hash": proof,
-            "download_png_url": f"/certificates/{cid}/download?format=png",
-            "download_pdf_url": f"/certificates/{cid}/download?format=pdf",
-        })
-
-    # 2. Approved Projects Credit Issuance
-    approved = db.query(Project).filter(Project.status == "approved").all()
-    for p in approved:
-        pc = db.query(ProjectCredits).filter(ProjectCredits.project_id == p.project_id).first()
-        cid = pc.certificate_id if (pc and pc.certificate_id) else f"CV-MINT-{p.project_id}"
-        credits_val = pc.verified_credits if (pc and pc.verified_credits) else (p.credits or 0.0)
-        ngo = db.query(NGO).filter(NGO.id == p.ngo_id).first() if p.ngo_id else None
-        beneficiary = ngo.name if ngo else "Forestry Authority"
-        proof = generate_proof_hash(cid, credits_val, p.project_id, beneficiary)
-        results.append({
-            "certificate_id": cid,
-            "type": "Carbon Credit Issuance",
-            "project_id": p.project_id,
-            "project_name": p.name,
-            "beneficiary": beneficiary,
-            "credits": round(credits_val, 2),
-            "issuance_date": str(pc.issuance_date if (pc and pc.issuance_date) else (p.created_at or "2024-10-07")),
-            "status": "ISSUED / VERIFIED",
-            "proof_hash": proof,
-            "download_png_url": f"/certificates/{cid}/download?format=png",
-            "download_pdf_url": f"/certificates/{cid}/download?format=pdf",
-        })
-
+    for cert in certs:
+        data = find_certificate_data(cert.public_id, db)
+        if data:
+            results.append({
+                "certificate_id": data["public_id"],
+                "public_id": data["public_id"],
+                "type": data["type"],
+                "raw_type": data["raw_type"],
+                "project_id": data["project_id"],
+                "project_name": data["project_name"],
+                "ngo_name": data["ngo_name"],
+                "beneficiary": data["beneficiary"],
+                "buyer_name": data["buyer_name"],
+                "tonnes": data["tonnes"],
+                "credits": data["tonnes"],
+                "issued_at": data["issued_at"],
+                "issuance_date": data["issuance_date"],
+                "status": data["status"],
+                "proof_hash": data["proof_hash"],
+                "sha256_hash": data["sha256_hash"],
+                "download_png_url": f"/certificates/{data['public_id']}/download?format=png",
+                "download_pdf_url": f"/certificates/{data['public_id']}/download?format=pdf",
+            })
     return results
+
+
+@router.get("/verify/{public_id}")
+def verify_certificate(public_id: str, db: Session = Depends(get_db)):
+    """
+    Verify authenticity of a certificate from the certificates table.
+    Returns 200 JSON if found, 404 if not found.
+    """
+    data = find_certificate_data(public_id, db)
+    if not data:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Impact Certificate Verification — Registry ID: {public_id} — Not Found"
+        )
+    return {
+        "valid": True,
+        "certificate_id": data["public_id"],
+        "public_id": data["public_id"],
+        "project_name": data["project_name"],
+        "project_id": data["project_id"],
+        "ngo": data["ngo_name"],
+        "ngo_name": data["ngo_name"],
+        "buyer_name": data["buyer_name"],
+        "beneficiary": data["beneficiary"],
+        "tonnes": data["tonnes"],
+        "tonnes_offset": data["tonnes"],
+        "issued_at": data["issued_at"],
+        "issuance_date": data["issuance_date"],
+        "date": data["date"],
+        "status": "Valid",
+        "hash": data["proof_hash"],
+        "proof_hash": data["proof_hash"],
+        "sha256_hash": data["proof_hash"],
+        "title": data["title"],
+        "type": data["type"],
+        "mrv_score": data.get("mrv_score", 88.0),
+        "plantation_type": data.get("plantation_type", "Reforestation"),
+        "registry": "CarbonVault MRV Global Registry (Satellite-Verified)",
+        "verified_at": datetime.utcnow().isoformat() + "Z"
+    }
 
 
 @router.get("/{cert_id}")
 def get_certificate_details(cert_id: str, db: Session = Depends(get_db)):
-    """Get complete verifiable metadata for a specific certificate."""
+    """Get complete verifiable metadata for a specific certificate from certificates table."""
     data = find_certificate_data(cert_id, db)
     if not data:
         raise HTTPException(status_code=404, detail=f"Certificate '{cert_id}' not found in registry")
     return data
 
 
-@router.get("/verify/{cert_id}")
-def verify_certificate(cert_id: str, db: Session = Depends(get_db)):
-    """Verify cryptographic authenticity and registry status of a certificate."""
-    data = find_certificate_data(cert_id, db)
-    if not data:
-        return {
-            "valid": False,
-            "certificate_id": cert_id,
-            "message": "Certificate not found or revoked."
-        }
-    return {
-        "valid": True,
-        "certificate_id": data["certificate_id"],
-        "beneficiary": data["beneficiary"],
-        "project_name": data["project_name"],
-        "tonnes_offset": data["tonnes"],
-        "status": data["status"],
-        "issuance_date": data["date"],
-        "proof_hash": data["proof_hash"],
-        "registry": "CarbonVault MRV Global Registry (Satellite-Verified)",
-        "verified_at": datetime.utcnow().isoformat() + "Z"
-    }
-
+# ── PNG & PDF GENERATION ──────────────────────────────────────────────────────
 
 def render_certificate_png(data: dict) -> bytes:
     """Generate high-resolution PNG certificate using Pillow."""
@@ -226,17 +294,14 @@ def render_certificate_png(data: dict) -> bytes:
     img = Image.new("RGB", (width, height), color=(10, 15, 29))
     draw = ImageDraw.Draw(img)
 
-    # Borders
     # Outer emerald border
     draw.rectangle([(24, 24), (width - 24, height - 24)], outline=(45, 212, 191), width=4)
     # Inner gold border
     draw.rectangle([(36, 36), (width - 36, height - 36)], outline=(245, 158, 11), width=1)
     # Corner flourishes
-    corner_size = 28
     for cx, cy in [(24, 24), (width - 24, 24), (24, height - 24), (width - 24, height - 24)]:
         draw.rectangle([(cx - 4, cy - 4), (cx + 4, cy + 4)], fill=(245, 158, 11))
 
-    # Font handling
     def get_font(size: int, bold: bool = False):
         try:
             return ImageFont.truetype("arialbd.ttf" if bold else "arial.ttf", size)
@@ -260,38 +325,35 @@ def render_certificate_png(data: dict) -> bytes:
 
     # 2. Main Title
     draw.text((width // 2, 135), data.get("title", "CERTIFICATE OF VERIFIED CARBON OFFSET"), fill=(255, 255, 255), anchor="mm", font=font_title)
-    draw.text((width // 2, 175), f"Official Registry Certificate ID: {data['certificate_id']}", fill=(245, 158, 11), anchor="mm", font=font_sub)
+    draw.text((width // 2, 175), f"Official Registry Certificate ID: {data['public_id']}", fill=(245, 158, 11), anchor="mm", font=font_sub)
 
-    # 3. Awarded to
+    # 3. Beneficiary
     draw.text((width // 2, 230), "THIS IS OFFICIALLY PRESENTED AND RECORDED TO", fill=(148, 163, 184), anchor="mm", font=font_label)
     draw.text((width // 2, 275), str(data.get("beneficiary", "Corporate Partner")), fill=(167, 139, 250), anchor="mm", font=font_value)
 
-    # 4. Tonnes Offset Highlight
+    # 4. Tonnes Highlight
     tonnes_str = f"{data.get('tonnes', 0):,.2f} METRIC TONNES CO₂e"
     draw.rectangle([(width // 2 - 320, 325), (width // 2 + 320, 395)], fill=(16, 24, 46), outline=(45, 212, 191), width=2)
     draw.text((width // 2, 360), tonnes_str, fill=(52, 211, 153), anchor="mm", font=font_tonnes)
 
     # 5. Project details
-    draw.text((width // 2, 430), "Permanently retired & verified through ecological restoration project:", fill=(148, 163, 184), anchor="mm", font=font_sub)
+    desc_label = "Permanently retired & verified through ecological restoration project:" if data.get("raw_type") == "purchase" else "Issued and verified through ecological restoration project:"
+    draw.text((width // 2, 430), desc_label, fill=(148, 163, 184), anchor="mm", font=font_sub)
     draw.text((width // 2, 465), f"{data.get('project_name')} ({data.get('project_id')})", fill=(255, 255, 255), anchor="mm", font=get_font(22, True))
     draw.text((width // 2, 500), f"Ecosystem: {data.get('plantation_type', 'Reforestation')}  •  MRV Verification Score: {data.get('mrv_score', 85)}/100", fill=(56, 189, 248), anchor="mm", font=font_sub)
 
-    # 6. Lower Metadata Bar
+    # 6. Metadata Bar
     draw.line([(80, 550), (width - 80, 550)], fill=(30, 41, 59), width=1)
-
-    # Date
     draw.text((120, 580), "ISSUANCE / RETIREMENT DATE", fill=(148, 163, 184), font=font_label)
     draw.text((120, 605), str(data.get("date")), fill=(255, 255, 255), font=get_font(15, True))
 
-    # Standard
     draw.text((width // 2 - 100, 580), "VERIFICATION STANDARD", fill=(148, 163, 184), font=font_label)
     draw.text((width // 2 - 100, 605), "Gold Standard & Satellite AI", fill=(255, 255, 255), font=get_font(15, True))
 
-    # Status
     draw.text((width - 320, 580), "REGISTRY STATUS", fill=(148, 163, 184), font=font_label)
     draw.text((width - 320, 605), str(data.get("status", "VERIFIED")), fill=(52, 211, 153), font=get_font(15, True))
 
-    # 7. Proof Hash at bottom
+    # 7. Proof Hash
     proof = data.get("proof_hash", "")
     draw.text((width // 2, 690), f"Cryptographic Verification Proof (SHA-256): {proof}", fill=(100, 116, 139), anchor="mm", font=font_small)
     draw.text((width // 2, 720), "Secured by CarbonVault Decentralized Ecological MRV Protocol  •  Tamper-Evident Impact Ledger", fill=(71, 85, 105), anchor="mm", font=font_small)
@@ -332,7 +394,7 @@ def render_certificate_pdf(data: dict) -> bytes:
 
     c.setFillColor(colors.HexColor("#f59e0b"))
     c.setFont("Helvetica-Bold", 12)
-    c.drawCentredString(width / 2.0, height - 130, f"Certificate ID: {data['certificate_id']}")
+    c.drawCentredString(width / 2.0, height - 130, f"Certificate ID: {data['public_id']}")
 
     # Beneficiary
     c.setFillColor(colors.HexColor("#94a3b8"))
@@ -343,7 +405,7 @@ def render_certificate_pdf(data: dict) -> bytes:
     c.setFont("Helvetica-Bold", 20)
     c.drawCentredString(width / 2.0, height - 200, str(data.get("beneficiary", "Corporate Partner")))
 
-    # Tonnes Offset
+    # Tonnes
     c.setFillColor(colors.HexColor("#10182e"))
     c.setStrokeColor(colors.HexColor("#2dd4bf"))
     c.setLineWidth(1.5)
@@ -354,9 +416,10 @@ def render_certificate_pdf(data: dict) -> bytes:
     c.drawCentredString(width / 2.0, height - 255, f"{data.get('tonnes', 0):,.2f} TONNES CO₂e")
 
     # Project
+    desc_label = "Has been permanently retired and verified through:" if data.get("raw_type") == "purchase" else "Has been issued and verified through:"
     c.setFillColor(colors.HexColor("#94a3b8"))
     c.setFont("Helvetica", 11)
-    c.drawCentredString(width / 2.0, height - 320, "Has been permanently retired and verified through:")
+    c.drawCentredString(width / 2.0, height - 320, desc_label)
 
     c.setFillColor(colors.HexColor("#ffffff"))
     c.setFont("Helvetica-Bold", 16)
@@ -408,7 +471,7 @@ def download_certificate(
     if not data:
         raise HTTPException(status_code=404, detail="Certificate not found")
 
-    filename = f"Certificate_{data['certificate_id']}.{format}"
+    filename = f"Certificate_{data['public_id']}.{format}"
     if format == "pdf":
         pdf_bytes = render_certificate_pdf(data)
         return Response(

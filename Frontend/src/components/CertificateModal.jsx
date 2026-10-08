@@ -1,6 +1,6 @@
 // src/components/CertificateModal.jsx
 import React, { useState, useEffect } from 'react';
-import { fetchCertificateDetail, getCertificateDownloadUrl, getCertificateImageUrl } from '../services/api.js';
+import { verifyCertificate, fetchCertificateDetail, getCertificateDownloadUrl, getCertificateImageUrl } from '../services/api.js';
 import { Modal, Btn, Badge, T } from './UI.jsx';
 import { Award, Download, ExternalLink, ShieldCheck, Copy, Check, FileText, Image as ImageIcon, X } from 'lucide-react';
 
@@ -17,23 +17,24 @@ export default function CertificateModal({ certId, onClose }) {
     setError(null);
     setImageLoaded(false);
 
-    fetchCertificateDetail(certId)
+    verifyCertificate(certId)
       .then((res) => {
         if (res.data) {
           setData(res.data);
         } else {
-          setError(res.error || 'Certificate not found');
+          setError(res.error || `Certificate ${certId} not found in registry`);
         }
       })
       .catch((err) => {
-        setError(err.message || 'Failed to fetch certificate');
+        setError(err.message || 'Failed to verify certificate');
       })
       .finally(() => setLoading(false));
   }, [certId]);
 
   const handleCopyHash = () => {
-    if (data?.proof_hash) {
-      navigator.clipboard.writeText(data.proof_hash);
+    const hashVal = data?.hash || data?.proof_hash;
+    if (hashVal) {
+      navigator.clipboard.writeText(hashVal);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     }
@@ -101,8 +102,22 @@ export default function CertificateModal({ certId, onClose }) {
             <div style={{ fontSize: 14, color: T.t2 }}>Rendering dynamic cryptographic certificate…</div>
           </div>
         ) : error ? (
-          <div style={{ textAlign: 'center', padding: '40px 0', color: T.roseL || '#f43f5e' }}>
-            {error}
+          <div style={{ textAlign: 'center', padding: '40px 16px', color: T.roseL || '#f43f5e' }}>
+            <div style={{
+              width: 44, height: 44, borderRadius: 12,
+              background: 'rgba(244, 63, 94, 0.12)',
+              border: '1px solid rgba(244, 63, 94, 0.3)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              margin: '0 auto 12px'
+            }}>
+              <X size={22} color="#f43f5e" />
+            </div>
+            <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 6, color: '#f43f5e' }}>
+              Certificate Not Found
+            </div>
+            <div style={{ fontSize: 13, color: T.t2, maxWidth: 460, margin: '0 auto', fontFamily: 'monospace' }}>
+              {error}
+            </div>
           </div>
         ) : (
           <div>
@@ -147,26 +162,30 @@ export default function CertificateModal({ certId, onClose }) {
             }}>
               <div>
                 <div style={{ fontSize: 11, color: T.t3, textTransform: 'uppercase', fontWeight: 600 }}>Beneficiary</div>
-                <div style={{ fontSize: 13, fontWeight: 700, color: T.t1, marginTop: 2 }}>{data.beneficiary}</div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: T.t1, marginTop: 2 }}>
+                  {data?.beneficiary || data?.buyer_name || data?.ngo_name || data?.ngo || 'Verified Partner'}
+                </div>
               </div>
               <div>
                 <div style={{ fontSize: 11, color: T.t3, textTransform: 'uppercase', fontWeight: 600 }}>Project</div>
-                <div style={{ fontSize: 13, fontWeight: 700, color: T.teal, marginTop: 2 }}>{data.project_name}</div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: T.teal, marginTop: 2 }}>{data?.project_name}</div>
               </div>
               <div>
                 <div style={{ fontSize: 11, color: T.t3, textTransform: 'uppercase', fontWeight: 600 }}>Volume Offset</div>
                 <div style={{ fontSize: 13, fontWeight: 700, color: T.emeraldL, marginTop: 2 }}>
-                  {data.tonnes?.toLocaleString()} tCO₂e
+                  {(data?.tonnes ?? data?.credits ?? 0).toLocaleString()} tCO₂e
                 </div>
               </div>
               <div>
                 <div style={{ fontSize: 11, color: T.t3, textTransform: 'uppercase', fontWeight: 600 }}>Issuance Date</div>
-                <div style={{ fontSize: 13, fontWeight: 700, color: T.t1, marginTop: 2 }}>{data.date}</div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: T.t1, marginTop: 2 }}>
+                  {data?.date || data?.issuance_date || '—'}
+                </div>
               </div>
             </div>
 
             {/* Cryptographic Proof Hash */}
-            {data.proof_hash && (
+            {(data?.hash || data?.proof_hash) && (
               <div style={{
                 padding: '12px 14px',
                 background: 'rgba(15, 23, 42, 0.6)',
@@ -183,7 +202,7 @@ export default function CertificateModal({ certId, onClose }) {
                     <ShieldCheck size={13} /> SHA-256 Cryptographic Ledger Proof
                   </div>
                   <div style={{ fontSize: 12, color: T.t2, fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 2 }}>
-                    {data.proof_hash}
+                    {data?.hash || data?.proof_hash}
                   </div>
                 </div>
                 <button

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
-import { fetchLeaderboard, fetchPlatformStats, fetchAuditLogs, fetchCertificates, fetchClimateAnalytics, fetchUsers, timeAgo } from '../../services/api.js';
+import { fetchLeaderboard, fetchPlatformStats, fetchAuditLogs, fetchCertificates, fetchClimateAnalytics, fetchUsers, timeAgo, getCertificateDownloadUrl } from '../../services/api.js';
 
 const mockPublicLeaderboard = [
   { rank: 1, name: 'Microsoft Sustainability', type: 'buyer', credits: 49400, points: 9850, badge: 'approved' },
@@ -243,6 +243,17 @@ export function PublicCertificates() {
     }).finally(() => setLoading(false));
   }, []);
 
+  const handleDirectDownload = (certId, e) => {
+    e.stopPropagation();
+    const url = getCertificateDownloadUrl(certId, 'pdf');
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `Certificate_${certId}.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   const filtered = certs.filter(c => {
     const q = search.toLowerCase();
     const matchesSearch = !q ||
@@ -396,7 +407,7 @@ export function PublicCertificates() {
                   <Award size={13} /> View Certificate
                 </button>
                 <button
-                  onClick={() => setSelectedCert(cert.certificate_id)}
+                  onClick={(e) => handleDirectDownload(cert.certificate_id, e)}
                   style={{
                     background: 'rgba(255, 255, 255, 0.04)',
                     border: `1px solid ${T.border}`,
