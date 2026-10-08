@@ -654,10 +654,6 @@ Open http://localhost:5173 and log in with a demo account (section 16).
 
 ---
 
-## 23. 👨‍💻 Team and license
-
-**Made by** Shubh Jain · Sakshi Sharma · Shambhavi Jha · Vaibhav Soni
-
 Licensed under the **MIT License**.
 
 <div align="center">
