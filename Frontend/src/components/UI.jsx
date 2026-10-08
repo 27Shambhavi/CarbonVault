@@ -85,7 +85,7 @@ const BM = {
 };
 
 /* ── Badge ──────────────────────────────────────────────── */
-export function Badge({ type, label }) {
+export function Badge({ type, label, children }) {
   const m = BM[type] || BM.public;
   return (
     <span style={{
@@ -95,7 +95,7 @@ export function Badge({ type, label }) {
       background:m.bg, color:m.color, border:`1px solid ${m.border}`,
     }}>
       <span style={{width:4,height:4,borderRadius:'50%',background:m.color,flexShrink:0,boxShadow:`0 0 4px ${m.color}`}}/>
-      {label || type}
+      {children || label || type}
     </span>
   );
 }

@@ -75,11 +75,15 @@ export default function CertificateModal({ certId, onClose }) {
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            {data?.status && (
-              <Badge color="emerald">
-                <ShieldCheck size={12} style={{ marginRight: 4 }} /> {data.status}
-              </Badge>
-            )}
+            <div style={{
+              display: 'inline-flex', alignItems: 'center', gap: 5,
+              padding: '4px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700,
+              background: 'rgba(16, 185, 129, 0.15)', color: '#34d399',
+              border: '1px solid rgba(16, 185, 129, 0.35)',
+              letterSpacing: '0.4px', textTransform: 'uppercase'
+            }}>
+              <ShieldCheck size={13} /> {data?.status || 'Valid'}
+            </div>
             <button
               onClick={onClose}
               style={{
