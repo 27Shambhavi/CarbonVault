@@ -21,7 +21,8 @@ logger = logging.getLogger("carbonvault")
 # DB Models & Engine
 from credit_calculation.credits_module.db_models import (
     Base, Project, NGO, CorporateRequest, Transaction, Wallet, ProjectCredits, FundingDetails, AuditLog,
-    User, PricingConfig, PriceHistory
+    User, PricingConfig, PriceHistory, Notification, ProjectStatusHistory, ProjectProgressUpdate,
+    FootprintEstimate
 )
 from credit_calculation.credits_module.db import engine, SessionLocal
 Base.metadata.create_all(bind=engine)
@@ -35,6 +36,9 @@ from fraud_detection_new.app.api.fraud_routes import router as fraud_router
 from credit_calculation.credits_module.api import router as credit_router
 from routers.payment_router import router as payment_router
 from routers.esg_router import router as esg_router
+from routers.notifications_router import router as notifications_router
+from routers.calculator_router import router as calculator_router
+from routers.certificate_router import router as certificate_router
 
 
 def migrate_db():
@@ -66,6 +70,104 @@ def migrate_db():
             logger.info("Added column projects.%s", col_name)
         except sqlite3.OperationalError:
             pass  # Column already exists
+
+    # Ensure notifications table exists
+    try:
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS notifications (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                recipient_role TEXT,
+                recipient_email TEXT,
+                type TEXT DEFAULT 'info',
+                title TEXT NOT NULL,
+                message TEXT NOT NULL,
+                related_project_id TEXT,
+                is_read BOOLEAN DEFAULT 0,
+                created_at DATETIME
+            )
+        """)
+        logger.info("Ensured notifications table exists")
+    except Exception as e:
+        logger.warning("Error creating notifications table: %s", e)
+
+    # Ensure project_status_history table exists
+    try:
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS project_status_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                project_id TEXT NOT NULL,
+                from_status TEXT,
+                to_status TEXT NOT NULL,
+                changed_by TEXT,
+                comment TEXT,
+                timestamp DATETIME
+            )
+        """)
+        logger.info("Ensured project_status_history table exists")
+    except Exception as e:
+        logger.warning("Error creating project_status_history table: %s", e)
+
+    # Ensure project_progress_updates table exists
+    try:
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS project_progress_updates (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                project_id TEXT NOT NULL,
+                quarter TEXT NOT NULL,
+                year INTEGER NOT NULL,
+                survival_rate REAL,
+                canopy_cover REAL,
+                photos TEXT,
+                notes TEXT,
+                submitted_at DATETIME,
+                verified_by_satellite BOOLEAN DEFAULT 0
+            )
+        """)
+        logger.info("Ensured project_progress_updates table exists")
+    except Exception as e:
+        logger.warning("Error creating project_progress_updates table: %s", e)
+
+    # Ensure footprint_estimates table exists
+    try:
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS footprint_estimates (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                corporate_name TEXT NOT NULL,
+                scope1_tonnes REAL NOT NULL,
+                scope2_tonnes REAL NOT NULL,
+                scope3_tonnes REAL NOT NULL,
+                total_tonnes REAL NOT NULL,
+                inputs_json TEXT,
+                created_at DATETIME
+            )
+        """)
+        logger.info("Ensured footprint_estimates table exists")
+    except Exception as e:
+        logger.warning("Error creating footprint_estimates table: %s", e)
+
+    # Ensure transactions table has certificate_id column
+    try:
+        cursor.execute("ALTER TABLE transactions ADD COLUMN certificate_id TEXT")
+        logger.info("Added certificate_id column to transactions")
+    except Exception:
+        pass
+
+    try:
+        cursor.execute("UPDATE transactions SET certificate_id = 'CV-OFF-' || substr('00000' || id, -5, 5) WHERE certificate_id IS NULL OR certificate_id = ''")
+    except Exception:
+        pass
+
+    # Ensure users table has admin_role column
+    try:
+        cursor.execute("ALTER TABLE users ADD COLUMN admin_role TEXT DEFAULT 'super_admin'")
+        logger.info("Added admin_role column to users")
+    except Exception:
+        pass
+
+    try:
+        cursor.execute("UPDATE users SET admin_role = 'super_admin' WHERE role = 'admin' AND (admin_role IS NULL OR admin_role = '')")
+    except Exception:
+        pass
 
     # Ensure PRJ-MAN-SUNDAR belongs to demo NGO (EcoGuard Brazil, id 1) and audit trail reflects it
     try:
@@ -116,9 +218,11 @@ def seed_initial_data():
             db.add_all([a1, a2, a3, a4])
             db.commit()
 
-        # Seed Users if empty
+        # Seed Users if empty or ensure admin accounts exist
         if not db.query(User).first():
             default_users = [
+                User(name="Alex Mercer", email="admin@carbonvault.com", role="admin", admin_role="super_admin", projects=0, credits=0, joined="2023-01-01", status="active"),
+                User(name="Sarah Jenkins", email="approver@carbonvault.com", role="admin", admin_role="approver", projects=0, credits=0, joined="2023-08-15", status="active"),
                 User(name="EcoGuard Brazil", email="contact@ecoguard.org", role="ngo", projects=3, credits=34600, joined="2023-06-12", status="active"),
                 User(name="Microsoft Sustainability", email="carbon@microsoft.com", role="buyer", projects=0, credits=15200, joined="2023-09-01", status="active"),
                 User(name="Google Carbon Team", email="sustainability@google.com", role="buyer", projects=0, credits=28000, joined="2023-07-14", status="active"),
@@ -129,6 +233,13 @@ def seed_initial_data():
                 User(name="CongoCare", email="ops@congocare.org", role="ngo", projects=2, credits=22000, joined="2023-11-30", status="active"),
             ]
             db.add_all(default_users)
+            db.commit()
+        else:
+            # Ensure super_admin and approver exist
+            if not db.query(User).filter(User.email == "admin@carbonvault.com").first():
+                db.add(User(name="Alex Mercer", email="admin@carbonvault.com", role="admin", admin_role="super_admin", projects=0, credits=0, joined="2023-01-01", status="active"))
+            if not db.query(User).filter(User.email == "approver@carbonvault.com").first():
+                db.add(User(name="Sarah Jenkins", email="approver@carbonvault.com", role="admin", admin_role="approver", projects=0, credits=0, joined="2023-08-15", status="active"))
             db.commit()
 
         # Seed Pricing Config if empty
@@ -151,6 +262,121 @@ def seed_initial_data():
                 PriceHistory(month="Dec", price=28.5, recorded_at=datetime.utcnow()),
             ]
             db.add_all(history)
+            db.commit()
+
+        # Seed Notifications if empty
+        if not db.query(Notification).first():
+            now = datetime.utcnow()
+            n1 = Notification(
+                recipient_role="all",
+                type="approval",
+                title="Project Approved",
+                message="Amazon Reforestation Initiative (PRJ-MAN-AMAZON) has been approved by admin.",
+                related_project_id="PRJ-MAN-AMAZON",
+                is_read=False,
+                created_at=now - timedelta(hours=2)
+            )
+            n2 = Notification(
+                recipient_role="admin",
+                type="submission",
+                title="New Project Pending Review",
+                message="Sundarbans Mangrove Restoration (PRJ-MAN-SUNDAR) submitted by EcoGuard Brazil.",
+                related_project_id="PRJ-MAN-SUNDAR",
+                is_read=False,
+                created_at=now - timedelta(hours=5)
+            )
+            n3 = Notification(
+                recipient_role="corporate",
+                type="payment",
+                title="Purchase Confirmed",
+                message="Microsoft Sustainability offset 2,000 tonnes of CO2 via PRJ-MAN-AMAZON.",
+                related_project_id="PRJ-MAN-AMAZON",
+                is_read=False,
+                created_at=now - timedelta(days=1)
+            )
+            db.add_all([n1, n2, n3])
+            db.commit()
+
+        # Seed Project Status History if empty
+        if not db.query(ProjectStatusHistory).first():
+            now = datetime.utcnow()
+            h1 = ProjectStatusHistory(
+                project_id="PRJ-MAN-AMAZON",
+                from_status="draft",
+                to_status="submitted",
+                changed_by="EcoGuard Brazil",
+                comment="Initial submission with satellite boundary",
+                timestamp=now - timedelta(days=60)
+            )
+            h2 = ProjectStatusHistory(
+                project_id="PRJ-MAN-AMAZON",
+                from_status="submitted",
+                to_status="under_review",
+                changed_by="Alex Mercer (Admin)",
+                comment="Assigned to verifier for GRS quality check",
+                timestamp=now - timedelta(days=45)
+            )
+            h3 = ProjectStatusHistory(
+                project_id="PRJ-MAN-AMAZON",
+                from_status="under_review",
+                to_status="field_verification",
+                changed_by="Alex Mercer (Admin)",
+                comment="Field drone and NDVI verification confirmed",
+                timestamp=now - timedelta(days=30)
+            )
+            h4 = ProjectStatusHistory(
+                project_id="PRJ-MAN-AMAZON",
+                from_status="field_verification",
+                to_status="approved",
+                changed_by="Alex Mercer (Admin)",
+                comment="Final approval and credits minted",
+                timestamp=now - timedelta(days=20)
+            )
+            h5 = ProjectStatusHistory(
+                project_id="PRJ-MAN-SUNDAR",
+                from_status="draft",
+                to_status="submitted",
+                changed_by="EcoGuard Brazil",
+                comment="Mangrove restoration project submitted for review",
+                timestamp=now - timedelta(hours=5)
+            )
+            db.add_all([h1, h2, h3, h4, h5])
+            db.commit()
+
+        # Seed Project Progress Updates if empty
+        if not db.query(ProjectProgressUpdate).first():
+            now = datetime.utcnow()
+            u1 = ProjectProgressUpdate(
+                project_id="PRJ-MAN-AMAZON",
+                quarter="Q1",
+                year=2024,
+                survival_rate=92.5,
+                canopy_cover=28.0,
+                notes="Initial planting phase completed across 1,500 hectares. Native seedlings established with strong root network.",
+                submitted_at=now - timedelta(days=90),
+                verified_by_satellite=True
+            )
+            u2 = ProjectProgressUpdate(
+                project_id="PRJ-MAN-AMAZON",
+                quarter="Q2",
+                year=2024,
+                survival_rate=89.0,
+                canopy_cover=36.5,
+                notes="Seasonal rains supported early tree growth. Weed suppression applied in sector B. Zero fire outbreaks reported.",
+                submitted_at=now - timedelta(days=45),
+                verified_by_satellite=True
+            )
+            u3 = ProjectProgressUpdate(
+                project_id="PRJ-MAN-AMAZON",
+                quarter="Q3",
+                year=2024,
+                survival_rate=91.2,
+                canopy_cover=44.0,
+                notes="Canopy closure accelerating in multi-species mixed plot. Sentinel-2 NDVI telemetry shows steady 0.72 index.",
+                submitted_at=now - timedelta(days=10),
+                verified_by_satellite=True
+            )
+            db.add_all([u1, u2, u3])
             db.commit()
 
         # Check if projects already exist
@@ -361,6 +587,30 @@ def seed_initial_data():
             db.add_all([a1, a2, a3, a4])
             db.commit()
 
+        # 6. Footprint Estimates
+        if not db.query(FootprintEstimate).first():
+            now = datetime.utcnow()
+            fe1 = FootprintEstimate(
+                corporate_name="Microsoft Sustainability",
+                scope1_tonnes=87.5,
+                scope2_tonnes=462.5,
+                scope3_tonnes=31.25,
+                total_tonnes=581.25,
+                inputs_json='{"employees": 250, "sqft": 25000, "short_haul_flights": 80, "long_haul_flights": 25, "cloud_spend_usd": 8500}',
+                created_at=now - timedelta(days=12)
+            )
+            fe2 = FootprintEstimate(
+                corporate_name="Google Climate",
+                scope1_tonnes=175.0,
+                scope2_tonnes=820.0,
+                scope3_tonnes=62.5,
+                total_tonnes=1057.5,
+                inputs_json='{"employees": 500, "sqft": 42500, "short_haul_flights": 150, "long_haul_flights": 60, "cloud_spend_usd": 15000}',
+                created_at=now - timedelta(days=3)
+            )
+            db.add_all([fe1, fe2])
+            db.commit()
+
         logger.info("[OK] Initial demo data seeded successfully")
 
     except Exception as e:
@@ -411,6 +661,9 @@ else:
 app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
 
 # Include Routers
+app.include_router(notifications_router, prefix="/notifications", tags=["Notifications"])
+app.include_router(calculator_router, prefix="/calculator", tags=["Carbon Calculator"])
+app.include_router(certificate_router, prefix="/certificates", tags=["Certificates"])
 app.include_router(project_router, prefix="/projects", tags=["Projects"])
 app.include_router(project_router, prefix="", tags=["Projects-Root"])
 app.include_router(grs_router, prefix="/grs", tags=["GRS"])
@@ -432,9 +685,37 @@ def read_root():
     }
 
 
+def get_commit_hash():
+    for var in ["RENDER_GIT_COMMIT", "GIT_COMMIT", "COMMIT_SHA", "VERCEL_GIT_COMMIT_SHA"]:
+        val = os.getenv(var)
+        if val:
+            return val
+    try:
+        import subprocess
+        commit = subprocess.check_output(["git", "rev-parse", "HEAD"], stderr=subprocess.DEVNULL).decode().strip()
+        if commit:
+            return commit
+    except Exception:
+        pass
+    commit_file = os.path.join(os.path.dirname(__file__), "COMMIT_HASH")
+    if os.path.exists(commit_file):
+        try:
+            with open(commit_file, "r") as f:
+                return f.read().strip()
+        except Exception:
+            pass
+    return "unknown"
+
+
 @app.get("/health")
 def health():
-    return {"status": "ok", "timestamp": datetime.utcnow().isoformat() + "Z"}
+    commit = get_commit_hash()
+    return {
+        "status": "ok",
+        "commit": commit,
+        "commit_hash": commit,
+        "timestamp": datetime.utcnow().isoformat() + "Z"
+    }
 
 
 if __name__ == "__main__":

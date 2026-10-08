@@ -1,10 +1,19 @@
 import { useState, useEffect, useCallback } from 'react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { useApp } from '../../AppContext.jsx';
-import { createProject, fetchProjects, fetchDashboard, fetchMapProjects, fetchMarketplaceRequests, checkSiteSuitability, acceptBuyRequest, createOrder, buyCredits, loadRazorpayScript } from '../../services/api.js';
+import {
+  createProject, fetchProjects, fetchDashboard, fetchMapProjects,
+  fetchMarketplaceRequests, checkSiteSuitability, acceptBuyRequest,
+  createOrder, buyCredits, loadRazorpayScript,
+  submitProgressUpdate, fetchProjectProgress, getImageUrl
+} from '../../services/api.js';
 import { Card, SectionHeader, Table, Badge, MRVScore, KPICard, Modal, Btn, T } from '../UI.jsx';
 import { ProjectMap } from '../GoogleMap.jsx';
-import { TreePine, Layers, ShoppingCart, Plus, MapPin, Upload, CheckCircle, Clock, TrendingUp, Search, Filter, Star, AlertCircle, X, Leaf, DollarSign } from 'lucide-react';
+import {
+  TreePine, Layers, ShoppingCart, Plus, MapPin, Upload, CheckCircle,
+  Clock, TrendingUp, Search, Filter, Star, AlertCircle, X, Leaf,
+  DollarSign, Camera, ShieldCheck, Eye, Calendar
+} from 'lucide-react';
 
 // ── Shared constants ────────────────────────────────────────────────────────────
 const NGO_ID = 1; // Hardcoded for demo — backend auto-creates NGO by name
@@ -193,12 +202,29 @@ export function NGODashboard() {
 
 // ── My Projects ────────────────────────────────────────────────────────────────
 export function NGOProjects() {
-  const { refreshKey } = useApp();
+  const { refreshKey, triggerRefresh } = useApp();
+  const { showToast, ToastEl } = useToast();
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [filter, setFilter] = useState('all');
   const [search, setSearch] = useState('');
+
+  // Progress Tracking state
+  const [progProject, setProgProject] = useState(null);
+  const [progressList, setProgressList] = useState([]);
+  const [progLoading, setProgLoading] = useState(false);
+  const [showUploadForm, setShowUploadForm] = useState(false);
+  const [uploadForm, setUploadForm] = useState({
+    quarter: 'Q1',
+    year: new Date().getFullYear(),
+    survival_rate: '',
+    canopy_cover: '',
+    notes: ''
+  });
+  const [uploadPhoto, setUploadPhoto] = useState(null);
+  const [uploading, setUploading] = useState(false);
+  const [lightboxImg, setLightboxImg] = useState(null);
 
   useEffect(() => {
     setLoading(true);
@@ -210,6 +236,65 @@ export function NGOProjects() {
       })
       .finally(() => setLoading(false));
   }, [refreshKey]);
+
+  const openProgress = (project) => {
+    setProgProject(project);
+    setShowUploadForm(false);
+    setProgLoading(true);
+    fetchProjectProgress(project.project_id || project.id)
+      .then(res => {
+        if (Array.isArray(res.data)) {
+          setProgressList(res.data);
+        } else {
+          setProgressList([]);
+        }
+      })
+      .catch(() => setProgressList([]))
+      .finally(() => setProgLoading(false));
+  };
+
+  const handleProgressSubmit = async (e) => {
+    e.preventDefault();
+    if (!progProject) return;
+    if (!uploadForm.survival_rate || !uploadForm.canopy_cover) {
+      showToast('Please provide survival rate and canopy cover estimates', 'error');
+      return;
+    }
+
+    setUploading(true);
+    const fd = new FormData();
+    fd.append('quarter', uploadForm.quarter);
+    fd.append('year', uploadForm.year);
+    fd.append('survival_rate', uploadForm.survival_rate);
+    fd.append('canopy_cover', uploadForm.canopy_cover);
+    fd.append('notes', uploadForm.notes);
+    if (uploadPhoto) {
+      fd.append('photo', uploadPhoto);
+    }
+
+    const res = await submitProgressUpdate(progProject.project_id || progProject.id, fd);
+    setUploading(false);
+
+    if (!res.error) {
+      showToast(`Quarterly report for ${uploadForm.quarter} ${uploadForm.year} submitted successfully!`);
+      setShowUploadForm(false);
+      setUploadForm({
+        quarter: 'Q1',
+        year: new Date().getFullYear(),
+        survival_rate: '',
+        canopy_cover: '',
+        notes: ''
+      });
+      setUploadPhoto(null);
+      // Reload progress updates
+      fetchProjectProgress(progProject.project_id || progProject.id).then(r => {
+        if (Array.isArray(r.data)) setProgressList(r.data);
+      });
+      triggerRefresh();
+    } else {
+      showToast(res.error || 'Failed to submit quarterly report', 'error');
+    }
+  };
 
   const filtered = projects.filter(p => (filter === 'all' || p.status === filter) && p.name.toLowerCase().includes(search.toLowerCase()));
 
@@ -255,20 +340,219 @@ export function NGOProjects() {
           </div>
         ) : (
           <Table
-            headers={['Project ID','Name','Type','Area (ha)','Credits','Shadow','Price/t','Status']}
+            headers={['Project ID','Name','Type','Area (ha)','Credits','Price/t','Status','Progress Tracking']}
             rows={filtered.map(p=>[
               <span style={{color:T.teal,fontWeight:700,fontSize:12}}>{p.project_id}</span>,
               <span style={{fontWeight:600,color:T.t1}}>{p.name}</span>,
               <Badge type={p.status==='approved'?'reforestation':p.status==='rejected'?'rejected':'pending'} label={p.plantation_type}/>,
               <span style={{color:T.t2}}>{p.area_hectares}</span>,
               <span style={{color:T.emeraldL,fontWeight:700}}>{(p.credits || 0).toLocaleString()}</span>,
-              <span style={{color:T.violetL || T.teal,fontWeight:600,fontSize:12}}>{(p.shadow_credits || 0).toLocaleString()}</span>,
               <span style={{color:T.goldL,fontWeight:700}}>{p.price_per_ton ? `$${p.price_per_ton}` : '—'}</span>,
-              <Badge type={p.status} label={p.status}/>,
+              <Badge type={p.status} label={p.status.replace('_', ' ')}/>,
+              <Btn variant="secondary" style={{padding:'5px 11px',fontSize:11,gap:6}} onClick={()=>openProgress(p)}>
+                <TrendingUp size={12} color={T.teal}/> Timeline & Reports
+              </Btn>
             ])}
           />
         )}
       </Card>
+
+      {/* ── Progress Tracking & Timeline Modal ── */}
+      <Modal open={!!progProject} onClose={()=>setProgProject(null)} title={`Quarterly Progress: ${progProject?.name || ''}`} width={720}>
+        {progProject && (
+          <div>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:18,paddingBottom:14,borderBottom:`1px solid ${T.border}`}}>
+              <div style={{display:'flex',alignItems:'center',gap:10}}>
+                <span style={{fontSize:12,color:T.t3}}>ID: <strong style={{color:T.t1}}>{progProject.project_id || progProject.id}</strong></span>
+                <span style={{color:T.t4}}>•</span>
+                <span style={{fontSize:12,color:T.t3}}>Area: <strong style={{color:T.teal}}>{progProject.area_hectares} ha</strong></span>
+                <span style={{color:T.t4}}>•</span>
+                <Badge type={progProject.status} label={progProject.status.replace('_', ' ')}/>
+              </div>
+              <Btn onClick={()=>setShowUploadForm(!showUploadForm)} style={{gap:6}}>
+                {showUploadForm ? <X size={13}/> : <Plus size={13}/>}
+                {showUploadForm ? 'Close Form' : 'Submit Progress Update'}
+              </Btn>
+            </div>
+
+            {/* ── Quarterly Report Upload Form ── */}
+            {showUploadForm && (
+              <form onSubmit={handleProgressSubmit} style={{background:'rgba(255,255,255,0.02)',border:`1px solid ${T.border}`,borderRadius:12,padding:18,marginBottom:22}}>
+                <div style={{fontSize:13,fontWeight:700,color:T.t1,marginBottom:12,display:'flex',alignItems:'center',gap:6}}>
+                  <Upload size={14} color={T.teal}/> Submit Quarterly Field Monitoring Report
+                </div>
+
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr',gap:12,marginBottom:14}}>
+                  <div>
+                    <label style={lbl}>Quarter</label>
+                    <select
+                      value={uploadForm.quarter}
+                      onChange={e=>setUploadForm({...uploadForm,quarter:e.target.value})}
+                      style={{...inp,height:40}}>
+                      <option value="Q1" style={{background:'#090c18'}}>Q1 (Jan–Mar)</option>
+                      <option value="Q2" style={{background:'#090c18'}}>Q2 (Apr–Jun)</option>
+                      <option value="Q3" style={{background:'#090c18'}}>Q3 (Jul–Sep)</option>
+                      <option value="Q4" style={{background:'#090c18'}}>Q4 (Oct–Dec)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label style={lbl}>Year</label>
+                    <input
+                      type="number"
+                      value={uploadForm.year}
+                      onChange={e=>setUploadForm({...uploadForm,year:parseInt(e.target.value)||2025})}
+                      style={{...inp,height:40}}/>
+                  </div>
+                  <div>
+                    <label style={lbl}>Survival Rate (%)</label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      placeholder="e.g. 91.5"
+                      value={uploadForm.survival_rate}
+                      onChange={e=>setUploadForm({...uploadForm,survival_rate:e.target.value})}
+                      style={{...inp,height:40}} required/>
+                  </div>
+                  <div>
+                    <label style={lbl}>Canopy Cover (%)</label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      placeholder="e.g. 42.0"
+                      value={uploadForm.canopy_cover}
+                      onChange={e=>setUploadForm({...uploadForm,canopy_cover:e.target.value})}
+                      style={{...inp,height:40}} required/>
+                  </div>
+                </div>
+
+                <div style={{marginBottom:14}}>
+                  <label style={lbl}>Field Observation & Growth Notes</label>
+                  <textarea
+                    rows={3}
+                    placeholder="Describe vegetative health, rain impact, sapling growth, weed clearing, or community ranger findings..."
+                    value={uploadForm.notes}
+                    onChange={e=>setUploadForm({...uploadForm,notes:e.target.value})}
+                    style={inp}
+                  />
+                </div>
+
+                <div style={{marginBottom:16}}>
+                  <label style={lbl}>Ground Evidence Photo (Optional)</label>
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    onChange={e=>setUploadPhoto(e.target.files[0]||null)}
+                    style={{...inp,padding:'7px 10px',fontSize:12}}
+                  />
+                </div>
+
+                <div style={{display:'flex',justifyContent:'flex-end',gap:10}}>
+                  <Btn variant="secondary" onClick={()=>setShowUploadForm(false)}>Cancel</Btn>
+                  <Btn type="submit" disabled={uploading} style={{gap:6}}>
+                    {uploading ? 'Submitting Report…' : 'Submit & Trigger Verification'}
+                  </Btn>
+                </div>
+              </form>
+            )}
+
+            {/* ── Quarterly Reports Timeline ── */}
+            <div>
+              <div style={{fontSize:12,fontWeight:700,color:T.t3,textTransform:'uppercase',letterSpacing:'0.6px',marginBottom:12}}>
+                Quarterly Telemetry & Evidence Timeline ({progressList.length} updates)
+              </div>
+
+              {progLoading ? (
+                <div style={{textAlign:'center',padding:30,color:T.t3,fontSize:13}}>Loading timeline…</div>
+              ) : progressList.length === 0 ? (
+                <div style={{textAlign:'center',padding:32,background:'rgba(255,255,255,0.01)',borderRadius:12,border:`1px dashed ${T.border}`}}>
+                  <Calendar size={28} color={T.t4} style={{margin:'0 auto 10px'}}/>
+                  <div style={{fontSize:13,color:T.t2,fontWeight:600}}>No quarterly reports recorded yet</div>
+                  <div style={{fontSize:12,color:T.t4,marginTop:4}}>Submit your first report using the button above to begin MRV telemetry tracking.</div>
+                </div>
+              ) : (
+                <div style={{display:'flex',flexDirection:'column',gap:14}}>
+                  {progressList.map(u => (
+                    <div key={u.id} style={{
+                      background:'rgba(255,255,255,0.025)',
+                      border:`1px solid ${T.border}`,
+                      borderRadius:12,
+                      padding:16,
+                      display:'flex',
+                      gap:16,
+                      alignItems:'flex-start'
+                    }}>
+                      {/* Left: Quarter badge */}
+                      <div style={{
+                        background:'rgba(45,212,191,0.08)',
+                        border:'1px solid rgba(45,212,191,0.25)',
+                        borderRadius:10,
+                        padding:'10px 14px',
+                        textAlign:'center',
+                        minWidth:74
+                      }}>
+                        <div style={{fontSize:16,fontWeight:800,color:T.teal,fontFamily:'Fraunces, serif'}}>{u.quarter}</div>
+                        <div style={{fontSize:11,color:T.t3,fontWeight:600}}>{u.year}</div>
+                      </div>
+
+                      {/* Middle: Metrics and Narrative */}
+                      <div style={{flex:1}}>
+                        <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap',marginBottom:8}}>
+                          <div style={{display:'flex',alignItems:'center',gap:4,fontSize:12,fontWeight:700,color:T.emeraldL,background:'rgba(16,185,129,0.1)',padding:'3px 8px',borderRadius:6}}>
+                            <Leaf size={12}/> Survival: {u.survival_rate != null ? `${u.survival_rate}%` : '—'}
+                          </div>
+                          <div style={{display:'flex',alignItems:'center',gap:4,fontSize:12,fontWeight:700,color:T.skyL,background:'rgba(56,189,248,0.1)',padding:'3px 8px',borderRadius:6}}>
+                            <TreePine size={12}/> Canopy: {u.canopy_cover != null ? `${u.canopy_cover}%` : '—'}
+                          </div>
+                          {u.verified_by_satellite && (
+                            <div style={{display:'flex',alignItems:'center',gap:4,fontSize:11,fontWeight:700,color:T.teal,background:'rgba(45,212,191,0.1)',padding:'3px 8px',borderRadius:6}}>
+                              <ShieldCheck size={12}/> Satellite Verified
+                            </div>
+                          )}
+                          <span style={{fontSize:11,color:T.t4,marginLeft:'auto'}}>{u.time_ago}</span>
+                        </div>
+
+                        {u.notes && (
+                          <div style={{fontSize:13,color:T.t2,lineHeight:1.5,marginBottom:8}}>
+                            {u.notes}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Right: Ground evidence photo thumbnail */}
+                      {u.photo_url && (
+                        <div
+                          onClick={()=>setLightboxImg(u.photo_url)}
+                          style={{
+                            width:86,height:86,borderRadius:8,overflow:'hidden',
+                            border:`1px solid ${T.border}`,cursor:'pointer',position:'relative',flexShrink:0
+                          }}>
+                          <img src={u.photo_url} alt="Field evidence" style={{width:'100%',height:'100%',objectFit:'cover'}}/>
+                          <div style={{position:'absolute',inset:0,background:'rgba(0,0,0,0.3)',display:'flex',alignItems:'center',justifyContent:'center',opacity:0,transition:'opacity 0.2s'}}
+                            onMouseEnter={e=>e.currentTarget.style.opacity='1'}
+                            onMouseLeave={e=>e.currentTarget.style.opacity='0'}>
+                            <Eye size={16} color="#fff"/>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* Lightbox Modal */}
+      <Modal open={!!lightboxImg} onClose={()=>setLightboxImg(null)} title="Field Photo" width={680}>
+        {lightboxImg && (
+          <div style={{textAlign:'center'}}>
+            <img src={lightboxImg} alt="Field verification" style={{maxWidth:'100%',maxHeight:'65vh',borderRadius:10,objectFit:'contain'}}/>
+          </div>
+        )}
+      </Modal>
+
+      {ToastEl}
     </div>
   );
 }

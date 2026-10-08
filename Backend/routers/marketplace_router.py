@@ -1,10 +1,12 @@
 # marketplace_router.py
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
-from typing import List
+from typing import List, Optional
 
-from credit_calculation.credits_module.db_models import Project, ProjectCredits, FundingDetails, CorporateRequest
+from credit_calculation.credits_module.db_models import (
+    Project, ProjectCredits, FundingDetails, CorporateRequest, NGO, ProjectProgressUpdate
+)
 from credit_calculation.credits_module.db import SessionLocal
 
 router = APIRouter()
@@ -70,6 +72,21 @@ def create_buy_request(request: BuyRequest):
         )
         db.add(new_request)
         db.commit()
+
+        # Emit platform notification
+        try:
+            from routers.notifications_router import create_notification
+            create_notification(
+                db=db,
+                title="New Buy Request",
+                message=f"{request.corporate_name} offered ${request.offered_price:.2f}/ton for project {request.project_id}.",
+                type="info",
+                recipient_role="admin",
+                related_project_id=request.project_id
+            )
+        except Exception as notif_err:
+            pass
+
         return {"message": "Request created"}
     finally:
         db.close()
@@ -100,31 +117,125 @@ def accept_request(request_id: int):
 
 
 @router.get("/listings")
-def get_marketplace_listings():
-    """Get all approved projects as marketplace listings for corporate buyers."""
+def get_marketplace_listings(
+    plantation_type: Optional[str] = Query(None, description="Filter by plantation type"),
+    min_price: Optional[float] = Query(None, description="Minimum price per ton"),
+    max_price: Optional[float] = Query(None, description="Maximum price per ton"),
+    min_mrv: Optional[float] = Query(None, description="Minimum MRV score"),
+    search: Optional[str] = Query(None, description="Search term for name or location")
+):
+    """Get all approved projects as marketplace listings with real filtering."""
     db = SessionLocal()
     try:
-        projects = db.query(Project).filter(Project.status == "approved").all()
+        query = db.query(Project).filter(Project.status == "approved")
+
+        if plantation_type and plantation_type.lower() != "all":
+            query = query.filter(Project.plantation_type.ilike(f"%{plantation_type.strip()}%"))
+
+        if min_mrv is not None:
+            query = query.filter(Project.mrv_score >= min_mrv)
+
+        if search:
+            s = f"%{search.strip()}%"
+            query = query.filter((Project.name.ilike(s)) | (Project.project_id.ilike(s)))
+
+        projects = query.all()
         result = []
         for p in projects:
             credits_entry = db.query(ProjectCredits).filter(ProjectCredits.project_id == p.project_id).first()
-            credits = credits_entry.verified_credits if credits_entry else p.credits or 0
+            credits = credits_entry.verified_credits if credits_entry else (p.credits or 0)
             funding_entry = db.query(FundingDetails).filter(FundingDetails.project_id == p.project_id).first()
-            price = funding_entry.price_per_ton if funding_entry else p.price or 25.0
-            from credit_calculation.credits_module.db_models import NGO
+            price = funding_entry.price_per_ton if funding_entry else (p.price or 25.0)
+
+            if min_price is not None and price < min_price:
+                continue
+            if max_price is not None and price > max_price:
+                continue
+
             ngo = db.query(NGO).filter(NGO.id == p.ngo_id).first()
+            progress = db.query(ProjectProgressUpdate).filter(
+                ProjectProgressUpdate.project_id == p.project_id
+            ).order_by(ProjectProgressUpdate.id.desc()).first()
+
             result.append({
                 "id": p.project_id,
                 "name": p.name,
                 "type": p.plantation_type.replace("_", " ").title() if p.plantation_type else "Reforestation",
-                "location": f"{p.latitude}, {p.longitude}",
+                "location": f"{p.latitude:.2f}, {p.longitude:.2f}" if p.latitude and p.longitude else "Global",
                 "credits": credits,
                 "area": p.area_hectares,
                 "price": price,
-                "ngo": ngo.name if ngo else "Unknown",
-                "verified": 85,
+                "mrv_score": p.mrv_score or 85.0,
+                "env_score": p.env_score or 80.0,
+                "trees": p.number_of_trees or 0,
+                "survival_rate": progress.survival_rate if progress else None,
+                "canopy_cover": progress.canopy_cover if progress else None,
+                "ngo": ngo.name if ngo else "Registered NGO",
+                "verified": int(p.mrv_score or 85),
             })
         return result
+    finally:
+        db.close()
+
+
+class CompareRequest(BaseModel):
+    project_ids: List[str]
+
+
+@router.post("/compare")
+def compare_projects(req: CompareRequest):
+    """
+    Compare 2 to 3 projects side-by-side using live database metrics.
+    """
+    if not req.project_ids or len(req.project_ids) < 2:
+        raise HTTPException(status_code=400, detail="Please select at least 2 projects to compare")
+    if len(req.project_ids) > 4:
+        raise HTTPException(status_code=400, detail="Maximum 4 projects can be compared simultaneously")
+
+    db = SessionLocal()
+    try:
+        results = []
+        for pid in req.project_ids:
+            p = db.query(Project).filter(
+                (Project.project_id == pid) | (Project.id == int(pid) if str(pid).isdigit() else False)
+            ).first()
+            if not p:
+                continue
+
+            credits_entry = db.query(ProjectCredits).filter(ProjectCredits.project_id == p.project_id).first()
+            credits = credits_entry.verified_credits if credits_entry else (p.credits or 0)
+            price = p.price or 25.0
+            ngo = db.query(NGO).filter(NGO.id == p.ngo_id).first()
+            progress = db.query(ProjectProgressUpdate).filter(
+                ProjectProgressUpdate.project_id == p.project_id
+            ).order_by(ProjectProgressUpdate.id.desc()).first()
+
+            area = p.area_hectares or 1.0
+            co2_per_ha = round((credits or 0) / area, 2) if area > 0 else 0.0
+
+            results.append({
+                "project_id": p.project_id,
+                "name": p.name,
+                "type": (p.plantation_type or "Reforestation").replace("_", " ").title(),
+                "status": p.status,
+                "mrv_score": p.mrv_score or 85.0,
+                "env_score": p.env_score or 80.0,
+                "price_usd": price,
+                "price_inr": round(price * 83.5, 2),
+                "available_credits": credits,
+                "area_hectares": p.area_hectares or 0,
+                "trees_count": p.number_of_trees or 0,
+                "survival_rate": progress.survival_rate if progress else None,
+                "canopy_cover": progress.canopy_cover if progress else None,
+                "ngo_name": ngo.name if ngo else "Registered NGO",
+                "location": f"{p.latitude:.2f}, {p.longitude:.2f}" if p.latitude and p.longitude else "Global",
+                "co2_per_ha": co2_per_ha,
+            })
+
+        if not results:
+            raise HTTPException(status_code=404, detail="None of the selected projects were found")
+
+        return results
     finally:
         db.close()
 

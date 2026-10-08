@@ -5,7 +5,13 @@ import { mockTransactions, mockGRSData, mockMarketplace, mockESGReport, generate
 import { fetchAllProjects, fetchMapProjects, fetchMarketplaceListings, createBuyRequest, createOrder, buyCredits, fetchTransactions, fetchWallet, generateESGReport, loadRazorpayScript } from '../../services/api.js';
 import { Card, SectionHeader, Table, Badge, MRVScore, KPICard, Modal, Btn, T, ScoreGauge, withAlpha } from '../UI.jsx';
 import { ProjectMap } from '../GoogleMap.jsx';
-import { Package, FileText, Wallet as WalletIcon, TrendingUp, MapPin, Download, Star, ShoppingCart, Leaf, DollarSign, CheckCircle, AlertCircle } from 'lucide-react';
+import CertificateModal from '../CertificateModal.jsx';
+import ProjectComparisonModal from '../ProjectComparisonModal.jsx';
+import {
+  Package, FileText, Wallet as WalletIcon, TrendingUp, MapPin, Download,
+  Star, ShoppingCart, Leaf, DollarSign, CheckCircle, AlertCircle, Award,
+  Scale, Search, SlidersHorizontal, RotateCcw, X
+} from 'lucide-react';
 
 const inp = { background:'var(--input-bg, rgba(255,255,255,0.04))', border:`1px solid ${T.border}`, borderRadius:9, padding:'10px 14px', color:T.t1, fontSize:14, outline:'none', width:'100%', fontFamily:'Plus Jakarta Sans, sans-serif' };
 
@@ -99,39 +105,78 @@ export function CorporateDashboard() {
 }
 
 export function CorporateMarketplace() {
-  const { refreshKey, triggerRefresh } = useApp();
+  const { user, refreshKey, triggerRefresh } = useApp();
+  const corporateName = user?.name || 'Microsoft Sustainability';
   const [listings, setListings] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [buyModal,setBuyModal] = useState(null);
-  const [qty,setQty]           = useState(25);
-  const [purchased,setPurchased] = useState({});
-  const [filter,setFilter]     = useState('all');
+  const [buyModal, setBuyModal] = useState(null);
+  const [qty, setQty]           = useState(25);
+  const [purchased, setPurchased] = useState({});
   const [buying, setBuying]    = useState(false);
 
-  useEffect(() => {
+  // Feature 7: Multi-parameter search & filters
+  const [filters, setFilters] = useState({
+    search: '',
+    plantation_type: 'all',
+    min_price: '',
+    max_price: '',
+    min_mrv: '',
+  });
+
+  // Feature 6: Comparison Tool
+  const [selectedForCompare, setSelectedForCompare] = useState([]);
+  const [compareModalOpen, setCompareModalOpen] = useState(false);
+
+  const loadListings = () => {
     setLoading(true);
-    fetchMarketplaceListings()
+    fetchMarketplaceListings(filters)
       .then(res => {
         if (!res.error && Array.isArray(res.data)) {
-          setListings(res.data.length > 0 ? res.data : mockMarketplace);
+          setListings(res.data);
         } else {
           setListings(mockMarketplace);
         }
       })
       .finally(() => setLoading(false));
-  }, [refreshKey]);
+  };
 
-  const filtered = filter==='all'?listings:listings.filter(p=>(p.type||'').toLowerCase()===filter);
-  const types = ['all',...new Set(listings.map(p=>(p.type||'').toLowerCase()).filter(Boolean))];
+  useEffect(() => {
+    loadListings();
+  }, [refreshKey, filters.plantation_type, filters.min_mrv]);
+
+  const handleApplyFilter = (e) => {
+    if (e) e.preventDefault();
+    loadListings();
+  };
+
+  const handleResetFilters = () => {
+    setFilters({
+      search: '',
+      plantation_type: 'all',
+      min_price: '',
+      max_price: '',
+      min_mrv: '',
+    });
+  };
+
+  const toggleCompare = (projectId) => {
+    if (selectedForCompare.includes(projectId)) {
+      setSelectedForCompare(selectedForCompare.filter(id => id !== projectId));
+    } else {
+      if (selectedForCompare.length >= 3) {
+        alert('You can compare a maximum of 3 projects simultaneously.');
+        return;
+      }
+      setSelectedForCompare([...selectedForCompare, projectId]);
+    }
+  };
+
   const inrAmount = (usd) => `₹${(usd*83.5).toLocaleString('en-IN',{maximumFractionDigits:0})}`;
 
   const handleRazorPay = async (item, quantity) => {
     setBuying(true);
     try {
-      // 1. Ensure real Razorpay checkout script is loaded
       await loadRazorpayScript();
-
-      // 2. Calculate amount in INR — price is per credit in USD, convert to INR
       const amountUSD = item.price * quantity;
       const amountINR = Math.round(amountUSD * 83.5);
 
@@ -141,15 +186,13 @@ export function CorporateMarketplace() {
         return;
       }
 
-      // 3. Persist buy request so it appears in NGO Corporate Buy Requests
       try {
-        await createBuyRequest('Microsoft Sustainability', item.id, item.price);
+        await createBuyRequest(corporateName, item.id, item.price);
       } catch (err) {
         console.warn('Could not record buy request before payment', err);
       }
 
-      // 4. Create order on backend (backend converts INR -> paise, NO double conversion)
-      const orderRes = await createOrder(amountINR, 'INR', item.id, 'Microsoft Sustainability');
+      const orderRes = await createOrder(amountINR, 'INR', item.id, corporateName);
       if (orderRes.error) {
         alert('Failed to create order: ' + orderRes.error);
         setBuying(false);
@@ -157,20 +200,19 @@ export function CorporateMarketplace() {
       }
       const order = orderRes.data;
 
-      // 5. If in demo mode (no Razorpay keys), simulate payment automatically
       if (order.demo_mode) {
         const buyRes = await buyCredits({
           razorpay_order_id: order.id,
           razorpay_payment_id: "pay_demo_" + Math.random().toString(36).substring(7),
           razorpay_signature: "demo_signature",
           project_id: item.id,
-          corporate_name: 'Microsoft Sustainability',
+          corporate_name: corporateName,
           quantity: quantity,
           amount: amountINR,
         });
         if (!buyRes.error) {
           setPurchased({...purchased, [item.id]: (purchased[item.id]||0) + quantity});
-          alert(`Payment successful! ${quantity} credits purchased.`);
+          alert(`Payment successful! ${quantity} credits purchased. Certificate issued.`);
           triggerRefresh();
         } else {
           alert('Payment recorded but save failed: ' + buyRes.error);
@@ -180,22 +222,20 @@ export function CorporateMarketplace() {
         return;
       }
 
-      // 4. Open Razorpay popup
       const options = {
         key: order.key_id,
-        amount: order.amount,  // already in paise from backend
+        amount: order.amount,
         currency: order.currency || 'INR',
         name: 'CarbonVault',
         description: `${quantity} credits from ${item.name}`,
         order_id: order.id,
         handler: async function (response) {
-          // 4. On success — record the purchase
           const buyRes = await buyCredits({
             razorpay_order_id: response.razorpay_order_id,
             razorpay_payment_id: response.razorpay_payment_id,
             razorpay_signature: response.razorpay_signature,
             project_id: item.id,
-            corporate_name: 'Microsoft Sustainability',
+            corporate_name: corporateName,
             quantity: quantity,
             amount: amountINR,
           });
@@ -215,8 +255,8 @@ export function CorporateMarketplace() {
           }
         },
         prefill: {
-          name: 'James Chen',
-          email: 'corp@carbonvault.com',
+          name: user?.name || 'James Chen',
+          email: user?.email || 'corp@carbonvault.com',
           contact: '9999999999'
         },
         theme: { color: '#2dd4bf' },
@@ -234,48 +274,290 @@ export function CorporateMarketplace() {
     }
   };
 
-  if (loading) return (
-    <div style={{padding:28, display:'flex', justifyContent:'center', alignItems:'center', minHeight:'40vh'}}>
-      <div style={{textAlign:'center'}}>
-        <div style={{width:44,height:44,border:`3px solid rgba(45,212,191,0.15)`,borderTop:`3px solid ${T.teal}`,borderRadius:'50%',margin:'0 auto 16px',animation:'spinSlow 0.8s linear infinite'}}/>
-        <div style={{fontSize:14,color:T.t2}}>Loading marketplace…</div>
-      </div>
-    </div>
-  );
+  const projectTypes = ['all', 'mangrove', 'teak', 'mixed', 'reforestation'];
 
   return (
-    <div style={{padding:28}}>
-      <SectionHeader title="Carbon Credit Marketplace" subtitle="Browse verified projects and purchase credits via Razorpay"/>
-      <div style={{display:'flex',gap:8,marginBottom:18,flexWrap:'wrap'}}>
-        {types.map(t=>(
-          <button key={t} onClick={()=>setFilter(t)} style={{background:filter===t?'rgba(45,212,191,0.1)':'rgba(255,255,255,0.03)',border:`1px solid ${filter===t?'rgba(45,212,191,0.35)':T.border}`,borderRadius:9,padding:'8px 16px',color:filter===t?T.teal:T.t3,fontSize:12,fontWeight:700,cursor:'pointer',textTransform:'capitalize',transition:'all 0.15s'}}>
-            {t==='all'?'All Types':t}
-          </button>
-        ))}
-      </div>
+    <div style={{padding:28, position: 'relative', minHeight: '85vh'}}>
+      <SectionHeader
+        title="Carbon Credit Marketplace"
+        subtitle="Browse verified ecological restoration projects, compare quality metrics, and purchase audited credits"
+      />
+
+      {/* Multi-Parameter Search & Filter Bar */}
+      <Card style={{ marginBottom: 20, padding: 16 }}>
+        <form onSubmit={handleApplyFilter}>
+          <div style={{ display: 'grid', gridTemplateColumns: '2fr 1.2fr 1fr 1fr auto', gap: 12, alignItems: 'center' }}>
+            {/* Search */}
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 8,
+              background: 'var(--input-bg, rgba(255,255,255,0.04))',
+              border: `1px solid ${T.border}`, borderRadius: 8, padding: '8px 12px'
+            }}>
+              <Search size={14} color={T.t3} />
+              <input
+                type="text"
+                placeholder="Search by project name or ID…"
+                value={filters.search}
+                onChange={(e) => setFilters(f => ({ ...f, search: e.target.value }))}
+                style={{ background: 'transparent', border: 'none', outline: 'none', color: T.t1, fontSize: 13, width: '100%' }}
+              />
+            </div>
+
+            {/* Min MRV Score */}
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              background: 'var(--input-bg, rgba(255,255,255,0.04))',
+              border: `1px solid ${T.border}`, borderRadius: 8, padding: '8px 12px'
+            }}>
+              <ShieldCheck size={14} color={T.teal} />
+              <select
+                value={filters.min_mrv}
+                onChange={(e) => setFilters(f => ({ ...f, min_mrv: e.target.value }))}
+                style={{ background: 'transparent', border: 'none', outline: 'none', color: T.t1, fontSize: 13, width: '100%', cursor: 'pointer' }}
+              >
+                <option value="" style={{ background: '#0a0f1d' }}>All MRV Scores</option>
+                <option value="75" style={{ background: '#0a0f1d' }}>MRV 75+ Score</option>
+                <option value="85" style={{ background: '#0a0f1d' }}>MRV 85+ (High Quality)</option>
+                <option value="90" style={{ background: '#0a0f1d' }}>MRV 90+ (Prime Grade)</option>
+              </select>
+            </div>
+
+            {/* Min Price */}
+            <input
+              type="number"
+              placeholder="Min $/t"
+              value={filters.min_price}
+              onChange={(e) => setFilters(f => ({ ...f, min_price: e.target.value }))}
+              style={{ ...inp, padding: '8px 12px', fontSize: 13 }}
+            />
+
+            {/* Max Price */}
+            <input
+              type="number"
+              placeholder="Max $/t"
+              value={filters.max_price}
+              onChange={(e) => setFilters(f => ({ ...f, max_price: e.target.value }))}
+              style={{ ...inp, padding: '8px 12px', fontSize: 13 }}
+            />
+
+            {/* Filter Buttons */}
+            <div style={{ display: 'flex', gap: 6 }}>
+              <button
+                type="submit"
+                style={{
+                  background: T.teal, color: '#031a17', border: 'none', borderRadius: 8,
+                  padding: '8px 16px', fontSize: 12, fontWeight: 700, cursor: 'pointer'
+                }}
+              >
+                Apply
+              </button>
+              <button
+                type="button"
+                onClick={handleResetFilters}
+                style={{
+                  background: 'rgba(255,255,255,0.06)', color: T.t2, border: `1px solid ${T.border}`,
+                  borderRadius: 8, padding: '8px 12px', cursor: 'pointer'
+                }}
+                title="Reset filters"
+              >
+                <RotateCcw size={13} />
+              </button>
+            </div>
+          </div>
+
+          {/* Type Chips */}
+          <div style={{ display: 'flex', gap: 8, marginTop: 12, alignItems: 'center' }}>
+            <span style={{ fontSize: 11, color: T.t3, textTransform: 'uppercase', fontWeight: 600 }}>Ecosystem:</span>
+            {projectTypes.map(t => (
+              <button
+                key={t}
+                type="button"
+                onClick={() => setFilters(f => ({ ...f, plantation_type: t }))}
+                style={{
+                  background: filters.plantation_type === t ? 'rgba(45,212,191,0.12)' : 'rgba(255,255,255,0.03)',
+                  border: `1px solid ${filters.plantation_type === t ? 'rgba(45,212,191,0.35)' : T.border}`,
+                  borderRadius: 7, padding: '4px 12px',
+                  color: filters.plantation_type === t ? T.teal : T.t3,
+                  fontSize: 11, fontWeight: 700, cursor: 'pointer', textTransform: 'capitalize'
+                }}
+              >
+                {t === 'all' ? 'All Types' : t}
+              </button>
+            ))}
+          </div>
+        </form>
+      </Card>
+
+      {/* Main Listings Table */}
       <Card>
-        {listings.length === 0 ? (
-          <div style={{textAlign:'center',padding:40,color:T.t3,fontSize:13}}>No marketplace listings available yet. Projects need to be approved first.</div>
+        {loading ? (
+          <div style={{ textAlign: 'center', padding: '50px 0' }}>
+            <div style={{
+              width: 36, height: 36, border: '3px solid rgba(45,212,191,0.15)',
+              borderTop: `3px solid ${T.teal}`, borderRadius: '50%',
+              margin: '0 auto 12px', animation: 'spinSlow 0.8s linear infinite'
+            }} />
+            <div style={{ fontSize: 13, color: T.t2 }}>Loading verified marketplace listings…</div>
+          </div>
+        ) : listings.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: 40, color: T.t3, fontSize: 13 }}>
+            No marketplace listings match the selected criteria.
+          </div>
         ) : (
-          <Table headers={['Project ID','🌱','Project Name','Type','Location','Credits (t)','Area','Price/t','Buy']}
-            rows={filtered.map(item=>[
-              <span style={{color:T.teal,fontWeight:700,fontSize:12}}>{item.id}</span>,
-              <div style={{width:34,height:34,borderRadius:8,background:'rgba(16,185,129,0.1)',border:'1px solid rgba(52,211,153,0.2)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:16}}>🌱</div>,
-              <span style={{fontWeight:700,color:T.t1,fontSize:13}}>{item.name}</span>,
-              <Badge type={item.type==='Reforestation'?'reforestation':item.type==='Mangrove'?'renewable':item.type==='Methane'?'methane':'carbon_capture'} label={item.type}/>,
-              <span style={{color:T.t3,fontSize:12,display:'flex',alignItems:'center',gap:4}}><MapPin size={10}/>{item.location}</span>,
-              <span style={{color:item.credits>0?T.emeraldL:T.roseL,fontWeight:700}}>{item.credits>0?item.credits.toLocaleString():'Sold Out'}</span>,
-              <span style={{color:T.t2}}>{item.area?item.area.toLocaleString()+' ha':'—'}</span>,
-              <div>
-                <div style={{color:T.goldL,fontWeight:700,fontSize:14}}>${item.price}</div>
-                <div style={{color:T.t3,fontSize:10}}>{inrAmount(item.price)}</div>
-              </div>,
-              item.credits>0?(<button onClick={()=>{setBuyModal(item);setQty(Math.min(25, item.credits));}} style={{background:`linear-gradient(135deg,${T.teal},${T.tealDD || T.teal})`,border:'none',borderRadius:8,padding:'7px 15px',color:'#021a17',fontSize:12,fontWeight:800,cursor:'pointer',transition:'all 0.15s',whiteSpace:'nowrap'}} onMouseEnter={e=>{e.currentTarget.style.opacity='0.85';}} onMouseLeave={e=>{e.currentTarget.style.opacity='1';}}>Buy</button>)
-              :(<span style={{color:T.roseL,fontSize:12,fontWeight:700}}>Sold Out</span>),
-            ])}
+          <Table headers={['Compare','Project ID','🌱','Project Name','Type','Location','MRV Score','Available (t)','Price/t','Action']}
+            rows={listings.map(item => {
+              const isSelected = selectedForCompare.includes(item.id);
+              return [
+                <button
+                  onClick={() => toggleCompare(item.id)}
+                  style={{
+                    background: isSelected ? 'rgba(56,189,248,0.2)' : 'rgba(255,255,255,0.04)',
+                    border: `1px solid ${isSelected ? T.skyL : T.border}`,
+                    color: isSelected ? T.skyL : T.t3,
+                    padding: '5px 9px',
+                    borderRadius: 6,
+                    fontSize: 11,
+                    cursor: 'pointer',
+                    fontWeight: 600,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 4
+                  }}
+                  title="Select for comparison"
+                >
+                  <Scale size={12} /> {isSelected ? 'Selected' : 'Compare'}
+                </button>,
+                <span style={{color:T.teal,fontWeight:700,fontSize:12,fontFamily:'monospace'}}>{item.id}</span>,
+                <div style={{width:32,height:32,borderRadius:8,background:'rgba(16,185,129,0.1)',border:'1px solid rgba(52,211,153,0.2)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:15}}>🌱</div>,
+                <span style={{fontWeight:700,color:T.t1,fontSize:13}}>{item.name}</span>,
+                <Badge type={item.type==='Reforestation'?'reforestation':item.type==='Mangrove'?'renewable':item.type==='Methane'?'methane':'carbon_capture'} label={item.type}/>,
+                <span style={{color:T.t3,fontSize:12,display:'flex',alignItems:'center',gap:4}}><MapPin size={10}/>{item.location}</span>,
+                <span style={{color:T.teal,fontWeight:700,fontSize:12}}>{item.mrv_score || item.verified || 85}/100</span>,
+                <span style={{color:item.credits>0?T.emeraldL:T.roseL,fontWeight:700}}>{item.credits>0?item.credits.toLocaleString():'Sold Out'}</span>,
+                <div>
+                  <div style={{color:T.goldL,fontWeight:700,fontSize:14}}>${item.price}</div>
+                  <div style={{color:T.t3,fontSize:10}}>{inrAmount(item.price)}</div>
+                </div>,
+                item.credits>0 ? (
+                  <button
+                    onClick={()=>{setBuyModal(item);setQty(Math.min(25, item.credits));}}
+                    style={{
+                      background:`linear-gradient(135deg,${T.teal},${T.tealDD || T.teal})`,
+                      border:'none',borderRadius:8,padding:'7px 15px',color:'#021a17',
+                      fontSize:12,fontWeight:800,cursor:'pointer',transition:'all 0.15s',whiteSpace:'nowrap'
+                    }}
+                  >
+                    Buy
+                  </button>
+                ) : (
+                  <span style={{color:T.roseL,fontSize:12,fontWeight:700}}>Sold Out</span>
+                ),
+              ];
+            })}
           />
         )}
       </Card>
+
+      {/* Floating Bottom Comparison Dock */}
+      {selectedForCompare.length > 0 && (
+        <div style={{
+          position: 'fixed',
+          bottom: 24,
+          left: '50%',
+          transform: 'translateX(-50%)',
+          background: 'rgba(8, 12, 22, 0.95)',
+          backdropFilter: 'blur(20px)',
+          border: `1px solid rgba(56, 189, 248, 0.35)`,
+          boxShadow: '0 10px 40px rgba(0,0,0,0.7)',
+          borderRadius: 14,
+          padding: '12px 22px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 16,
+          zIndex: 999
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Scale size={18} color={T.skyL} />
+            <span style={{ fontSize: 13, fontWeight: 700, color: T.t1 }}>
+              Compare Projects ({selectedForCompare.length}/3)
+            </span>
+          </div>
+
+          <div style={{ display: 'flex', gap: 6 }}>
+            {selectedForCompare.map(id => {
+              const p = listings.find(l => l.id === id);
+              return (
+                <div key={id} style={{
+                  background: 'rgba(255,255,255,0.06)',
+                  border: `1px solid ${T.border}`,
+                  borderRadius: 6,
+                  padding: '4px 8px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  fontSize: 12,
+                  color: T.t1
+                }}>
+                  <span>{p?.name || id}</span>
+                  <button
+                    onClick={() => toggleCompare(id)}
+                    style={{ background: 'transparent', border: 'none', color: T.t3, cursor: 'pointer', padding: 0 }}
+                  >
+                    <X size={12} />
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+
+          <button
+            onClick={() => setCompareModalOpen(true)}
+            disabled={selectedForCompare.length < 2}
+            style={{
+              background: selectedForCompare.length >= 2 ? T.skyL : 'rgba(255,255,255,0.1)',
+              color: selectedForCompare.length >= 2 ? '#041724' : T.t3,
+              border: 'none',
+              borderRadius: 8,
+              padding: '8px 16px',
+              fontSize: 12,
+              fontWeight: 700,
+              cursor: selectedForCompare.length >= 2 ? 'pointer' : 'not-allowed',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6
+            }}
+          >
+            Compare Now <ArrowRight size={13} />
+          </button>
+
+          <button
+            onClick={() => setSelectedForCompare([])}
+            style={{ background: 'transparent', border: 'none', color: T.t3, fontSize: 12, cursor: 'pointer' }}
+          >
+            Clear
+          </button>
+        </div>
+      )}
+
+      {/* Project Comparison Modal */}
+      {compareModalOpen && (
+        <ProjectComparisonModal
+          projectIds={selectedForCompare}
+          onClose={() => setCompareModalOpen(false)}
+          onSelectBuy={(p) => {
+            setCompareModalOpen(false);
+            const found = listings.find(l => l.id === p.project_id) || {
+              id: p.project_id,
+              name: p.name,
+              price: p.price_usd,
+              credits: p.available_credits,
+              verified: p.mrv_score,
+            };
+            setBuyModal(found);
+            setQty(Math.min(25, found.credits || 100));
+          }}
+        />
+      )}
 
       <Modal open={!!buyModal} onClose={()=>setBuyModal(null)} title="Purchase Carbon Credits" width={450}>
         {buyModal&&(
@@ -312,69 +594,89 @@ export function CorporateMarketplace() {
 }
 
 export function CorporateWallet() {
-  const { refreshKey } = useApp();
+  const { user, refreshKey } = useApp();
+  const corporateName = user?.name || 'Microsoft Sustainability';
   const [transactions, setTransactions] = useState([]);
   const [walletData, setWalletData] = useState(null);
   const [loading, setLoading] = useState(true);
-  const myTx = mockTransactions.filter(t=>t.buyer==='Microsoft Sustainability');
-  const totalCredits = myTx.reduce((s,t)=>s+t.tons,0);
-  const totalSpent   = myTx.reduce((s,t)=>s+t.total,0);
+  const [selectedCert, setSelectedCert] = useState(null);
 
   useEffect(() => {
     setLoading(true);
     Promise.all([
-      fetchTransactions('Microsoft Sustainability'),
-      fetchWallet('Microsoft Sustainability'),
+      fetchTransactions(corporateName),
+      fetchWallet(corporateName),
     ]).then(([txRes, walRes]) => {
       if (!txRes.error && Array.isArray(txRes.data)) setTransactions(txRes.data);
       if (!walRes.error && walRes.data) setWalletData(walRes.data);
     }).finally(() => setLoading(false));
-  }, [refreshKey]);
+  }, [refreshKey, corporateName]);
 
   const realCredits = walletData?.total_credits || 0;
   const realSpentINR = walletData?.total_spent_inr || 0;
   const realSpentUSD = walletData?.total_spent_usd || 0;
-  const inrAmount = (usd) => `₹${(usd*83.5).toLocaleString('en-IN',{maximumFractionDigits:0})}`;
-
-  // Merge real + mock transactions for display
-  const allTx = transactions.length > 0 ? transactions : [];
 
   return (
     <div style={{padding:28}}>
-      <SectionHeader title="My Wallet" subtitle="Carbon credit holdings and transaction history" action={<Btn variant="secondary"><Download size={13}/>Export</Btn>}/>
+      <SectionHeader
+        title="My Wallet"
+        subtitle="Carbon credit holdings and verifiable retirement impact certificates"
+        action={<Btn variant="secondary"><Download size={13}/>Export</Btn>}
+      />
       <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:15,marginBottom:24}}>
-        <KPICard icon={Package}    label="Total Credits"   value={realCredits > 0 ? realCredits.toLocaleString() : totalCredits.toLocaleString()} sub="Tonnes CO₂e held"           trend="up" color={T.violetLL || T.violetL}/>
-        <KPICard icon={WalletIcon} label="Portfolio Value" value={realCredits > 0 ? `$${realSpentUSD.toLocaleString()}` : `$${(totalCredits*28.5).toLocaleString()}`} sub="At market price" trend="up" color={T.emeraldL}/>
-        <KPICard icon={TrendingUp} label="Total Spent"     value={realSpentINR > 0 ? `₹${realSpentINR.toLocaleString('en-IN')}` : `$${totalSpent.toLocaleString()}`} sub="Lifetime" trend="up" color={T.teal}/>
+        <KPICard icon={Package}    label="Total Credits"   value={realCredits.toLocaleString()} sub="Tonnes CO₂e held"           trend="up" color={T.violetLL || T.violetL}/>
+        <KPICard icon={WalletIcon} label="Portfolio Value" value={`$${realSpentUSD.toLocaleString()}`} sub="At market price" trend="up" color={T.emeraldL}/>
+        <KPICard icon={TrendingUp} label="Total Spent"     value={`₹${realSpentINR.toLocaleString('en-IN')}`} sub="Lifetime" trend="up" color={T.teal}/>
       </div>
       <Card>
-        <SectionHeader title="Transaction History"/>
-        {allTx.length > 0 ? (
-          <Table headers={['Date','Project','Project ID','Credit Tons','Price/t','Total (INR)','Status']}
-            rows={allTx.map(t=>[
-              <span style={{color:T.t3,fontSize:12}}>{t.date || '—'}</span>,
-              <span style={{fontWeight:600,color:T.t1}}>{t.project_name || '—'}</span>,
-              <span style={{color:T.teal,fontWeight:700,fontSize:12}}>{t.project_id}</span>,
-              <span style={{color:T.teal,fontWeight:700}}>{(t.quantity||0).toLocaleString()}t</span>,
-              <span style={{color:T.goldL}}>${t.price_per_ton || '—'}</span>,
-              <span style={{color:T.emeraldL,fontWeight:700}}>₹{(t.amount_inr||0).toLocaleString('en-IN')}</span>,
-              <Badge type={t.status === 'completed' ? 'approved' : 'pending'} label={t.status || 'completed'}/>,
-            ])}
+        <SectionHeader title="Auditable Transaction & Retirement Ledger"/>
+        {transactions.length > 0 ? (
+          <Table headers={['Date','Project','Project ID','Credit Tons','Price/t','Total (INR)','Status','Certificate']}
+            rows={transactions.map(t=>{
+              const certId = t.certificate_id || `CV-OFF-${String(t.id).padStart(5, '0')}`;
+              return [
+                <span style={{color:T.t3,fontSize:12}}>{t.date || '—'}</span>,
+                <span style={{fontWeight:600,color:T.t1}}>{t.project_name || '—'}</span>,
+                <span style={{color:T.teal,fontWeight:700,fontSize:12}}>{t.project_id}</span>,
+                <span style={{color:T.teal,fontWeight:700}}>{(t.quantity||0).toLocaleString()}t</span>,
+                <span style={{color:T.goldL}}>${t.price_per_ton || '—'}</span>,
+                <span style={{color:T.emeraldL,fontWeight:700}}>₹{(t.amount_inr||0).toLocaleString('en-IN')}</span>,
+                <Badge type={t.status === 'completed' ? 'approved' : 'pending'} label={t.status || 'completed'}/>,
+                <button
+                  onClick={() => setSelectedCert(certId)}
+                  style={{
+                    background: 'rgba(124,58,237,0.12)',
+                    border: '1px solid rgba(167,139,250,0.3)',
+                    borderRadius: 7,
+                    padding: '5px 11px',
+                    color: T.violetLL || '#a78bfa',
+                    fontSize: 12,
+                    cursor: 'pointer',
+                    fontWeight: 600,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 5
+                  }}
+                  title={`View Certificate ${certId}`}
+                >
+                  <Award size={13} /> View Cert
+                </button>
+              ];
+            })}
           />
         ) : (
-          <Table headers={['Date','Project','Project ID','Credit Tons','Price/t','Total','Receipt']}
-            rows={myTx.map(t=>[
-              <span style={{color:T.t3,fontSize:12}}>{t.date}</span>,
-              <span style={{fontWeight:600,color:T.t1}}>{t.project}</span>,
-              <span style={{color:T.teal,fontWeight:700,fontSize:12}}>{t.projectId}</span>,
-              <span style={{color:T.teal,fontWeight:700}}>{t.tons.toLocaleString()}t</span>,
-              <span style={{color:T.goldL}}>${t.price}</span>,
-              <span style={{color:T.emeraldL,fontWeight:700}}>${t.total.toLocaleString()}</span>,
-              <button style={{background:'rgba(124,58,237,0.1)',border:'1px solid rgba(167,139,250,0.25)',borderRadius:7,padding:'5px 11px',color:T.violetLL || T.violetL,fontSize:12,cursor:'pointer',fontWeight:700,display:'flex',alignItems:'center',gap:4}}><Download size={10}/>{t.cert}</button>,
-            ])}
-          />
+          <div style={{ textAlign: 'center', padding: '40px 0', color: T.t3, fontSize: 14 }}>
+            No credit purchases recorded yet. Acquire credits on the Marketplace to generate official impact certificates.
+          </div>
         )}
       </Card>
+
+      {selectedCert && (
+        <CertificateModal
+          certId={selectedCert}
+          onClose={() => setSelectedCert(null)}
+        />
+      )}
     </div>
   );
 }

@@ -70,7 +70,8 @@ export const mockGRSData = {
 };
 
 export const demoAccounts = [
-  {role:'admin',  email:'admin@carbonvault.com', name:'Alex Mercer', org:'CarbonVault HQ'},
+  {role:'admin',  admin_role:'super_admin', email:'admin@carbonvault.com', name:'Alex Mercer', org:'CarbonVault HQ'},
+  {role:'admin',  admin_role:'approver',    email:'approver@carbonvault.com', name:'Sarah Jenkins', org:'CarbonVault Verifications'},
   {role:'ngo',    email:'ngo@carbonvault.com',   name:'Maria Santos',org:'EcoGuard Brazil'},
   {role:'corporate', email:'corp@carbonvault.com', name:'James Chen', org:'Microsoft Sustainability'},
 ];

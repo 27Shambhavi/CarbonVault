@@ -23,6 +23,13 @@ export function getImageUrl(path) {
 
 // ── Backend availability tracking ──────────────────────────────────────────
 let _backendOnline = true; // Default optimistic so requests are always attempted
+let _currentAdminRole = 'super_admin';
+let _currentAdminEmail = 'admin@carbonvault.com';
+
+export function setApiAdminContext(role, email) {
+  _currentAdminRole = role || 'super_admin';
+  _currentAdminEmail = email || 'admin@carbonvault.com';
+}
 
 export async function checkBackend() {
   try {
@@ -47,8 +54,20 @@ async function request(url, options = {}) {
     // Default 60s timeout to accommodate Render free-tier cold starts
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 60000);
+
+    const headers = {
+      ...(options.headers || {}),
+    };
+    if (_currentAdminRole) {
+      headers['X-Admin-Role'] = _currentAdminRole;
+    }
+    if (_currentAdminEmail) {
+      headers['X-Admin-Email'] = _currentAdminEmail;
+    }
+
     const fetchOptions = {
       ...options,
+      headers,
       signal: options.signal || controller.signal,
     };
 
@@ -160,12 +179,38 @@ export async function fetchAllProjects() {
   return requestWithFallback(`${API_BASE}/projects/all-projects`, {}, mockFallback);
 }
 
-/** Update project status (admin approve/reject) */
-export async function updateProjectStatus(projectId, status) {
-  return request(`${API_BASE}/projects/projects/${projectId}/status?status=${status}`, {
+/** Update project status (admin multi-stage lifecycle with comment) */
+export async function updateProjectStatus(projectId, status, comment = null, changedBy = null) {
+  return request(`${API_BASE}/projects/${projectId}/status`, {
     method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      status,
+      comment,
+      changed_by: changedBy || 'Alex Mercer (Admin)',
+    }),
   });
 }
+
+/** Fetch Project Status History / Audit Trail */
+export async function fetchProjectHistory(projectId) {
+  return request(`${API_BASE}/projects/${projectId}/history`);
+}
+
+/** Submit Quarterly Progress Update (NGO) */
+export async function submitProgressUpdate(projectId, formData) {
+  return request(`${API_BASE}/projects/${projectId}/progress`, {
+    method: 'POST',
+    body: formData,
+  });
+}
+
+/** Fetch Quarterly Progress Updates for Timeline */
+export async function fetchProjectProgress(projectId) {
+  return request(`${API_BASE}/projects/${projectId}/progress`);
+}
+
+
 
 // ══════════════════════════════════════════════════════════════════════════════
 // FRAUD DETECTION APIs
@@ -198,9 +243,25 @@ export async function fetchMarketplaceRequests(ngoId) {
   return requestWithFallback(`${API_BASE}/marketplace/requests/${ngoId}`, {}, mockFallback);
 }
 
-/** Fetch marketplace listings for corporate buyers */
-export async function fetchMarketplaceListings() {
-  return requestWithFallback(`${API_BASE}/marketplace/listings`, {}, mockMarketplace);
+/** Fetch marketplace listings for corporate buyers with optional multi-param filtering */
+export async function fetchMarketplaceListings(filters = {}) {
+  const q = new URLSearchParams();
+  if (filters.plantation_type && filters.plantation_type !== 'all') q.append('plantation_type', filters.plantation_type);
+  if (filters.min_price != null && filters.min_price !== '') q.append('min_price', filters.min_price);
+  if (filters.max_price != null && filters.max_price !== '') q.append('max_price', filters.max_price);
+  if (filters.min_mrv != null && filters.min_mrv !== '') q.append('min_mrv', filters.min_mrv);
+  if (filters.search) q.append('search', filters.search);
+  const qs = q.toString() ? `?${q.toString()}` : '';
+  return requestWithFallback(`${API_BASE}/marketplace/listings${qs}`, {}, mockMarketplace);
+}
+
+/** Side-by-side Project Comparison API */
+export async function compareProjects(projectIds) {
+  return request(`${API_BASE}/marketplace/compare`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ project_ids: projectIds }),
+  });
 }
 
 /** Create a buy request (corporate → NGO) */
@@ -356,13 +417,7 @@ export async function fetchPlatformStats() {
 
 /** Fetch immutable audit trail */
 export async function fetchAuditLogs() {
-  const mockFallback = [
-    { id: 1, action: 'mint', name: 'PRJ-MAN-AMAZON', timestamp: new Date(Date.now() - 14 * 60000).toISOString(), detail: 'Minted 12,400 verified credits with satellite NDVI verification', user: 'Admin System' },
-    { id: 2, action: 'approve', name: 'PRJ-TEK-CONGO1', timestamp: new Date(Date.now() - 2 * 3600000).toISOString(), detail: 'Project approved with GRS quality score of 91/100', user: 'Alex Mercer (Admin)' },
-    { id: 3, action: 'create', name: 'PRJ-MAN-SUNDAR', timestamp: new Date(Date.now() - 5 * 3600000).toISOString(), detail: 'New mangrove restoration project submitted with boundary polygon', user: 'EcoGuard Brazil' },
-    { id: 4, action: 'payment', name: 'PRJ-MAN-AMAZON', timestamp: new Date(Date.now() - 24 * 3600000).toISOString(), detail: 'Microsoft purchased 2,000 tonnes (₹4,75,950.00)', user: 'Microsoft Sustainability' },
-  ];
-  return requestWithFallback(`${API_BASE}/projects/audit-logs`, {}, mockFallback);
+  return request(`${API_BASE}/projects/audit-logs`);
 }
 
 /** Calculate real-time human-friendly relative time (e.g. '10m ago') from ISO timestamp */
@@ -400,7 +455,23 @@ export function loadRazorpayScript() {
 
 /** Verification Certificates Registry API */
 export async function fetchCertificates() {
-  return request(`${API_BASE}/projects/certificates`);
+  return request(`${API_BASE}/certificates`);
+}
+
+export async function fetchCertificateDetail(certId) {
+  return request(`${API_BASE}/certificates/${encodeURIComponent(certId)}`);
+}
+
+export async function verifyCertificate(certId) {
+  return request(`${API_BASE}/certificates/verify/${encodeURIComponent(certId)}`);
+}
+
+export function getCertificateDownloadUrl(certId, format = 'png') {
+  return `${API_BASE}/certificates/${encodeURIComponent(certId)}/download?format=${format}`;
+}
+
+export function getCertificateImageUrl(certId) {
+  return `${API_BASE}/certificates/${encodeURIComponent(certId)}/image`;
 }
 
 /** Climate Resilience & Co-Benefits API */
@@ -465,7 +536,92 @@ export async function updateUserStatus(userId, status) {
 }
 
 /** Dynamic Notifications API */
-export async function fetchNotifications() {
-  return requestWithFallback(`${API_BASE}/notifications`, {}, mockNotifications);
+export async function fetchNotifications(params = {}) {
+  const q = new URLSearchParams();
+  if (params.role) q.append('role', params.role);
+  if (params.email) q.append('email', params.email);
+  if (params.unread_only) q.append('unread_only', 'true');
+  const qs = q.toString() ? `?${q.toString()}` : '';
+  return request(`${API_BASE}/notifications${qs}`);
 }
+
+export async function fetchUnreadNotifCount(params = {}) {
+  const q = new URLSearchParams();
+  if (params.role) q.append('role', params.role);
+  if (params.email) q.append('email', params.email);
+  const qs = q.toString() ? `?${q.toString()}` : '';
+  return request(`${API_BASE}/notifications/unread-count${qs}`);
+}
+
+export async function markNotificationRead(id) {
+  return request(`${API_BASE}/notifications/${id}/read`, {
+    method: 'PATCH',
+  });
+}
+
+export async function markAllNotificationsRead(params = {}) {
+  const q = new URLSearchParams();
+  if (params.role) q.append('role', params.role);
+  if (params.email) q.append('email', params.email);
+  const qs = q.toString() ? `?${q.toString()}` : '';
+  return request(`${API_BASE}/notifications/mark-all-read${qs}`, {
+    method: 'POST',
+  });
+}
+
+/** Corporate Footprint Calculator API */
+export async function calculateFootprint(data) {
+  return request(`${API_BASE}/calculator/estimate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+}
+
+export async function fetchFootprintHistory(corporateName) {
+  return request(`${API_BASE}/calculator/history/${encodeURIComponent(corporateName || 'Corporate Buyer')}`);
+}
+
+/** Project Deletion API (Super Admin Only) */
+export async function deleteProject(projectId) {
+  return request(`${API_BASE}/projects/${encodeURIComponent(projectId)}`, {
+    method: 'DELETE',
+  });
+}
+
+/** Bulk CSV Project Import API */
+export async function importProjectsCSV(file) {
+  const formData = new FormData();
+  formData.append('file', file);
+  return request(`${API_BASE}/projects/import-csv`, {
+    method: 'POST',
+    body: formData,
+  });
+}
+
+/** Platform PDF Intelligence Report */
+export function getPlatformPDFUrl() {
+  return `${API_BASE}/projects/export-pdf`;
+}
+
+export async function downloadPlatformPDF() {
+  const url = getPlatformPDFUrl();
+  const res = await fetch(url);
+  if (!res.ok) {
+    throw new Error(`Failed to download PDF report (${res.status})`);
+  }
+  const blob = await res.blob();
+  const blobUrl = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = blobUrl;
+  link.download = `CarbonVault_Platform_Report_${new Date().toISOString().slice(0, 10)}.pdf`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(blobUrl);
+}
+
+
+
+
 

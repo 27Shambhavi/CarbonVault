@@ -1,6 +1,6 @@
 # credits_module/db_models.py
 
-from sqlalchemy import Column, Integer, Float, String, Date, DateTime, Text, ForeignKey
+from sqlalchemy import Column, Integer, Float, String, Date, DateTime, Text, ForeignKey, Boolean
 from sqlalchemy.orm import relationship
 from .db import Base
 
@@ -102,6 +102,7 @@ class Transaction(Base):
     amount_inr = Column(Float)
     amount_usd = Column(Float)
     status = Column(String, default="completed")
+    certificate_id = Column(String, nullable=True, index=True)
     created_at = Column(Date)
 
     project = relationship("Project")
@@ -135,6 +136,7 @@ class User(Base):
     name = Column(String, index=True)
     email = Column(String, unique=True, index=True)
     role = Column(String)  # 'admin', 'ngo', 'buyer'
+    admin_role = Column(String, default="super_admin")  # 'super_admin' or 'approver'
     projects = Column(Integer, default=0)
     credits = Column(Float, default=0.0)
     status = Column(String, default="active")  # 'active', 'suspended'
@@ -159,3 +161,61 @@ class PriceHistory(Base):
     month = Column(String)
     price = Column(Float)
     recorded_at = Column(DateTime)
+
+
+class Notification(Base):
+    __tablename__ = "notifications"
+
+    id = Column(Integer, primary_key=True, index=True)
+    recipient_role = Column(String, nullable=True, index=True)  # 'admin', 'ngo', 'corporate', or 'all'
+    recipient_email = Column(String, nullable=True, index=True)
+    type = Column(String, default="info")  # 'approval', 'submission', 'mint', 'payment', 'warning', 'info'
+    title = Column(String)
+    message = Column(Text)
+    related_project_id = Column(String, nullable=True)
+    is_read = Column(Boolean, default=False)
+    created_at = Column(DateTime)
+
+
+class ProjectStatusHistory(Base):
+    __tablename__ = "project_status_history"
+
+    id = Column(Integer, primary_key=True, index=True)
+    project_id = Column(String, ForeignKey("projects.project_id"), index=True)
+    from_status = Column(String)
+    to_status = Column(String)
+    changed_by = Column(String)
+    comment = Column(Text, nullable=True)
+    timestamp = Column(DateTime)
+
+    project = relationship("Project")
+
+
+class ProjectProgressUpdate(Base):
+    __tablename__ = "project_progress_updates"
+
+    id = Column(Integer, primary_key=True, index=True)
+    project_id = Column(String, ForeignKey("projects.project_id"), index=True)
+    quarter = Column(String)  # 'Q1', 'Q2', 'Q3', 'Q4'
+    year = Column(Integer)
+    survival_rate = Column(Float, nullable=True)  # e.g. 88.5%
+    canopy_cover = Column(Float, nullable=True)   # e.g. 42.0%
+    photos = Column(Text, nullable=True)          # image path or JSON list
+    notes = Column(Text, nullable=True)
+    submitted_at = Column(DateTime)
+    verified_by_satellite = Column(Boolean, default=False)
+
+    project = relationship("Project")
+
+
+class FootprintEstimate(Base):
+    __tablename__ = "footprint_estimates"
+
+    id = Column(Integer, primary_key=True, index=True)
+    corporate_name = Column(String, index=True)
+    scope1_tonnes = Column(Float)
+    scope2_tonnes = Column(Float)
+    scope3_tonnes = Column(Float)
+    total_tonnes = Column(Float)
+    inputs_json = Column(Text)
+    created_at = Column(DateTime)

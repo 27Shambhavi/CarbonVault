@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
 import { AreaChart, Area, LineChart, Line, BarChart, Bar, RadarChart, Radar, PolarGrid, PolarAngleAxis, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
+import { useApp } from '../../AppContext.jsx';
 import { mockPricing, mockCreditsOverTime, mockCreditsByType } from '../../data/mockData.js';
 import { fetchPricingConfig, savePricingConfig, fetchPlatformStats, fetchAllProjects, fetchClimateAnalytics } from '../../services/api.js';
 import { Card, SectionHeader, KPICard, Btn, T, withAlpha } from '../UI.jsx';
-import { DollarSign, TrendingUp, Package, Activity, Save, RotateCcw } from 'lucide-react';
+import { DollarSign, TrendingUp, Package, Activity, Save, RotateCcw, ShieldAlert, Lock } from 'lucide-react';
 
 const CT=({active,payload,label})=>{
   if(!active||!payload?.length)return null;
@@ -14,6 +15,9 @@ const CT=({active,payload,label})=>{
 };
 
 export function AdminPricing() {
+  const { user } = useApp();
+  const isApprover = user?.admin_role === 'approver';
+
   const [p, setP] = useState(mockPricing);
   const [history, setHistory] = useState([]);
   const [saving, setSaving] = useState(false);
@@ -40,6 +44,10 @@ export function AdminPricing() {
   }, []);
 
   const handleSave = async () => {
+    if (isApprover) {
+      setSavedMsg('Super Admin privilege required to update pricing configuration');
+      return;
+    }
     setSaving(true);
     setSavedMsg('');
     const res = await savePricingConfig({
@@ -65,7 +73,7 @@ export function AdminPricing() {
     const color = sc[field] || T.teal;
     const pct = ((p[field] - min) / (max - min)) * 100;
     return (
-      <div style={{ marginBottom: 22 }}>
+      <div style={{ marginBottom: 22, opacity: isApprover ? 0.75 : 1 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 9 }}>
           <span style={{ fontSize: 13, color: T.t2, fontWeight: 500 }}>{label}</span>
           <span style={{ fontSize: 19, fontWeight: 800, color, fontFamily: 'Fraunces, serif' }}>{p[field].toFixed(2)}×</span>
@@ -74,8 +82,9 @@ export function AdminPricing() {
           <div style={{ position: 'absolute', left: 0, top: 0, height: '100%', width: `${pct}%`, background: `linear-gradient(90deg,${color}70,${color})`, borderRadius: 4, boxShadow: `0 0 8px ${color}60` }} />
         </div>
         <input type="range" min={min} max={max} step={0.01} value={p[field]}
+          disabled={isApprover}
           onChange={e => setP({ ...p, [field]: parseFloat(e.target.value) })}
-          style={{ width: '100%', cursor: 'pointer', accentColor: color }} />
+          style={{ width: '100%', cursor: isApprover ? 'not-allowed' : 'pointer', accentColor: color }} />
       </div>
     );
   };
@@ -87,6 +96,26 @@ export function AdminPricing() {
   return (
     <div style={{ padding: 28 }}>
       <SectionHeader title="Pricing Engine" subtitle="Configure live carbon credit pricing multipliers" />
+
+      {/* Approver role read-only banner */}
+      {isApprover && (
+        <div style={{
+          background: 'rgba(56,189,248,0.08)',
+          border: `1px solid rgba(56,189,248,0.25)`,
+          borderRadius: 10,
+          padding: '12px 16px',
+          marginBottom: 20,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 12,
+        }}>
+          <ShieldAlert size={18} color={T.skyL} />
+          <div style={{ fontSize: 13, color: T.skyL }}>
+            <strong>Project Approver Role:</strong> Viewing live pricing configuration in read-only mode. Adjusting base prices and multipliers requires <strong>Super Admin</strong> authorization.
+          </div>
+        </div>
+      )}
+
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
         <div>
           <Card style={{ marginBottom: 16 }}>
@@ -94,8 +123,10 @@ export function AdminPricing() {
             <div style={{ marginBottom: 24 }}>
               <label style={{ fontSize: 10, color: T.t3, fontWeight: 700, letterSpacing: '0.7px', textTransform: 'uppercase', marginBottom: 8, display: 'block' }}>Base Price ($/t CO₂e)</label>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <input type="number" value={p.base} onChange={e => setP({ ...p, base: parseFloat(e.target.value) || 0 })}
-                  style={{ background: `rgba(45,212,191,0.07)`, border: `1px solid rgba(45,212,191,0.25)`, borderRadius: 11, padding: '11px 15px', color: T.tealL, fontSize: 26, fontWeight: 900, outline: 'none', width: 130, fontFamily: 'Fraunces, serif' }} />
+                <input type="number" value={p.base}
+                  disabled={isApprover}
+                  onChange={e => setP({ ...p, base: parseFloat(e.target.value) || 0 })}
+                  style={{ background: `rgba(45,212,191,0.07)`, border: `1px solid rgba(45,212,191,0.25)`, borderRadius: 11, padding: '11px 15px', color: T.tealL, fontSize: 26, fontWeight: 900, outline: 'none', width: 130, fontFamily: 'Fraunces, serif', cursor: isApprover ? 'not-allowed' : 'text' }} />
                 <span style={{ color: T.t3, fontSize: 13 }}>per tonne</span>
               </div>
             </div>
@@ -103,9 +134,15 @@ export function AdminPricing() {
             <Slider label="Supply Multiplier" field="supply" />
             <Slider label="Living Credit Multiplier" field="living" />
             <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-              <Btn onClick={handleSave} disabled={saving}><Save size={13} />{saving ? 'Saving…' : 'Save Config'}</Btn>
+              {isApprover ? (
+                <Btn disabled style={{ opacity: 0.5, cursor: 'not-allowed' }} title="Super Admin privilege required">
+                  <Lock size={13} /> Save Config (Locked)
+                </Btn>
+              ) : (
+                <Btn onClick={handleSave} disabled={saving}><Save size={13} />{saving ? 'Saving…' : 'Save Config'}</Btn>
+              )}
               <Btn variant="secondary" onClick={loadConfig}><RotateCcw size={13} />Reset</Btn>
-              {savedMsg && <span style={{ fontSize: 12, color: savedMsg.includes('failed') ? T.roseL : T.teal, fontWeight: 600 }}>{savedMsg}</span>}
+              {savedMsg && <span style={{ fontSize: 12, color: savedMsg.includes('failed') || savedMsg.includes('required') ? T.roseL : T.teal, fontWeight: 600 }}>{savedMsg}</span>}
             </div>
           </Card>
         </div>

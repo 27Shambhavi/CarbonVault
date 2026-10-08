@@ -2,10 +2,16 @@ import { useState, useEffect } from 'react';
 import { useApp } from '../../AppContext.jsx';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
 import { mockCreditsByType } from '../../data/mockData.js';
-import { fetchPlatformStats, fetchAllProjects, fetchMapProjects, fetchMapPendingProjects } from '../../services/api.js';
+import {
+  fetchPlatformStats,
+  fetchAllProjects,
+  fetchMapProjects,
+  fetchMapPendingProjects,
+  downloadPlatformPDF
+} from '../../services/api.js';
 import { KPICard, Card, SectionHeader, Table, Badge, MRVScore, Btn, T } from '../UI.jsx';
 import { ProjectMap } from '../GoogleMap.jsx';
-import { Layers, FolderCheck, Clock, AlertTriangle, Download } from 'lucide-react';
+import { Layers, FolderCheck, Clock, AlertTriangle, Download, RefreshCw } from 'lucide-react';
 
 const CT = ({active,payload,label}) => {
   if (!active||!payload?.length) return null;
@@ -23,6 +29,18 @@ export default function AdminDashboard() {
   const [projects, setProjects] = useState([]);
   const [mapFeatures, setMapFeatures] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [exporting, setExporting] = useState(false);
+
+  const handleExportPDF = async () => {
+    setExporting(true);
+    try {
+      await downloadPlatformPDF();
+    } catch (err) {
+      alert(err.message || 'Failed to generate PDF report');
+    } finally {
+      setExporting(false);
+    }
+  };
 
   useEffect(() => {
     setLoading(true);
@@ -70,7 +88,16 @@ export default function AdminDashboard() {
       <SectionHeader
         title="Platform Overview"
         subtitle="Real-time metrics across all projects and users"
-        action={<Btn variant="secondary"><Download size={13}/>Export Report</Btn>}
+        action={
+          <Btn variant="secondary" onClick={handleExportPDF} disabled={exporting}>
+            {exporting ? (
+              <RefreshCw size={13} style={{ animation: 'spinSlow 0.8s linear infinite' }} />
+            ) : (
+              <Download size={13} />
+            )}
+            {exporting ? 'Generating PDF…' : 'Export Report'}
+          </Btn>
+        }
       />
 
       {/* KPIs */}

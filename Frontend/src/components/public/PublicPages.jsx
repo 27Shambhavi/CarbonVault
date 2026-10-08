@@ -11,7 +11,8 @@ const mockPublicLeaderboard = [
 ];
 
 import { Card, SectionHeader, Table, Badge, KPICard, T } from '../UI.jsx';
-import { Globe, Trophy, FileSearch, Award, Activity, Leaf, Zap } from 'lucide-react';
+import CertificateModal from '../CertificateModal.jsx';
+import { Globe, Trophy, FileSearch, Award, Activity, Leaf, Zap, Search, Download, ShieldCheck, CheckCircle } from 'lucide-react';
 
 const CT = ({ active, payload, label }) => {
   if (active && payload?.length) return (
@@ -230,6 +231,9 @@ export function PublicAudit() {
 export function PublicCertificates() {
   const [certs, setCerts] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [typeFilter, setTypeFilter] = useState('all'); // 'all' | 'retirement' | 'issuance'
+  const [selectedCert, setSelectedCert] = useState(null);
 
   useEffect(() => {
     fetchCertificates().then(res => {
@@ -239,43 +243,189 @@ export function PublicCertificates() {
     }).finally(() => setLoading(false));
   }, []);
 
+  const filtered = certs.filter(c => {
+    const q = search.toLowerCase();
+    const matchesSearch = !q ||
+      (c.certificate_id && c.certificate_id.toLowerCase().includes(q)) ||
+      (c.project_name && c.project_name.toLowerCase().includes(q)) ||
+      (c.beneficiary && c.beneficiary.toLowerCase().includes(q));
+
+    if (!matchesSearch) return false;
+    if (typeFilter === 'retirement') return (c.type || '').toLowerCase().includes('retirement') || (c.type || '').toLowerCase().includes('offset');
+    if (typeFilter === 'issuance') return (c.type || '').toLowerCase().includes('issuance');
+    return true;
+  });
+
   if (loading) {
     return (
       <div style={{ padding: 28, display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '40vh' }}>
         <div style={{ textAlign: 'center' }}>
           <div style={{ width: 36, height: 36, border: '3px solid rgba(45,212,191,0.15)', borderTop: '3px solid #2dd4bf', borderRadius: '50%', margin: '0 auto 12px', animation: 'spinSlow 0.8s linear infinite' }} />
-          <div style={{ fontSize: 13, color: '#94a3b8' }}>Loading certificates…</div>
+          <div style={{ fontSize: 13, color: '#94a3b8' }}>Loading verified certificate registry…</div>
         </div>
       </div>
     );
   }
 
-  const displayCerts = certs;
-
   return (
     <div style={{ padding: 28 }}>
-      <SectionHeader title="Verification Certificates" subtitle="Publicly accessible certificate registry" />
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
-        {displayCerts.map((cert) => (
-          <Card key={cert.certificate_id}>
-            <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 14 }}>
-              <div style={{ background: '#2dd4bf20', borderRadius: 10, padding: 10, display: 'flex' }}>
-                <Award size={20} color="#2dd4bf" />
-              </div>
-              <div>
-                <div style={{ fontSize: 14, fontWeight: 700, color: '#f1f5f9' }}>{cert.certificate_id}</div>
-                <Badge type="minted" label="VERIFIED" />
-              </div>
-            </div>
-            <div style={{ fontSize: 12, color: '#475569', marginBottom: 4 }}>Project: {cert.project_name}</div>
-            <div style={{ fontSize: 12, color: '#1e293b', marginBottom: 12 }}>Issued: {cert.issuance_date}</div>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button style={{ background: 'rgba(45,212,191,0.06)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 6, padding: '5px 10px', color: '#2dd4bf', fontSize: 11, cursor: 'pointer' }}>View</button>
-              <button style={{ background: 'rgba(45,212,191,0.06)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 6, padding: '5px 10px', color: '#2dd4bf', fontSize: 11, cursor: 'pointer' }}>Download</button>
-            </div>
-          </Card>
-        ))}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
+        <div>
+          <SectionHeader title="Verification Certificates" subtitle="Publicly accessible, cryptographically verified certificate registry" />
+        </div>
+        <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+          {/* Search box */}
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 8,
+            background: 'var(--input-bg, rgba(255,255,255,0.04))',
+            border: `1px solid ${T.border}`, borderRadius: 8, padding: '7px 12px', width: 260
+          }}>
+            <Search size={14} color={T.t3} />
+            <input
+              type="text"
+              placeholder="Search ID, project, buyer…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              style={{
+                background: 'transparent', border: 'none', outline: 'none',
+                color: T.t1, fontSize: 13, width: '100%'
+              }}
+            />
+          </div>
+
+          {/* Type Filter Buttons */}
+          <div style={{ display: 'flex', gap: 4, background: T.bg1, padding: 3, borderRadius: 8, border: `1px solid ${T.border}` }}>
+            <button
+              onClick={() => setTypeFilter('all')}
+              style={{
+                padding: '6px 12px', borderRadius: 6, fontSize: 12, fontWeight: 600, border: 'none', cursor: 'pointer',
+                background: typeFilter === 'all' ? T.teal : 'transparent',
+                color: typeFilter === 'all' ? '#041d1a' : T.t2
+              }}
+            >
+              All ({certs.length})
+            </button>
+            <button
+              onClick={() => setTypeFilter('retirement')}
+              style={{
+                padding: '6px 12px', borderRadius: 6, fontSize: 12, fontWeight: 600, border: 'none', cursor: 'pointer',
+                background: typeFilter === 'retirement' ? T.teal : 'transparent',
+                color: typeFilter === 'retirement' ? '#041d1a' : T.t2
+              }}
+            >
+              Offsets
+            </button>
+            <button
+              onClick={() => setTypeFilter('issuance')}
+              style={{
+                padding: '6px 12px', borderRadius: 6, fontSize: 12, fontWeight: 600, border: 'none', cursor: 'pointer',
+                background: typeFilter === 'issuance' ? T.teal : 'transparent',
+                color: typeFilter === 'issuance' ? '#041d1a' : T.t2
+              }}
+            >
+              Issuances
+            </button>
+          </div>
+        </div>
       </div>
+
+      {filtered.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: '60px 0', color: T.t3 }}>
+          No certificates found matching your criteria.
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
+          {filtered.map((cert) => (
+            <Card key={cert.certificate_id} style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
+                  <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                    <div style={{
+                      background: cert.type?.includes('Retirement') ? 'rgba(167, 139, 250, 0.15)' : 'rgba(45, 212, 191, 0.15)',
+                      borderRadius: 10, padding: 9, display: 'flex'
+                    }}>
+                      <Award size={18} color={cert.type?.includes('Retirement') ? (T.violetLL || '#a78bfa') : '#2dd4bf'} />
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: '#f1f5f9', fontFamily: 'monospace' }}>
+                        {cert.certificate_id}
+                      </div>
+                      <span style={{ fontSize: 11, color: T.t3 }}>{cert.type || 'Verified Certificate'}</span>
+                    </div>
+                  </div>
+                  <Badge color="emerald">
+                    <ShieldCheck size={11} style={{ marginRight: 3 }} /> {cert.status || 'VERIFIED'}
+                  </Badge>
+                </div>
+
+                <div style={{ marginBottom: 12, padding: '10px 12px', background: T.bg1, borderRadius: 8, border: `1px solid ${T.border}` }}>
+                  <div style={{ fontSize: 11, color: T.t3, textTransform: 'uppercase' }}>Beneficiary / Buyer</div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: T.t1, marginTop: 2 }}>
+                    {cert.beneficiary || 'Verified Entity'}
+                  </div>
+                  <div style={{ fontSize: 11, color: T.t2, marginTop: 6 }}>
+                    Project: <strong style={{ color: T.teal }}>{cert.project_name}</strong>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 12, marginBottom: 16, color: T.t2 }}>
+                  <span>Volume: <strong style={{ color: T.emeraldL }}>{cert.credits?.toLocaleString()} tCO₂e</strong></span>
+                  <span style={{ fontSize: 11, color: T.t3 }}>Issued: {cert.issuance_date}</span>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: 8, borderTop: `1px solid ${T.border}`, paddingTop: 12 }}>
+                <button
+                  onClick={() => setSelectedCert(cert.certificate_id)}
+                  style={{
+                    flex: 1,
+                    background: 'rgba(45, 212, 191, 0.08)',
+                    border: '1px solid rgba(45, 212, 191, 0.25)',
+                    borderRadius: 7,
+                    padding: '7px 12px',
+                    color: '#2dd4bf',
+                    fontSize: 12,
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 6
+                  }}
+                >
+                  <Award size={13} /> View Certificate
+                </button>
+                <button
+                  onClick={() => setSelectedCert(cert.certificate_id)}
+                  style={{
+                    background: 'rgba(255, 255, 255, 0.04)',
+                    border: `1px solid ${T.border}`,
+                    borderRadius: 7,
+                    padding: '7px 12px',
+                    color: T.t2,
+                    fontSize: 12,
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 4
+                  }}
+                  title="Download Certificate"
+                >
+                  <Download size={13} />
+                </button>
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {selectedCert && (
+        <CertificateModal
+          certId={selectedCert}
+          onClose={() => setSelectedCert(null)}
+        />
+      )}
     </div>
   );
 }

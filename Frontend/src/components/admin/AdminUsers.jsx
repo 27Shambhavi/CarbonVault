@@ -1,9 +1,13 @@
 import { useState, useEffect } from 'react';
+import { useApp } from '../../AppContext.jsx';
 import { fetchUsers, inviteUser, updateUserStatus } from '../../services/api.js';
 import { Card, SectionHeader, Table, Badge, Modal, Btn, T } from '../UI.jsx';
-import { Search, UserPlus } from 'lucide-react';
+import { Search, UserPlus, ShieldAlert, Lock } from 'lucide-react';
 
 export default function AdminUsers() {
+  const { user: currentUser } = useApp();
+  const isApprover = currentUser?.admin_role === 'approver';
+
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -30,6 +34,10 @@ export default function AdminUsers() {
   }, []);
 
   const handleInvite = async () => {
+    if (isApprover) {
+      setInviteError('Super Admin privilege required to invite users');
+      return;
+    }
     if (!inviteData.name || !inviteData.email) {
       setInviteError('Please fill in both name and email');
       return;
@@ -48,6 +56,7 @@ export default function AdminUsers() {
   };
 
   const handleToggleStatus = async (user) => {
+    if (isApprover) return;
     const nextStatus = user.status === 'active' ? 'suspended' : 'active';
     const res = await updateUserStatus(user.id, nextStatus);
     if (!res.error) {
@@ -69,7 +78,47 @@ export default function AdminUsers() {
 
   return (
     <div style={{ padding: 28 }}>
-      <SectionHeader title="User Management" subtitle="Manage platform users, roles and access levels" action={<Btn onClick={() => setInvite(true)}><UserPlus size={13} />Invite User</Btn>} />
+      <SectionHeader
+        title="User Management"
+        subtitle="Manage platform users, roles and access levels"
+        action={
+          isApprover ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 11, color: T.goldL, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
+                <Lock size={12} /> Read-only mode
+              </span>
+              <Btn
+                disabled
+                style={{ opacity: 0.5, cursor: 'not-allowed' }}
+                title="Super Admin privilege required to invite users"
+              >
+                <UserPlus size={13} /> Invite User
+              </Btn>
+            </div>
+          ) : (
+            <Btn onClick={() => setInvite(true)}><UserPlus size={13} />Invite User</Btn>
+          )
+        }
+      />
+
+      {/* Approver role notification banner */}
+      {isApprover && (
+        <div style={{
+          background: 'rgba(56,189,248,0.08)',
+          border: `1px solid rgba(56,189,248,0.25)`,
+          borderRadius: 10,
+          padding: '12px 16px',
+          marginBottom: 20,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 12,
+        }}>
+          <ShieldAlert size={18} color={T.skyL} />
+          <div style={{ fontSize: 13, color: T.skyL }}>
+            <strong>Project Approver Role:</strong> You have read-only access to user directories. Inviting new users and suspending accounts requires <strong>Super Admin</strong> authorization.
+          </div>
+        </div>
+      )}
 
       {/* Stats */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 13, marginBottom: 22 }}>
@@ -108,7 +157,22 @@ export default function AdminUsers() {
           rows={filtered.map(u => [
             <span style={{ fontWeight: 700, color: T.t1 }}>{u.name}</span>,
             <span style={{ color: T.t3, fontSize: 12 }}>{u.email}</span>,
-            <Badge type={u.role} label={u.role.toUpperCase()} />,
+            u.role === 'admin' ? (
+              <span style={{
+                background: u.admin_role === 'approver' ? 'rgba(56,189,248,0.15)' : 'rgba(217,119,6,0.15)',
+                color: u.admin_role === 'approver' ? T.skyL : T.goldL,
+                border: `1px solid ${u.admin_role === 'approver' ? 'rgba(56,189,248,0.3)' : 'rgba(217,119,6,0.3)'}`,
+                padding: '3px 8px',
+                borderRadius: 6,
+                fontSize: 10,
+                fontWeight: 800,
+                letterSpacing: '0.5px'
+              }}>
+                {u.admin_role === 'approver' ? 'APPROVER' : 'SUPER ADMIN'}
+              </span>
+            ) : (
+              <Badge type={u.role} label={u.role.toUpperCase()} />
+            ),
             <span style={{ color: T.teal, fontWeight: 600 }}>{u.projects}</span>,
             <span style={{ color: T.emeraldL, fontWeight: 700 }}>{(u.credits || 0).toLocaleString()}</span>,
             <span style={{ color: T.t3, fontSize: 12 }}>{u.joined}</span>,
@@ -125,18 +189,24 @@ export default function AdminUsers() {
       <Modal open={!!sel} onClose={() => setSel(null)} title={sel?.name || ''} width={520}>
         {sel && <>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 20 }}>
-            {[{ l: 'Email', v: sel.email }, { l: 'Role', v: <Badge type={sel.role} label={sel.role.toUpperCase()} /> }, { l: 'Projects', v: sel.projects }, { l: 'Credits', v: (sel.credits || 0).toLocaleString() }, { l: 'Joined', v: sel.joined }, { l: 'Status', v: <Badge type={sel.status} label={sel.status} /> }].map(({ l, v }) => (
+            {[{ l: 'Email', v: sel.email }, { l: 'Role', v: sel.role === 'admin' ? (sel.admin_role === 'approver' ? 'Project Approver' : 'Super Admin') : <Badge type={sel.role} label={sel.role.toUpperCase()} /> }, { l: 'Projects', v: sel.projects }, { l: 'Credits', v: (sel.credits || 0).toLocaleString() }, { l: 'Joined', v: sel.joined }, { l: 'Status', v: <Badge type={sel.status} label={sel.status} /> }].map(({ l, v }) => (
               <div key={l} style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 9, padding: 13 }}>
                 <div style={{ fontSize: 9, color: T.t3, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.7px', marginBottom: 6 }}>{l}</div>
                 <div style={{ fontSize: 13, color: T.t1 }}>{v}</div>
               </div>
             ))}
           </div>
-          <div style={{ display: 'flex', gap: 10 }}>
-            {sel.status === 'active' ? (
-              <Btn variant="danger" onClick={() => handleToggleStatus(sel)}>Suspend Account</Btn>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+            {isApprover ? (
+              <div style={{ fontSize: 12, color: T.t3, fontStyle: 'italic', display: 'flex', alignItems: 'center', gap: 6 }}>
+                <Lock size={13} color={T.goldL} /> Super Admin permission required to modify user status.
+              </div>
             ) : (
-              <Btn onClick={() => handleToggleStatus(sel)}>Activate Account</Btn>
+              sel.status === 'active' ? (
+                <Btn variant="danger" onClick={() => handleToggleStatus(sel)}>Suspend Account</Btn>
+              ) : (
+                <Btn onClick={() => handleToggleStatus(sel)}>Activate Account</Btn>
+              )
             )}
             <Btn variant="secondary" onClick={() => setSel(null)}>Close</Btn>
           </div>

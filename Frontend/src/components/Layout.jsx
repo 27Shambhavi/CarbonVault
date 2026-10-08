@@ -1,14 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useApp } from '../AppContext.jsx';
-import { mockNotifications } from '../data/mockData.js';
-import { fetchNotifications } from '../services/api.js';
 import { T, gc } from './UI.jsx';
 import {
   Leaf, Bell, Settings, User, LogOut, ChevronRight, X, Menu,
   LayoutDashboard, Users, FolderCheck, DollarSign, BarChart3,
   Map, Upload, ShieldCheck, TreePine, ShoppingCart,
   Wallet, FileText, Star, Globe, Trophy, FileSearch, Award, Plus,
-  Activity, TrendingUp, Layers, Sun, Moon
+  Activity, TrendingUp, Layers, Sun, Moon, Calculator
 } from 'lucide-react';
 
 const adminNav = [
@@ -30,6 +28,7 @@ const corporateNav = [
   {id:'marketplace', label:'Marketplace', icon:ShoppingCart},
   {id:'wallet',      label:'My Wallet',   icon:Wallet},
   {id:'esg',         label:'ESG Reports', icon:FileText},
+  {id:'calculator',  label:'Footprint Calculator', icon:Calculator},
 ];
 const publicNav = [
   {id:'dashboard',    label:'Impact Stats',     icon:LayoutDashboard},
@@ -127,6 +126,23 @@ export function Sidebar() {
           <div style={{flex:1,minWidth:0}}>
             <div style={{fontSize:12,fontWeight:600,color:T.t1,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{user.name}</div>
             <div style={{fontSize:10,color:T.t3,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{user.email}</div>
+            {user.role === 'admin' && (
+              <div style={{
+                marginTop: 4,
+                display: 'inline-block',
+                fontSize: 9,
+                fontWeight: 800,
+                textTransform: 'uppercase',
+                letterSpacing: '0.6px',
+                padding: '2px 6px',
+                borderRadius: 4,
+                background: user.admin_role === 'approver' ? 'rgba(56,189,248,0.15)' : 'rgba(217,119,6,0.15)',
+                color: user.admin_role === 'approver' ? T.skyL : T.goldL,
+                border: `1px solid ${user.admin_role === 'approver' ? 'rgba(56,189,248,0.3)' : 'rgba(217,119,6,0.3)'}`
+              }}>
+                {user.admin_role === 'approver' ? 'Project Approver' : 'Super Admin'}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -135,18 +151,10 @@ export function Sidebar() {
 }
 
 export function Navbar() {
-  const {user,page,setPage,setNotifOpen,sidebarOpen,setSidebarOpen,logout,theme,toggleTheme} = useApp();
+  const {user,page,setPage,setNotifOpen,sidebarOpen,setSidebarOpen,logout,theme,toggleTheme,unreadNotifCount,switchAdminRole} = useApp();
   const [menuOpen,setMenuOpen] = useState(false);
-  const [notifs, setNotifs] = useState(mockNotifications);
-
-  useEffect(() => {
-    fetchNotifications().then(res => {
-      if (Array.isArray(res.data) && res.data.length > 0) setNotifs(res.data);
-    }).catch(() => {});
-  }, []);
 
   if (!user) return null;
-  const unread = notifs.filter(n=>!n.read).length;
   const rc = RC[user.role] || RC.admin;
   const pageTitle = (navMap[user.role]||[]).find(n=>n.id===page)?.label || (page==='settings'?'Settings':page==='profile'?'Profile':'Dashboard');
 
@@ -168,6 +176,50 @@ export function Navbar() {
         <span style={{fontSize:13,fontWeight:600,color:T.t2}}>{pageTitle}</span>
       </div>
 
+      {/* Admin Role Switcher (Super Admin vs Project Approver) */}
+      {user.role === 'admin' && (
+        <div style={{ display: 'flex', alignItems: 'center', background: 'var(--card-bg, rgba(255,255,255,0.04))', border: `1px solid ${T.border}`, borderRadius: 20, padding: '2px 4px', gap: 4 }}>
+          <button
+            onClick={() => switchAdminRole && switchAdminRole('super_admin')}
+            title="Switch to Super Admin (Full permissions: users, pricing, deletion)"
+            style={{
+              background: (user.admin_role || 'super_admin') === 'super_admin' ? 'rgba(217,119,6,0.2)' : 'transparent',
+              border: (user.admin_role || 'super_admin') === 'super_admin' ? `1px solid ${T.goldL}` : '1px solid transparent',
+              color: (user.admin_role || 'super_admin') === 'super_admin' ? T.goldL : T.t3,
+              borderRadius: 16,
+              padding: '3px 10px',
+              fontSize: 11,
+              fontWeight: 700,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 5,
+              transition: 'all 0.15s',
+            }}>
+            <span>🛡️</span> Super Admin
+          </button>
+          <button
+            onClick={() => switchAdminRole && switchAdminRole('approver')}
+            title="Switch to Project Approver (Review projects, read-only users & pricing)"
+            style={{
+              background: user.admin_role === 'approver' ? 'rgba(56,189,248,0.2)' : 'transparent',
+              border: user.admin_role === 'approver' ? `1px solid ${T.skyL}` : '1px solid transparent',
+              color: user.admin_role === 'approver' ? T.skyL : T.t3,
+              borderRadius: 16,
+              padding: '3px 10px',
+              fontSize: 11,
+              fontWeight: 700,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 5,
+              transition: 'all 0.15s',
+            }}>
+            <span>🔍</span> Approver
+          </button>
+        </div>
+      )}
+
       {/* Theme Toggle (Dark / Light) */}
       {iconBtn(
         toggleTheme,
@@ -178,8 +230,10 @@ export function Navbar() {
       {/* Bell */}
       <div style={{position:'relative'}}>
         {iconBtn(()=>setNotifOpen(true), <Bell size={15} color={T.teal}/>, 'Notifications')}
-        {unread>0 && (
-          <div style={{position:'absolute',top:-3,right:-3,width:16,height:16,background:`linear-gradient(135deg,${T.rose},#dc2626)`,borderRadius:'50%',fontSize:9,fontWeight:800,color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',boxShadow:`0 2px 8px rgba(244,63,94,0.5), 0 0 0 2px var(--bg0)`}}>{unread}</div>
+        {unreadNotifCount > 0 && (
+          <div style={{position:'absolute',top:-3,right:-3,width:16,height:16,background:`linear-gradient(135deg,${T.rose},#dc2626)`,borderRadius:'50%',fontSize:9,fontWeight:800,color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',boxShadow:`0 2px 8px rgba(244,63,94,0.5), 0 0 0 2px var(--bg0)`}}>
+            {unreadNotifCount > 99 ? '99+' : unreadNotifCount}
+          </div>
         )}
       </div>
 
@@ -213,46 +267,65 @@ export function Navbar() {
 }
 
 export function NotificationCenter() {
-  const {notifOpen,setNotifOpen} = useApp();
-  const [notifs,setNotifs] = useState(mockNotifications);
-
-  useEffect(() => {
-    if (notifOpen) {
-      fetchNotifications().then(res => {
-        if (Array.isArray(res.data) && res.data.length > 0) {
-          setNotifs(res.data);
-        }
-      }).catch(() => {});
-    }
-  }, [notifOpen]);
+  const {notifOpen, setNotifOpen, notifications, markNotifAsRead, markAllNotifsAsRead, user, setPage} = useApp();
 
   if (!notifOpen) return null;
-  const tc = {approval:T.emeraldL,warning:T.roseL,success:T.teal,info:T.skyL};
+  const tc = {approval:T.emeraldL, warning:T.roseL, success:T.teal, info:T.skyL, mint:T.violetLL, payment:T.goldL, submission:T.skyL};
+
+  const handleNotifClick = (n) => {
+    if (!n.read) {
+      markNotifAsRead(n.id);
+    }
+    if (n.related_project_id) {
+      if (user?.role === 'admin') setPage('approvals');
+      else if (user?.role === 'ngo') setPage('projects');
+      else setPage('marketplace');
+      setNotifOpen(false);
+    }
+  };
 
   return (
     <div className="no-print" style={{position:'fixed',inset:0,background:'var(--modal-backdrop, rgba(4,5,8,0.65))',backdropFilter:'blur(6px)',zIndex:500}}
       onClick={e=>e.target===e.currentTarget&&setNotifOpen(false)}>
       <div style={{position:'absolute',right:18,top:68,width:370,background:'var(--menu-bg, #090c18)',border:`1px solid var(--border2)`,borderRadius:16,boxShadow:'var(--shadow-modal)'}}>
         <div style={{padding:'15px 18px',borderBottom:`1px solid ${T.border}`,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-          <span style={{fontWeight:700,color:T.t1,fontSize:14}}>Notifications</span>
-          <button onClick={()=>setNotifs(notifs.map(n=>({...n,read:true})))} style={{background:`color-mix(in srgb, var(--teal) 10%, transparent)`,border:`1px solid color-mix(in srgb, var(--teal) 25%, transparent)`,borderRadius:7,padding:'3px 10px',color:T.teal,cursor:'pointer',fontSize:11,fontWeight:700}}>Mark all read</button>
+          <div style={{display:'flex',alignItems:'center',gap:8}}>
+            <span style={{fontWeight:700,color:T.t1,fontSize:14}}>Notifications</span>
+            <span style={{fontSize:11,background:'rgba(255,255,255,0.06)',padding:'2px 7px',borderRadius:10,color:T.t3,fontWeight:600}}>{notifications.length}</span>
+          </div>
+          <button onClick={markAllNotifsAsRead} style={{background:`color-mix(in srgb, var(--teal) 10%, transparent)`,border:`1px solid color-mix(in srgb, var(--teal) 25%, transparent)`,borderRadius:7,padding:'4px 10px',color:T.teal,cursor:'pointer',fontSize:11,fontWeight:700,transition:'all 0.15s'}}>
+            Mark all read
+          </button>
         </div>
         <div style={{maxHeight:390,overflowY:'auto'}}>
-          {notifs.map(n=>(
-            <div key={n.id} onClick={()=>setNotifs(notifs.map(x=>x.id===n.id?{...x,read:true}:x))}
-              style={{padding:'13px 18px',borderBottom:`1px solid var(--border)`,cursor:'pointer',background:n.read?'transparent':'color-mix(in srgb, var(--teal) 4%, transparent)',transition:'background 0.12s'}}
-              onMouseEnter={e=>e.currentTarget.style.background='var(--glass2, rgba(255,255,255,0.025))'}
-              onMouseLeave={e=>e.currentTarget.style.background=n.read?'transparent':'color-mix(in srgb, var(--teal) 4%, transparent)'}>
-              <div style={{display:'flex',gap:10,alignItems:'flex-start'}}>
-                <div style={{width:6,height:6,borderRadius:'50%',background:n.read?'transparent':tc[n.type],marginTop:5,flexShrink:0,boxShadow:n.read?'none':`0 0 6px ${tc[n.type]}`}}/>
-                <div>
-                  <div style={{fontSize:13,fontWeight:600,color:T.t1}}>{n.title}</div>
-                  <div style={{fontSize:12,color:T.t3,marginTop:2,lineHeight:1.5}}>{n.message}</div>
-                  <div style={{fontSize:11,color:T.t4,marginTop:4}}>{n.time}</div>
+          {notifications.length === 0 ? (
+            <div style={{padding:'36px 20px',textAlign:'center',color:T.t4,fontSize:13}}>
+              No notifications at this time
+            </div>
+          ) : (
+            notifications.map(n=>(
+              <div key={n.id} onClick={()=>handleNotifClick(n)}
+                style={{padding:'13px 18px',borderBottom:`1px solid var(--border)`,cursor:'pointer',background:n.read?'transparent':'color-mix(in srgb, var(--teal) 5%, transparent)',transition:'background 0.12s'}}
+                onMouseEnter={e=>e.currentTarget.style.background='var(--glass2, rgba(255,255,255,0.03))'}
+                onMouseLeave={e=>e.currentTarget.style.background=n.read?'transparent':'color-mix(in srgb, var(--teal) 5%, transparent)'}>
+                <div style={{display:'flex',gap:10,alignItems:'flex-start'}}>
+                  <div style={{width:7,height:7,borderRadius:'50%',background:n.read?'transparent':(tc[n.type] || T.teal),marginTop:5,flexShrink:0,boxShadow:n.read?'none':`0 0 6px ${tc[n.type] || T.teal}`}}/>
+                  <div style={{flex:1}}>
+                    <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline'}}>
+                      <div style={{fontSize:13,fontWeight:n.read?500:700,color:n.read?T.t2:T.t1}}>{n.title}</div>
+                      <div style={{fontSize:10,color:T.t4,marginLeft:6,whiteSpace:'nowrap'}}>{n.time}</div>
+                    </div>
+                    <div style={{fontSize:12,color:n.read?T.t4:T.t3,marginTop:2,lineHeight:1.45}}>{n.message}</div>
+                    {n.related_project_id && (
+                      <div style={{fontSize:10,color:T.teal,marginTop:4,fontWeight:600}}>
+                        View {n.related_project_id} &rarr;
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            ))
+          )}
         </div>
       </div>
     </div>

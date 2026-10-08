@@ -11,9 +11,11 @@ import os
 import hmac
 import hashlib
 import logging
+import uuid
+import json
 from datetime import datetime
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request, Header
 from pydantic import BaseModel
 from typing import Optional
 
@@ -54,6 +56,7 @@ class CreateOrderRequest(BaseModel):
     currency: str = "INR"
     project_id: Optional[str] = None
     corporate_name: Optional[str] = None
+    quantity: Optional[float] = None
 
 
 class BuyCreditsRequest(BaseModel):
@@ -102,6 +105,7 @@ def create_order(req: CreateOrderRequest):
                 "notes": {
                     "project_id": req.project_id or "",
                     "corporate_name": req.corporate_name or "",
+                    "quantity": str(req.quantity or 0),
                 },
             }
             order = razorpay_client.order.create(data=order_data)
@@ -207,6 +211,9 @@ def buy_credits(req: BuyCreditsRequest):
         if corp_req:
             corp_req.status = "completed"
 
+        # Generate unique verifiable certificate ID
+        cert_id = f"CV-OFF-{uuid.uuid4().hex[:8].upper()}"
+
         # Create transaction record
         txn = Transaction(
             razorpay_order_id=req.razorpay_order_id,
@@ -219,6 +226,7 @@ def buy_credits(req: BuyCreditsRequest):
             amount_inr=req.amount,
             amount_usd=round(req.amount / float(os.getenv("INR_USD_RATE", "83.5")), 2),
             status="completed",
+            certificate_id=cert_id,
             created_at=datetime.now().date(),
         )
         db.add(txn)
@@ -248,7 +256,7 @@ def buy_credits(req: BuyCreditsRequest):
             audit_entry = AuditLog(
                 action="payment",
                 name=req.project_id,
-                detail=f"{req.corporate_name} purchased {req.quantity:,.0f} credits of '{project.name}' for ₹{req.amount:,.2f}",
+                detail=f"{req.corporate_name} purchased {req.quantity:,.0f} credits of '{project.name}' for ₹{req.amount:,.2f} (Cert: {cert_id})",
                 user=req.corporate_name,
                 timestamp=datetime.utcnow()
             )
@@ -257,14 +265,29 @@ def buy_credits(req: BuyCreditsRequest):
         except Exception as e:
             logger.warning("Failed to record audit log for payment: %s", e)
 
+        # Emit real platform notification
+        try:
+            from routers.notifications_router import create_notification
+            create_notification(
+                db=db,
+                title="Credits Purchased & Certificate Issued",
+                message=f"{req.corporate_name} purchased {req.quantity:,.0f} credits of '{project.name}'. Impact Certificate {cert_id} generated.",
+                type="payment",
+                recipient_role="all",
+                related_project_id=req.project_id
+            )
+        except Exception as notif_err:
+            logger.warning("Failed to emit notification on payment: %s", notif_err)
+
         logger.info(
-            "Transaction recorded: %s bought %.2f credits of %s for ₹%.2f",
-            req.corporate_name, req.quantity, req.project_id, req.amount
+            "Transaction recorded: %s bought %.2f credits of %s for ₹%.2f (Cert: %s)",
+            req.corporate_name, req.quantity, req.project_id, req.amount, cert_id
         )
 
         return {
-            "message": "Payment successful — credits added to wallet",
+            "message": "Payment successful — credits added to wallet and certificate issued",
             "transaction_id": txn.id,
+            "certificate_id": cert_id,
             "project_id": req.project_id,
             "project_name": project.name,
             "quantity": req.quantity,
@@ -336,6 +359,184 @@ def get_wallet(company: str):
             "total_spent_usd": round((wallet.total_spent_inr or 0) / inr_rate, 2),
             "last_purchase_date": str(wallet.last_purchase_date) if wallet.last_purchase_date else None,
         }
+    finally:
+        db.close()
+
+
+# ── POST /webhook ────────────────────────────────────────────────────────
+
+@router.post("/webhook")
+async def razorpay_webhook(
+    request: Request,
+    x_razorpay_signature: Optional[str] = Header(None, alias="X-Razorpay-Signature")
+):
+    """
+    Handle incoming Razorpay webhooks (e.g. payment.captured, order.paid, payment.failed)
+    with strict HMAC-SHA256 signature verification.
+    """
+    raw_body = await request.body()
+    if not x_razorpay_signature:
+        logger.warning("Rejected webhook request: Missing X-Razorpay-Signature header")
+        raise HTTPException(status_code=400, detail="Missing X-Razorpay-Signature header")
+
+    # Get secret: test secret or production webhook secret
+    webhook_secret = (
+        os.getenv("RAZORPAY_WEBHOOK_SECRET") or
+        RAZORPAY_KEY_SECRET or
+        "9m0Tq4EB8zFLXKJUgzgmCy9I"
+    )
+
+    expected_signature = hmac.new(
+        webhook_secret.encode("utf-8"),
+        raw_body,
+        hashlib.sha256
+    ).hexdigest()
+
+    if not hmac.compare_digest(expected_signature, x_razorpay_signature):
+        logger.warning("Razorpay webhook HMAC signature mismatch")
+        raise HTTPException(status_code=400, detail="Invalid webhook signature")
+
+    try:
+        payload = json.loads(raw_body.decode("utf-8"))
+    except Exception as parse_err:
+        raise HTTPException(status_code=400, detail=f"Invalid JSON payload: {parse_err}")
+
+    event = payload.get("event")
+    logger.info("Received verified Razorpay webhook event: %s", event)
+
+    db = SessionLocal()
+    try:
+        if event in ["payment.captured", "order.paid"]:
+            payment_entity = payload.get("payload", {}).get("payment", {}).get("entity", {})
+            payment_id = payment_entity.get("id")
+            order_id = payment_entity.get("order_id")
+            amount_paise = payment_entity.get("amount", 0)
+            amount_inr = amount_paise / 100.0 if amount_paise else 0.0
+
+            notes = payment_entity.get("notes", {})
+            project_id = notes.get("project_id") or "PRJ-MAN-AMAZON"
+            corporate_name = notes.get("corporate_name") or "Corporate Buyer"
+
+            # Check if this payment was already recorded
+            existing_txn = db.query(Transaction).filter(
+                (Transaction.razorpay_payment_id == payment_id) |
+                (Transaction.razorpay_order_id == order_id)
+            ).first()
+
+            if existing_txn:
+                logger.info("Webhook event already processed for txn %s", existing_txn.id)
+                return {"status": "ok", "message": "Transaction already recorded", "transaction_id": existing_txn.id}
+
+            # Locate project
+            project = db.query(Project).filter(
+                (Project.project_id == project_id) |
+                (Project.id == int(project_id) if str(project_id).isdigit() else False)
+            ).first()
+
+            if not project:
+                project = db.query(Project).filter(Project.status == "approved").first()
+
+            price_per_ton = project.price if project and project.price else 25.0
+            quantity_from_notes = float(notes.get("quantity") or 0.0)
+            quantity = quantity_from_notes if quantity_from_notes > 0 else round(amount_inr / (price_per_ton * 83.5), 2)
+
+            cert_id = f"CV-OFF-{uuid.uuid4().hex[:8].upper()}"
+
+            # Deduct credits from project
+            if project and project.credits is not None:
+                project.credits = max(0.0, float(project.credits) - quantity)
+
+            # Record Transaction
+            txn = Transaction(
+                razorpay_order_id=order_id,
+                razorpay_payment_id=payment_id,
+                project_id=project.project_id if project else project_id,
+                project_name=project.name if project else "Verified Ecological Reserve",
+                corporate_name=corporate_name,
+                quantity=quantity,
+                price_per_ton=price_per_ton,
+                amount_inr=amount_inr,
+                amount_usd=round(amount_inr / 83.5, 2),
+                status="completed",
+                certificate_id=cert_id,
+                created_at=datetime.utcnow().date(),
+            )
+            db.add(txn)
+
+            # Update or create Wallet
+            wallet = db.query(Wallet).filter(Wallet.corporate_name == corporate_name).first()
+            if wallet:
+                wallet.total_credits = (wallet.total_credits or 0) + quantity
+                wallet.total_spent_inr = (wallet.total_spent_inr or 0) + amount_inr
+                wallet.last_purchase_date = datetime.utcnow().date()
+            else:
+                wallet = Wallet(
+                    corporate_name=corporate_name,
+                    total_credits=quantity,
+                    total_spent_inr=amount_inr,
+                    last_purchase_date=datetime.utcnow().date(),
+                )
+                db.add(wallet)
+
+            # Audit log
+            from credit_calculation.credits_module.db_models import AuditLog
+            audit_entry = AuditLog(
+                action="payment",
+                name=project.project_id if project else project_id,
+                detail=f"Webhook captured payment: {corporate_name} acquired {quantity:,.2f} credits for ₹{amount_inr:,.2f} (Cert: {cert_id})",
+                user="Razorpay Webhook",
+                timestamp=datetime.utcnow()
+            )
+            db.add(audit_entry)
+            db.commit()
+
+            # Emit notification
+            try:
+                from routers.notifications_router import create_notification
+                create_notification(
+                    db=db,
+                    title="Webhook Payment Captured",
+                    message=f"Razorpay webhook verified ₹{amount_inr:,.2f} payment from {corporate_name}. Impact Certificate {cert_id} generated.",
+                    type="payment",
+                    recipient_role="all",
+                    related_project_id=project.project_id if project else project_id
+                )
+            except Exception as ne:
+                logger.warning("Could not emit webhook notification: %s", ne)
+
+            return {
+                "status": "ok",
+                "processed": True,
+                "event": event,
+                "transaction_id": txn.id,
+                "certificate_id": cert_id
+            }
+
+        elif event == "payment.failed":
+            payment_entity = payload.get("payload", {}).get("payment", {}).get("entity", {})
+            error_code = payment_entity.get("error_code")
+            error_desc = payment_entity.get("error_description", "Payment failed")
+            logger.warning("Razorpay webhook payment.failed: %s (%s)", error_code, error_desc)
+
+            try:
+                from routers.notifications_router import create_notification
+                create_notification(
+                    db=db,
+                    title="Payment Failed",
+                    message=f"Razorpay payment attempt failed: {error_desc}",
+                    type="warning",
+                    recipient_role="all"
+                )
+            except Exception:
+                pass
+
+            return {"status": "ok", "event": event, "recorded": True}
+
+        return {"status": "ok", "event": event, "action": "ignored"}
+    except Exception as e:
+        db.rollback()
+        logger.error("Error processing webhook: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
     finally:
         db.close()
 

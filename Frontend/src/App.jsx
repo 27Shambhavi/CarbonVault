@@ -16,6 +16,7 @@ import { NGODashboard, NGOProjects, NGONewProject, NGOSiteSuitability, NGOMarket
 
 // Corporate
 import { CorporateDashboard, CorporateMarketplace, CorporateWallet, CorporateESG } from './components/corporate/CorporatePages.jsx';
+import CorporateCalculator from './components/corporate/CorporateCalculator.jsx';
 
 // Public
 import { PublicDashboard, PublicLeaderboard, PublicAudit, PublicCertificates, PublicClimate } from './components/public/PublicPages.jsx';
@@ -49,6 +50,7 @@ function PageRouter() {
     if (page === 'marketplace') return <CorporateMarketplace />;
     if (page === 'wallet')      return <CorporateWallet />;
     if (page === 'esg')         return <CorporateESG />;
+    if (page === 'calculator')  return <CorporateCalculator />;
     return <CorporateDashboard />;
   }
 
