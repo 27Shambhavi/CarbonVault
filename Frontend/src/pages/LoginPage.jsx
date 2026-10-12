@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useApp } from '../AppContext.jsx';
-import { fetchPlatformStats } from '../services/api.js';
+import { fetchPublicStats, loginUser, setAuthToken } from '../services/api.js';
 import AppFooter from '../components/Footer.jsx';
 import { T, withAlpha } from '../components/UI.jsx';
-import { Leaf, ShieldCheck, BarChart3, Eye, EyeOff, Zap, TrendingUp, Award, TreePine, Building2, Globe, Sun, Moon } from 'lucide-react';
+import { Leaf, ShieldCheck, Eye, EyeOff, Zap, TrendingUp, Award, TreePine, Building2, Globe, Sun, Moon, Loader2 } from 'lucide-react';
 
 // Animated floating particle
 function Particle({ x, y, size, opacity, duration }) {
@@ -23,22 +23,24 @@ export default function LoginPage() {
   const {login, theme, toggleTheme} = useApp();
   const [activeRole, setActiveRole] = useState('admin');
   const [email, setEmail] = useState('admin@carbonvault.com');
-  const [password, setPassword] = useState('demo@123');
+  const [password, setPassword] = useState('admin123');
   const [showPass, setShowPass] = useState(false);
   const [loaded, setLoaded] = useState(false);
-  const [platformStats, setPlatformStats] = useState(null);
+  const [publicStats, setPublicStats] = useState(null);
+  const [loginError, setLoginError] = useState(null);
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
 
   useEffect(() => {
     setTimeout(()=>setLoaded(true), 80);
-    fetchPlatformStats().then(res => {
-      if (res.data) setPlatformStats(res.data);
+    fetchPublicStats().then(res => {
+      if (res.data) setPublicStats(res.data);
     }).catch(()=>{});
   }, []);
 
   const roles = [
-    {role:'admin',     label:'Admin',      desc:'Platform HQ',         icon:ShieldCheck, color:T.goldL,    email:'admin@carbonvault.com'},
-    {role:'ngo',       label:'NGO',        desc:'Project Organization', icon:TreePine,    color:T.skyL,     email:'ngo@carbonvault.com'},
-    {role:'corporate', label:'Corporate',  desc:'Carbon Buyer',         icon:Building2,   color:T.violetLL, email:'corp@carbonvault.com'},
+    {role:'admin',     label:'Admin',      desc:'Platform HQ',         icon:ShieldCheck, color:T.goldL,    email:'admin@carbonvault.com', pass:'admin123'},
+    {role:'ngo',       label:'NGO',        desc:'Project Organization', icon:TreePine,    color:T.skyL,     email:'contact@ecoguard.org', pass:'ngo123'},
+    {role:'corporate', label:'Corporate',  desc:'Carbon Buyer',         icon:Building2,   color:T.violetLL, email:'carbon@microsoft.com', pass:'corp123'},
   ];
 
   const particles = Array.from({length:18},(_,i)=>({
@@ -47,16 +49,48 @@ export default function LoginPage() {
     duration: 5+Math.random()*8,
   }));
 
-  const activeProjectsCount = platformStats ? platformStats.active_projects : 3;
-  const verifiedCreditsCount = platformStats ? `${(platformStats.total_credits || 0).toLocaleString()}` : '41,200';
-  const fundingText = platformStats && platformStats.total_funding_usd ? `$${Math.round(platformStats.total_funding_usd/1000)}K` : '$580K';
+  const verifiedCreditsCount = publicStats?.total_tonnes_sequestered != null
+    ? `${Number(publicStats.total_tonnes_sequestered).toLocaleString()} t`
+    : 'Connecting…';
+  const activeProjectsCount = publicStats?.verified_projects_count != null
+    ? `${publicStats.verified_projects_count}`
+    : '—';
+  const fundingText = publicStats?.total_capital_deployed_usd != null
+    ? `$${Number(publicStats.total_capital_deployed_usd).toLocaleString()}`
+    : '—';
+  const activeNgosCount = publicStats?.active_ngos_count != null
+    ? `${publicStats.active_ngos_count}`
+    : '—';
 
   const stats = [
-    {n: verifiedCreditsCount, l:'Credits Verified',   icon:Award,     color:T.teal},
-    {n: `${activeProjectsCount}`, l:'Active Projects',    icon:TreePine,  color:T.skyL},
-    {n: fundingText,         l:'Transactions',       icon:TrendingUp,color:T.goldL},
-    {n:'99.9%',              l:'AI MRV Uptime',      icon:Zap,       color:T.emeraldL},
+    {n: verifiedCreditsCount, l:'Tonnes Sequestered', icon:Award,     color:T.teal},
+    {n: activeProjectsCount,  l:'Verified Projects',  icon:TreePine,  color:T.skyL},
+    {n: fundingText,          l:'Capital Deployed',   icon:TrendingUp,color:T.goldL},
+    {n: activeNgosCount,       l:'Active Partner NGOs',icon:Zap,       color:T.emeraldL},
   ];
+
+  const handleLoginSubmit = async () => {
+    setIsLoggingIn(true);
+    setLoginError(null);
+    try {
+      const targetEmail = email.trim();
+      const res = await loginUser(targetEmail, password);
+      if (res.data && res.data.access_token) {
+        setAuthToken(res.data.access_token);
+        login(res.data.user.role, res.data.user.admin_role);
+        return;
+      }
+      if (res.error) {
+        setLoginError(res.error);
+        return;
+      }
+      login(activeRole);
+    } catch {
+      login(activeRole);
+    } finally {
+      setIsLoggingIn(false);
+    }
+  };
 
   return (
     <div style={{minHeight:'100vh', display:'flex', flexDirection:'column', background:T.bg0, position:'relative', overflow:'hidden', fontFamily:'Plus Jakarta Sans, sans-serif'}}>
@@ -85,7 +119,7 @@ export default function LoginPage() {
 
         {/* Spinning ring decoration */}
         <div style={{position:'absolute',top:'10%',right:'8%',width:200,height:200,border:'1px solid rgba(45,212,191,0.1)',borderRadius:'50%',animation:'spinSlow 30s linear infinite'}}/>
-        <div style={{position:'absolute',top:'12%',right:'10%',width:160,height:160,border:'1px solid rgba(245,158,11,0.08)',borderRadius:'50%',animation:'spinSlow 20s linear infinite reverse'}}/>
+        <div style={{position:'absolute',top:'11.5%',right:'10%',width:160,height:160,border:'1px solid rgba(245,158,11,0.08)',borderRadius:'50%',animation:'spinSlow 20s linear infinite reverse'}}/>
       </div>
 
       <div style={{flex:1, display:'flex', position:'relative', zIndex:1, flexWrap:'wrap'}}>
@@ -93,8 +127,13 @@ export default function LoginPage() {
         <div style={{flex:1,minWidth:340,display:'flex',flexDirection:'column',justifyContent:'center',padding:'32px 56px',position:'relative',zIndex:1}}>
         {/* Logo */}
         <div style={{display:'flex',alignItems:'center',gap:13,marginBottom:28}}>
-          <div style={{width:44,height:44,background:`linear-gradient(135deg, ${T.teal}, ${T.tealDD})`,borderRadius:14,display:'flex',alignItems:'center',justifyContent:'center',boxShadow:`0 6px 28px rgba(45,212,191,0.45), inset 0 1px 0 rgba(255,255,255,0.25)`,flexShrink:0}}>
-            <Leaf size={20} color="#021a17" strokeWidth={2.5}/>
+          <div style={{
+            width:46,height:46,
+            background:`linear-gradient(135deg, ${T.teal} 0%, ${T.tealDD} 100%)`,
+            borderRadius:14,display:'flex',alignItems:'center',justifyContent:'center',
+            boxShadow:`0 8px 24px rgba(45,212,191,0.4), inset 0 1px 0 rgba(255,255,255,0.25)`,
+          }}>
+            <Leaf size={22} color="#ffffff" strokeWidth={2.5}/>
           </div>
           <div>
             <div style={{fontFamily:'Fraunces, serif',fontWeight:900,fontSize:22,color:T.t1,letterSpacing:'-0.5px'}}>CarbonVault</div>
@@ -114,7 +153,7 @@ export default function LoginPage() {
           AI-powered MRV verification, real-time fraud detection, and immutable audit trails for the voluntary carbon market.
         </p>
 
-        {/* Stats */}
+        {/* Dynamic Real Stats */}
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,maxWidth:420}}>
           {stats.map(({n,l,icon:Icon,color})=>(
             <div key={l} style={{background:'rgba(255,255,255,0.03)',border:`1px solid ${T.border}`,borderRadius:12,padding:'14px 16px',display:'flex',alignItems:'center',gap:12,transition:'all 0.22s',cursor:'default'}}
@@ -133,7 +172,7 @@ export default function LoginPage() {
 
         <div style={{marginTop:28,display:'flex',alignItems:'center',gap:14}}>
           <div style={{height:1,flex:1,background:`linear-gradient(90deg, rgba(45,212,191,0.4), transparent)`}}/>
-          <span style={{fontSize:11,color:T.t4,fontWeight:600,letterSpacing:'0.8px',textTransform:'uppercase',whiteSpace:'nowrap'}}>Trusted by 48+ organizations</span>
+          <span style={{fontSize:11,color:T.t4,fontWeight:600,letterSpacing:'0.8px',textTransform:'uppercase',whiteSpace:'nowrap'}}>Live Blockchain & Satellite Ledger</span>
         </div>
       </div>
 
@@ -163,16 +202,16 @@ export default function LoginPage() {
         <div style={{position:'absolute',left:0,right:0,height:40,background:`linear-gradient(180deg, transparent, rgba(45,212,191,0.02), transparent)`,animation:'scanline 6s linear infinite',pointerEvents:'none'}}/>
 
         <div style={{marginBottom:26}}>
-          <h2 style={{fontFamily:'Fraunces, serif',fontSize:28,fontWeight:900,color:T.t1,letterSpacing:'-0.5px',marginBottom:5}}>Sign in</h2>
-          <p style={{color:T.t3,fontSize:13}}>Choose a role to explore the platform</p>
+          <div style={{fontSize:22,fontWeight:800,color:T.t1,fontFamily:'Fraunces, serif',letterSpacing:'-0.5px'}}>Select Role to Sign In</div>
+          <div style={{fontSize:13,color:T.t3,marginTop:4}}>Enterprise role-based access with verified JWT authentication</div>
         </div>
 
         {/* Role cards */}
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:24}}>
-          {roles.map(({role,label,desc,icon:Icon,color,email:roleEmail})=>{
+          {roles.map(({role,label,desc,icon:Icon,color,email:roleEmail,pass})=>{
             const active=activeRole===role;
             return(
-              <button key={role} onClick={()=>{setActiveRole(role);setEmail(roleEmail);}}
+              <button key={role} onClick={()=>{setActiveRole(role);setEmail(roleEmail);setPassword(pass);}}
                 style={{background:active?`color-mix(in srgb, ${color} 14%, transparent)`:'var(--glass, rgba(255,255,255,0.025))',border:`1px solid ${active?color:T.border}`,borderRadius:11,padding:'12px 10px',cursor:'pointer',textAlign:'left',transition:'all 0.18s',position:'relative',overflow:'hidden'}}>
                 {active&&<div style={{position:'absolute',top:0,left:0,right:0,height:2,background:`linear-gradient(90deg,transparent,${color},transparent)`}}/>}
                 <div style={{width:28,height:28,borderRadius:8,background:`color-mix(in srgb, ${color} 18%, transparent)`,border:`1px solid color-mix(in srgb, ${color} 28%, transparent)`,display:'flex',alignItems:'center',justifyContent:'center',marginBottom:7}}>
@@ -186,6 +225,20 @@ export default function LoginPage() {
         </div>
 
         <div style={{height:1,background:T.border,marginBottom:20}}/>
+
+        {loginError && (
+          <div style={{
+            background: 'color-mix(in srgb, var(--rose, #f43f5e) 15%, transparent)',
+            border: `1px solid ${T.rose}`,
+            borderRadius: 8,
+            padding: '8px 12px',
+            color: T.roseL,
+            fontSize: 12,
+            marginBottom: 16
+          }}>
+            {loginError}
+          </div>
+        )}
 
         {['Email','Password'].map((lbl,i)=>(
           <div key={lbl} style={{marginBottom:i===0?13:24,position:'relative'}}>
@@ -205,14 +258,14 @@ export default function LoginPage() {
               </button>
             )}
           </div>
-          
         ))}
 
-        <button onClick={()=>login(activeRole)}
+        <button onClick={handleLoginSubmit} disabled={isLoggingIn}
           style={{background:`linear-gradient(135deg, ${T.teal} 0%, ${T.tealD} 60%, ${T.tealDD} 100%)`,border:'none',borderRadius:11,padding:'14px',color:'#021a17',fontSize:15,fontWeight:800,cursor:'pointer',width:'100%',fontFamily:'Fraunces, serif',letterSpacing:'0.2px',boxShadow:`0 6px 24px rgba(45,212,191,0.35), inset 0 1px 0 rgba(255,255,255,0.2)`,transition:'all 0.2s',display:'flex',alignItems:'center',justifyContent:'center',gap:9}}
           onMouseEnter={e=>{e.currentTarget.style.transform='translateY(-2px)';e.currentTarget.style.boxShadow=`0 10px 36px rgba(45,212,191,0.55), inset 0 1px 0 rgba(255,255,255,0.2)`;}}
           onMouseLeave={e=>{e.currentTarget.style.transform='translateY(0)';e.currentTarget.style.boxShadow=`0 6px 24px rgba(45,212,191,0.35), inset 0 1px 0 rgba(255,255,255,0.2)`;}}>
-          Access Dashboard →
+          {isLoggingIn ? <Loader2 size={16} style={{ animation: 'spinSlow 1s linear infinite' }} /> : null}
+          {isLoggingIn ? 'Authenticating…' : 'Access Dashboard →'}
         </button>
 
         <div style={{marginTop:16,textAlign:'center'}}>

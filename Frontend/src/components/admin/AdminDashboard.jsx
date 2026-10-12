@@ -6,11 +6,13 @@ import {
   fetchAllProjects,
   fetchMapProjects,
   fetchMapPendingProjects,
-  downloadPlatformPDF
+  downloadPlatformPDF,
+  fetchOverviewStats
 } from '../../services/api.js';
 import { KPICard, Card, SectionHeader, Table, Badge, MRVScore, Btn, T } from '../UI.jsx';
 import { ProjectMap } from '../GoogleMap.jsx';
-import { Layers, FolderCheck, Clock, AlertTriangle, Download, RefreshCw } from 'lucide-react';
+import { ActivityFeed } from '../ActivityFeed.jsx';
+import { Layers, FolderCheck, Clock, AlertTriangle, Download, RefreshCw, Activity } from 'lucide-react';
 
 const CT = ({active,payload,label}) => {
   if (!active||!payload?.length) return null;
@@ -23,8 +25,9 @@ const CT = ({active,payload,label}) => {
 };
 
 export default function AdminDashboard() {
-  const { refreshKey } = useApp();
+  const { refreshKey, liveEvents } = useApp();
   const [stats, setStats] = useState(null);
+  const [overview, setOverview] = useState(null);
   const [projects, setProjects] = useState([]);
   const [mapFeatures, setMapFeatures] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -43,9 +46,16 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     setLoading(true);
-    Promise.all([fetchPlatformStats(), fetchAllProjects(), fetchMapProjects(), fetchMapPendingProjects()])
-      .then(([statsRes, allRes, mapRes, pendRes]) => {
+    Promise.all([
+      fetchPlatformStats(),
+      fetchAllProjects(),
+      fetchMapProjects(),
+      fetchMapPendingProjects(),
+      fetchOverviewStats('admin', '30d')
+    ])
+      .then(([statsRes, allRes, mapRes, pendRes, overviewRes]) => {
         if (statsRes.data) setStats(statsRes.data);
+        if (overviewRes?.data) setOverview(overviewRes.data);
         if (!allRes.error && Array.isArray(allRes.data)) {
           setProjects(allRes.data);
         }
@@ -99,12 +109,40 @@ export default function AdminDashboard() {
         }
       />
 
-      {/* KPIs */}
+      {/* KPIs with real DB deltas (no static constants) */}
       <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:15,marginBottom:28}}>
-        <KPICard icon={Layers}        label="Total Credits Minted" value={Math.round(total).toLocaleString()} sub="+12% this month"        trend="up"   color={T.teal}/>
-        <KPICard icon={FolderCheck}   label="Active Projects"      value={activeCount} sub={`${projects.length || stats?.total_projects || 0} total`} trend="up" color={T.violetL}/>
-        <KPICard icon={Clock}         label="Pending Reviews"       value={pendingCount}                sub="Avg 2.1 days"           trend="down" color={T.goldL}/>
-        <KPICard icon={AlertTriangle} label="Fraud Flags"           value={flagged}                sub={`${flagged} flagged`}   trend="up"   color={T.roseL}/>
+        <KPICard
+          icon={Layers}
+          label="Total Credits Minted"
+          value={Math.round(total).toLocaleString()}
+          delta={overview?.kpis?.total_credits?.delta_pct}
+          sub={overview?.kpis?.total_credits?.previous ? `vs ${Math.round(overview.kpis.total_credits.previous).toLocaleString()} prev period` : 'Live verified inventory'}
+          color={T.teal}
+        />
+        <KPICard
+          icon={FolderCheck}
+          label="Active Projects"
+          value={activeCount}
+          delta={overview?.kpis?.active_projects?.delta_pct}
+          sub={`${projects.length || stats?.total_projects || 0} total registered`}
+          color={T.violetL}
+        />
+        <KPICard
+          icon={Clock}
+          label="Pending Reviews"
+          value={pendingCount}
+          delta={overview?.kpis?.pending_reviews?.delta_pct}
+          sub="Awaiting admin action"
+          color={T.goldL}
+        />
+        <KPICard
+          icon={AlertTriangle}
+          label="Fraud Flags"
+          value={flagged}
+          delta={overview?.kpis?.fraud_flags?.delta_pct}
+          sub={`${flagged} flagged by ML/rules`}
+          color={T.roseL}
+        />
       </div>
 
       {/* Map + Pie row */}
@@ -141,6 +179,15 @@ export default function AdminDashboard() {
           </div>
         </Card>
       </div>
+
+      {/* Live Submissions & Real-Time Event Stream */}
+      <Card style={{marginBottom:22}}>
+        <SectionHeader
+          title="Real-Time Event Stream"
+          subtitle="Server-Sent Events: Instantaneous ledger actions, submissions, approvals & purchases"
+        />
+        <ActivityFeed events={liveEvents} maxHeight={220} />
+      </Card>
 
       {/* Table */}
       <Card style={{marginBottom:22}}>

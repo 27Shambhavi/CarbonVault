@@ -35,9 +35,11 @@ def run_seed():
         logger.info("Current projects in DB: %d", proj_count)
         if proj_count == 0:
             logger.info("Database empty, running seed_initial_data()...")
-            seed_initial_data()
-        else:
-            logger.info("Database already seeded with projects.")
+        # Ensure all seeded projects have is_synthetic = True
+        for p in db.query(Project).all():
+            if p.project_id in ["PRJ-MAN-AMAZON", "PRJ-MAN-SUNDAR", "PRJ-TEK-CONGO1", "PRJ-MAN-VIET01"]:
+                p.is_synthetic = True
+        db.commit()
 
         # Run certificate backfill
         logger.info("Running certificate backfill for approved projects and completed transactions...")

@@ -131,7 +131,7 @@ export function ProfilePage() {
           </div>
           <div style={{ fontSize:19, fontWeight:800, color:T.t1, fontFamily:'Fraunces, serif', marginBottom:4 }}>{user.name}</div>
           <div style={{ fontSize:13, color:T.t3, marginBottom:12 }}>{user.org}</div>
-          <div style={{ display:'inline-flex', background:`color-mix(in srgb, ${rc} 12%, transparent)`, border:`1px solid color-mix(in srgb, ${rc} 30%, transparent)`, borderRadius:8, padding:'4px 12px', fontSize:11, fontWeight:700, color:rc, textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:20 }}>{user.role}</div>
+          <div style={{ display:'inline-flex', background:`color-mix(in srgb, ${rc} 14%, transparent)`, border:`1px solid color-mix(in srgb, ${rc} 30%, transparent)`, borderRadius:8, padding:'4px 12px', fontSize:11, fontWeight:700, color:rc, textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:20 }}>{user.role}</div>
           <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
             <button style={{ background:'color-mix(in srgb, var(--teal) 10%, transparent)', border:`1px solid color-mix(in srgb, var(--teal) 25%, transparent)`, borderRadius:10, padding:10, color:T.teal, fontSize:13, cursor:'pointer', fontFamily:'Plus Jakarta Sans, sans-serif', fontWeight:600 }}>Edit Profile</button>
             <button onClick={logout} style={{ background:'color-mix(in srgb, var(--rose) 10%, transparent)', border:`1px solid color-mix(in srgb, var(--rose) 25%, transparent)`, borderRadius:10, padding:10, color:T.roseL, fontSize:13, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:6, fontFamily:'Plus Jakarta Sans, sans-serif', fontWeight:600 }}>

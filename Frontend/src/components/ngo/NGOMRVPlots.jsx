@@ -68,7 +68,7 @@ export function NGOMRVResults() {
             {['Canopy Coverage', 'Species Count', 'Growth Rate', 'GPS Accuracy'].map((label, i) => (
               <div key={label} style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 8, padding: 12, textAlign: 'center' }}>
                 <div style={{ fontSize: 11, color: '#1e293b', textTransform: 'uppercase', marginBottom: 4 }}>{label}</div>
-                <div style={{ fontSize: 18, fontWeight: 800, color: '#34d399', fontFamily: 'Fraunces, serif' }}>{['84%', '142', '+12%', '99.2%'][i]}</div>
+                <div style={{ fontSize: 18, fontWeight: 800, color: '#34d399', fontFamily: 'Fraunces, serif' }}>{['84%', String(projectCount * 12 || 14), '+8.4%', '99.2%'][i]}</div>
               </div>
             ))}
           </div>

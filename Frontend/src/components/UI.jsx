@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { TrendingUp, TrendingDown } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { TrendingUp, TrendingDown, RotateCcw } from 'lucide-react';
 
 /* ── Design tokens mapped to CSS variables with Dark fallbacks ─ */
 export const T = {
@@ -62,23 +62,23 @@ export const gc = (extra={}) => ({
 
 /* ── Badge map ──────────────────────────────────────────── */
 const BM = {
-  approved:  {bg:'color-mix(in srgb, var(--emerald, #10b981) 12%, transparent)', color:T.emeraldL, border:'color-mix(in srgb, var(--emerald, #10b981) 25%, transparent)'},
+  approved:  {bg:'color-mix(in srgb, var(--emerald, #10b981) 14%, transparent)', color:T.emeraldL, border:'color-mix(in srgb, var(--emerald, #10b981) 25%, transparent)'},
   pending:   {bg:'color-mix(in srgb, var(--gold, #f59e0b) 14%, transparent)',    color:T.goldL,    border:'color-mix(in srgb, var(--gold, #f59e0b) 28%, transparent)'},
   rejected:  {bg:'color-mix(in srgb, var(--rose, #f43f5e) 14%, transparent)',    color:T.roseL,    border:'color-mix(in srgb, var(--rose, #f43f5e) 28%, transparent)'},
   minted:    {bg:'color-mix(in srgb, var(--sky, #0ea5e9) 14%, transparent)',     color:T.skyL,     border:'color-mix(in srgb, var(--sky, #0ea5e9) 28%, transparent)'},
   draft:     {bg:'color-mix(in srgb, var(--violet, #7c3aed) 14%, transparent)',  color:T.violetL,  border:'color-mix(in srgb, var(--violet, #7c3aed) 28%, transparent)'},
-  active:    {bg:'color-mix(in srgb, var(--emerald, #10b981) 12%, transparent)', color:T.emeraldL, border:'color-mix(in srgb, var(--emerald, #10b981) 25%, transparent)'},
-  sold_out:  {bg:'color-mix(in srgb, var(--rose, #f43f5e) 12%, transparent)',    color:T.roseL,    border:'color-mix(in srgb, var(--rose, #f43f5e) 25%, transparent)'},
+  active:    {bg:'color-mix(in srgb, var(--emerald, #10b981) 14%, transparent)', color:T.emeraldL, border:'color-mix(in srgb, var(--emerald, #10b981) 25%, transparent)'},
+  sold_out:  {bg:'color-mix(in srgb, var(--rose, #f43f5e) 14%, transparent)',    color:T.roseL,    border:'color-mix(in srgb, var(--rose, #f43f5e) 25%, transparent)'},
   suspended: {bg:'color-mix(in srgb, var(--gold, #f59e0b) 14%, transparent)',    color:T.goldL,    border:'color-mix(in srgb, var(--gold, #f59e0b) 28%, transparent)'},
   ngo:       {bg:'color-mix(in srgb, var(--sky, #0ea5e9) 14%, transparent)',     color:T.skyL,     border:'color-mix(in srgb, var(--sky, #0ea5e9) 28%, transparent)'},
   buyer:     {bg:'color-mix(in srgb, var(--violet, #7c3aed) 14%, transparent)',  color:T.violetL,  border:'color-mix(in srgb, var(--violet, #7c3aed) 28%, transparent)'},
   admin:     {bg:'color-mix(in srgb, var(--gold, #f59e0b) 14%, transparent)',    color:T.goldL,    border:'color-mix(in srgb, var(--gold, #f59e0b) 28%, transparent)'},
   public:    {bg:'color-mix(in srgb, var(--teal, #2dd4bf) 14%, transparent)',    color:T.teal,     border:'color-mix(in srgb, var(--teal, #2dd4bf) 28%, transparent)'},
-  reforestation: {bg:'color-mix(in srgb, var(--emerald, #10b981) 12%, transparent)', color:T.emeraldL, border:'color-mix(in srgb, var(--emerald, #10b981) 25%, transparent)'},
+  reforestation: {bg:'color-mix(in srgb, var(--emerald, #10b981) 14%, transparent)', color:T.emeraldL, border:'color-mix(in srgb, var(--emerald, #10b981) 25%, transparent)'},
   renewable:     {bg:'color-mix(in srgb, var(--sky, #0ea5e9) 14%, transparent)', color:T.skyL, border:'color-mix(in srgb, var(--sky, #0ea5e9) 28%, transparent)'},
   methane:       {bg:'color-mix(in srgb, var(--gold, #f59e0b) 14%, transparent)', color:T.goldL, border:'color-mix(in srgb, var(--gold, #f59e0b) 28%, transparent)'},
   carbon_capture:{bg:'color-mix(in srgb, var(--violet, #7c3aed) 14%, transparent)', color:T.violetL, border:'color-mix(in srgb, var(--violet, #7c3aed) 28%, transparent)'},
-  Platinum:{bg:'color-mix(in srgb, var(--t2) 12%, transparent)', color:T.t1, border:'color-mix(in srgb, var(--t2) 25%, transparent)'},
+  Platinum:{bg:'color-mix(in srgb, var(--t2) 14%, transparent)', color:T.t1, border:'color-mix(in srgb, var(--t2) 25%, transparent)'},
   Gold:    {bg:'color-mix(in srgb, var(--gold, #f59e0b) 16%, transparent)', color:T.goldL, border:'color-mix(in srgb, var(--gold, #f59e0b) 35%, transparent)'},
   Silver:  {bg:'color-mix(in srgb, var(--t3) 14%, transparent)', color:T.t2, border:'color-mix(in srgb, var(--t3) 25%, transparent)'},
   Bronze:  {bg:'color-mix(in srgb, var(--gold-l, #fbbf24) 14%, transparent)', color:T.gold, border:'color-mix(in srgb, var(--gold-l, #fbbf24) 25%, transparent)'},
@@ -101,12 +101,18 @@ export function Badge({ type, label, children }) {
 }
 
 /* ── KPI Card ───────────────────────────────────────────── */
-export function KPICard({ icon:Icon, label, value, sub, trend, color=T.teal }) {
+export function KPICard({ icon:Icon, label, value, sub, trend, delta, color=T.teal }) {
   const [hov, setHov] = useState(false);
-  const glowBg = withAlpha(color, '18', 12);
-  const iconBg = withAlpha(color, '14', 12);
+  const glowBg = withAlpha(color, '18', 14);
+  const iconBg = withAlpha(color, '14', 14);
   const iconBorder = withAlpha(color, '30', 25);
   const borderHover = withAlpha(color, '44', 35);
+
+  // Delta percentage computed from database
+  const deltaNum = typeof delta === 'number' ? delta : (typeof trend === 'number' ? trend : null);
+  const hasDelta = deltaNum !== null && !isNaN(deltaNum);
+  const isUp = hasDelta && deltaNum >= 0;
+
   return (
     <div
       style={{
@@ -131,8 +137,19 @@ export function KPICard({ icon:Icon, label, value, sub, trend, color=T.teal }) {
         <div style={{width:44,height:44,borderRadius:12,background:iconBg,border:`1px solid ${iconBorder}`,display:'flex',alignItems:'center',justifyContent:'center'}}>
           <Icon size={20} color={color} />
         </div>
-        {trend==='up' && <span style={{display:'flex',alignItems:'center',gap:3,fontSize:11,color:T.emeraldL,fontWeight:700,background:'color-mix(in srgb, var(--emerald, #10b981) 12%, transparent)',padding:'2px 7px',borderRadius:20,border:'1px solid color-mix(in srgb, var(--emerald, #10b981) 25%, transparent)'}}><TrendingUp size={10}/>+12%</span>}
-        {trend==='down' && <span style={{display:'flex',alignItems:'center',gap:3,fontSize:11,color:T.roseL,fontWeight:700,background:'color-mix(in srgb, var(--rose, #f43f5e) 12%, transparent)',padding:'2px 7px',borderRadius:20,border:'1px solid color-mix(in srgb, var(--rose, #f43f5e) 25%, transparent)'}}><TrendingDown size={10}/>−4%</span>}
+        {hasDelta && (
+          <span style={{
+            display:'flex',alignItems:'center',gap:3,fontSize:11,
+            color: isUp ? T.emeraldL : T.roseL,
+            fontWeight:700,
+            background: isUp ? 'color-mix(in srgb, var(--emerald, #10b981) 14%, transparent)' : 'color-mix(in srgb, var(--rose, #f43f5e) 14%, transparent)',
+            padding:'2px 7px',borderRadius:20,
+            border:`1px solid ${isUp ? 'color-mix(in srgb, var(--emerald, #10b981) 25%, transparent)' : 'color-mix(in srgb, var(--rose, #f43f5e) 25%, transparent)'}`
+          }}>
+            {isUp ? <TrendingUp size={10}/> : <TrendingDown size={10}/>}
+            {deltaNum > 0 ? `+${Math.abs(deltaNum).toFixed(1)}%` : deltaNum < 0 ? `−${Math.abs(deltaNum).toFixed(1)}%` : '0.0%'}
+          </span>
+        )}
       </div>
       <div style={{fontSize:32,fontWeight:800,color:T.t1,fontFamily:'Fraunces, serif',lineHeight:1,letterSpacing:'-1px'}}>{value}</div>
       <div style={{fontSize:11,color:T.t3,fontWeight:600,letterSpacing:'0.7px',textTransform:'uppercase',marginTop:9}}>{label}</div>
@@ -297,4 +314,51 @@ export function ScoreGauge({ score, max=1000, label }) {
   );
 }
 
+/* ── Server Loading State (Cold-start friendly) ────────── */
+export function ServerLoadingState({ onRetry, message = 'Loading live data...' }) {
+  const [slowNotice, setSlowNotice] = useState(false);
+
+  useEffect(() => {
+    const t = setTimeout(() => setSlowNotice(true), 5000);
+    return () => clearTimeout(t);
+  }, []);
+
+  return (
+    <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:48,gap:16,textAlign:'center'}}>
+      <div style={{
+        width: 34,
+        height: 34,
+        borderRadius: '50%',
+        border: `3px solid color-mix(in srgb, ${T.teal} 25%, transparent)`,
+        borderTopColor: T.teal,
+        animation: 'spin 0.9s linear infinite'
+      }}/>
+      <div style={{fontSize: 13, color: T.t2, fontWeight: 500}}>{message}</div>
+      {slowNotice && (
+        <div style={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: 10,
+          background: 'color-mix(in srgb, var(--gold, #f59e0b) 14%, transparent)',
+          border: '1px solid color-mix(in srgb, var(--gold, #f59e0b) 28%, transparent)',
+          borderRadius: 10,
+          padding: '12px 20px',
+          maxWidth: 420
+        }}>
+          <span style={{fontSize: 12.5, color: T.goldL, fontWeight: 600}}>
+            Server is waking up… Free-tier instances sleep when idle and may take ~15–30 seconds.
+          </span>
+          {onRetry && (
+            <Btn small variant="secondary" onClick={onRetry}>
+              <RotateCcw size={12} /> Retry Now
+            </Btn>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export { BM as badgeMap };
+

@@ -6,7 +6,7 @@ from PIL import Image
 
 BASE_URL = os.getenv("TEST_BASE_URL", "http://127.0.0.1:8000")
 
-def test_endpoint(method, path, **kwargs):
+def _call_endpoint(method, path, **kwargs):
     url = f"{BASE_URL}{path}"
     try:
         resp = requests.request(method, url, timeout=10, **kwargs)
@@ -22,16 +22,16 @@ def test_endpoint(method, path, **kwargs):
 
 def run_tests():
     print("\n--- TESTING CORE ENDPOINTS ---")
-    test_endpoint("GET", "/")
-    test_endpoint("GET", "/health")
+    _call_endpoint("GET", "/")
+    _call_endpoint("GET", "/health")
 
     print("\n--- TESTING PROJECT ENDPOINTS ---")
-    test_endpoint("GET", "/projects/all-projects")
-    test_endpoint("GET", "/projects/projects?ngo_id=1")
-    test_endpoint("GET", "/projects/dashboard/1")
-    test_endpoint("GET", "/projects/map")
-    test_endpoint("GET", "/projects/pending")
-    test_endpoint("PATCH", "/projects/projects/PRJ-MAN-SUNDAR/status?status=approved")
+    _call_endpoint("GET", "/projects/all-projects")
+    _call_endpoint("GET", "/projects/projects?ngo_id=1")
+    _call_endpoint("GET", "/projects/dashboard/1")
+    _call_endpoint("GET", "/projects/map")
+    _call_endpoint("GET", "/projects/pending")
+    _call_endpoint("PATCH", "/projects/projects/PRJ-MAN-SUNDAR/status?status=approved")
 
     # Test create-project with in-memory image
     img = Image.new('RGB', (100, 100), color='green')
@@ -53,7 +53,7 @@ def run_tests():
         'start_date': '2024-05-01',
         'polygon_wkt': 'POLYGON((-62.22 -3.47, -62.21 -3.47, -62.21 -3.46, -62.22 -3.46, -62.22 -3.47))'
     }
-    ok, create_resp = test_endpoint("POST", "/projects/create-project", data=data, files=files)
+    ok, create_resp = _call_endpoint("POST", "/projects/create-project", data=data, files=files)
     created_id = "PRJ-MAN-AMAZON"
     if ok and create_resp:
         try:
@@ -63,22 +63,22 @@ def run_tests():
             pass
 
     print("\n--- TESTING MARKETPLACE ENDPOINTS ---")
-    test_endpoint("GET", "/marketplace/listings")
-    test_endpoint("GET", "/marketplace/requests/1")
-    test_endpoint("POST", "/marketplace/request", json={
+    _call_endpoint("GET", "/marketplace/listings")
+    _call_endpoint("GET", "/marketplace/requests/1")
+    _call_endpoint("POST", "/marketplace/request", json={
         "corporate_name": "Microsoft Sustainability",
         "project_id": "PRJ-MAN-AMAZON",
         "offered_price": 28.50
     })
-    test_endpoint("POST", "/marketplace/accept/1")
+    _call_endpoint("POST", "/marketplace/accept/1")
 
     print("\n--- TESTING CREDITS ENDPOINTS ---")
-    test_endpoint("GET", "/credits/balance/Microsoft%20Sustainability")
-    test_endpoint("POST", "/credits/mint", json={
+    _call_endpoint("GET", "/credits/balance/Microsoft%20Sustainability")
+    _call_endpoint("POST", "/credits/mint", json={
         "project_id": "PRJ-MAN-AMAZON",
         "credits": 500.0
     })
-    test_endpoint("POST", "/credits/transfer", json={
+    _call_endpoint("POST", "/credits/transfer", json={
         "from_entity": "Microsoft Sustainability",
         "to_entity": "Google Carbon Team",
         "quantity": 100.0,
@@ -86,13 +86,13 @@ def run_tests():
     })
 
     print("\n--- TESTING PAYMENT / RAZORPAY ENDPOINTS ---")
-    test_endpoint("POST", "/payment/create-order", json={
+    _call_endpoint("POST", "/payment/create-order", json={
         "amount": 25000.0,
         "currency": "INR",
         "project_id": "PRJ-MAN-AMAZON",
         "corporate_name": "Microsoft Sustainability"
     })
-    test_endpoint("POST", "/payment/buy-credits", json={
+    _call_endpoint("POST", "/payment/buy-credits", json={
         "razorpay_order_id": "order_demo_test123",
         "razorpay_payment_id": "pay_demo_test123",
         "razorpay_signature": "demo_signature",
@@ -101,11 +101,11 @@ def run_tests():
         "quantity": 50.0,
         "amount": 118987.5
     })
-    test_endpoint("GET", "/payment/transactions/Microsoft%20Sustainability")
-    test_endpoint("GET", "/payment/wallet/Microsoft%20Sustainability")
+    _call_endpoint("GET", "/payment/transactions/Microsoft%20Sustainability")
+    _call_endpoint("GET", "/payment/wallet/Microsoft%20Sustainability")
 
     print("\n--- TESTING GRS ENDPOINTS ---")
-    test_endpoint("POST", "/grs/calculate-grs", json={
+    _call_endpoint("POST", "/grs/calculate-grs", json={
         "company_name": "Microsoft Sustainability",
         "total_carbon_funded": 15000.0,
         "avg_survival_probability": 0.88,
@@ -115,39 +115,39 @@ def run_tests():
         "transparency_score": 92.0,
         "verification_score": 95.0
     })
-    test_endpoint("GET", "/grs/leaderboard")
+    _call_endpoint("GET", "/grs/leaderboard")
 
     print("\n--- TESTING FRAUD DETECTION ENDPOINT ---")
-    test_endpoint("POST", "/fraud/check-project", json={
+    _call_endpoint("POST", "/fraud/check-project", json={
         "project_id": created_id,
         "polygon_wkt": "POLYGON((-62.22 -3.47, -62.21 -3.47, -62.21 -3.46, -62.22 -3.46, -62.22 -3.47))",
         "image_path": ""
     })
 
     print("\n--- TESTING SITE SUITABILITY ENDPOINT ---")
-    test_endpoint("POST", "/suitability/predict", json={
+    _call_endpoint("POST", "/suitability/predict", json={
         "lat": -3.465,
         "lon": -62.215,
         "area": 100.0
     })
 
     print("\n--- TESTING ESG REPORT GENERATOR ENDPOINT ---")
-    test_endpoint("POST", "/esg/generate-report", json={
+    _call_endpoint("POST", "/esg/generate-report", json={
         "corporate_name": "Microsoft Sustainability",
         "project_id": None
     })
     print("\n--- TESTING CERTIFICATES ENDPOINTS ---")
-    ok, cert_resp = test_endpoint("GET", "/certificates")
+    ok, cert_resp = _call_endpoint("GET", "/certificates")
     if ok and cert_resp:
         try:
             certs = cert_resp.json()
             if certs and len(certs) > 0:
                 first_cid = certs[0].get("public_id") or certs[0].get("certificate_id")
                 print(f"   First certificate ID: {first_cid}")
-                test_endpoint("GET", f"/certificates/verify/{first_cid}")
-                test_endpoint("GET", f"/certificates/{first_cid}")
-                test_endpoint("GET", f"/certificates/{first_cid}/download?format=pdf")
-                test_endpoint("GET", f"/certificates/{first_cid}/download?format=png")
+                _call_endpoint("GET", f"/certificates/verify/{first_cid}")
+                _call_endpoint("GET", f"/certificates/{first_cid}")
+                _call_endpoint("GET", f"/certificates/{first_cid}/download?format=pdf")
+                _call_endpoint("GET", f"/certificates/{first_cid}/download?format=png")
         except Exception as ce:
             print("   Certificate test error:", ce)
 

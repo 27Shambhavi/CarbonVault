@@ -31,10 +31,10 @@ export function LiveBadge({ status = 'offline', lastEventAt = null, source = nul
 
   const dotColor = isLive ? T.emeraldL : isReconnecting ? T.goldL : T.t3;
   const bg = isLive
-    ? 'color-mix(in srgb, var(--emerald, #10b981) 12%, transparent)'
+    ? 'color-mix(in srgb, var(--emerald, #10b981) 14%, transparent)'
     : isReconnecting
-    ? 'color-mix(in srgb, var(--gold, #f59e0b) 12%, transparent)'
-    : 'color-mix(in srgb, var(--t3, #475569) 12%, transparent)';
+    ? 'color-mix(in srgb, var(--gold, #f59e0b) 14%, transparent)'
+    : 'color-mix(in srgb, var(--t3, #475569) 14%, transparent)';
 
   const border = isLive
     ? 'color-mix(in srgb, var(--emerald, #10b981) 28%, transparent)'

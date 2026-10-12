@@ -40,6 +40,8 @@ from routers.notifications_router import router as notifications_router
 from routers.calculator_router import router as calculator_router
 from routers.certificate_router import router as certificate_router
 from routers.realtime_router import router as realtime_router
+from routers.auth_router import router as auth_router, hash_password
+from routers.stats_router import router as stats_router
 
 
 def migrate_db():
@@ -63,6 +65,7 @@ def migrate_db():
         ("shadow_credits", "REAL"),
         ("evidence_image", "TEXT"),
         ("evidence_images", "TEXT"),
+        ("is_synthetic", "BOOLEAN DEFAULT 0"),
     ]
 
     for col_name, col_type in new_columns:
@@ -361,25 +364,33 @@ def seed_initial_data():
         # Seed Users if empty or ensure admin accounts exist
         if not db.query(User).first():
             default_users = [
-                User(name="Alex Mercer", email="admin@carbonvault.com", role="admin", admin_role="super_admin", projects=0, credits=0, joined="2023-01-01", status="active"),
-                User(name="Sarah Jenkins", email="approver@carbonvault.com", role="admin", admin_role="approver", projects=0, credits=0, joined="2023-08-15", status="active"),
-                User(name="EcoGuard Brazil", email="contact@ecoguard.org", role="ngo", projects=3, credits=34600, joined="2023-06-12", status="active"),
-                User(name="Microsoft Sustainability", email="carbon@microsoft.com", role="buyer", projects=0, credits=15200, joined="2023-09-01", status="active"),
-                User(name="Google Carbon Team", email="sustainability@google.com", role="buyer", projects=0, credits=28000, joined="2023-07-14", status="active"),
-                User(name="Green Delta", email="info@greendelta.org", role="ngo", projects=2, credits=8200, joined="2024-01-05", status="active"),
-                User(name="Shell Renewables", email="offsets@shell.com", role="buyer", projects=0, credits=42000, joined="2023-04-22", status="active"),
-                User(name="Borneo Earth", email="team@borneoearth.org", role="ngo", projects=1, credits=0, joined="2024-03-08", status="suspended"),
-                User(name="HSBC Green Finance", email="carbon@hsbc.com", role="buyer", projects=0, credits=9800, joined="2024-02-17", status="active"),
-                User(name="CongoCare", email="ops@congocare.org", role="ngo", projects=2, credits=22000, joined="2023-11-30", status="active"),
+                User(name="Alex Mercer", email="admin@carbonvault.com", password_hash=hash_password("admin123"), role="admin", admin_role="super_admin", projects=0, credits=0, joined="2023-01-01", status="active"),
+                User(name="Sarah Jenkins", email="approver@carbonvault.com", password_hash=hash_password("approver123"), role="admin", admin_role="approver", projects=0, credits=0, joined="2023-08-15", status="active"),
+                User(name="EcoGuard Brazil", email="contact@ecoguard.org", password_hash=hash_password("ngo123"), role="ngo", projects=3, credits=34600, joined="2023-06-12", status="active"),
+                User(name="Microsoft Sustainability", email="carbon@microsoft.com", password_hash=hash_password("corp123"), role="corporate", projects=0, credits=15200, joined="2023-09-01", status="active"),
+                User(name="Google Carbon Team", email="sustainability@google.com", password_hash=hash_password("corp123"), role="buyer", projects=0, credits=28000, joined="2023-07-14", status="active"),
+                User(name="Green Delta", email="info@greendelta.org", password_hash=hash_password("ngo123"), role="ngo", projects=2, credits=8200, joined="2024-01-05", status="active"),
+                User(name="Shell Renewables", email="offsets@shell.com", password_hash=hash_password("corp123"), role="buyer", projects=0, credits=42000, joined="2023-04-22", status="active"),
+                User(name="Borneo Earth", email="team@borneoearth.org", password_hash=hash_password("ngo123"), role="ngo", projects=1, credits=0, joined="2024-03-08", status="suspended"),
+                User(name="HSBC Green Finance", email="carbon@hsbc.com", password_hash=hash_password("corp123"), role="buyer", projects=0, credits=9800, joined="2024-02-17", status="active"),
+                User(name="CongoCare", email="ops@congocare.org", password_hash=hash_password("ngo123"), role="ngo", projects=2, credits=22000, joined="2023-11-30", status="active"),
             ]
             db.add_all(default_users)
             db.commit()
         else:
-            # Ensure super_admin and approver exist
-            if not db.query(User).filter(User.email == "admin@carbonvault.com").first():
-                db.add(User(name="Alex Mercer", email="admin@carbonvault.com", role="admin", admin_role="super_admin", projects=0, credits=0, joined="2023-01-01", status="active"))
-            if not db.query(User).filter(User.email == "approver@carbonvault.com").first():
-                db.add(User(name="Sarah Jenkins", email="approver@carbonvault.com", role="admin", admin_role="approver", projects=0, credits=0, joined="2023-08-15", status="active"))
+            # Backfill password hashes for demo accounts if missing
+            users_to_fix = {
+                "admin@carbonvault.com": ("admin123", "Alex Mercer", "admin", "super_admin"),
+                "approver@carbonvault.com": ("approver123", "Sarah Jenkins", "admin", "approver"),
+                "contact@ecoguard.org": ("ngo123", "EcoGuard Brazil", "ngo", None),
+                "carbon@microsoft.com": ("corp123", "Microsoft Sustainability", "corporate", None),
+            }
+            for em, (pw, nm, rl, arl) in users_to_fix.items():
+                u = db.query(User).filter(User.email == em).first()
+                if not u:
+                    db.add(User(name=nm, email=em, password_hash=hash_password(pw), role=rl, admin_role=arl, status="active"))
+                elif not u.password_hash:
+                    u.password_hash = hash_password(pw)
             db.commit()
 
         # Seed Pricing Config if empty
@@ -393,13 +404,14 @@ def seed_initial_data():
             )
             db.add(cfg)
             
+            now_seed = datetime.utcnow()
             history = [
-                PriceHistory(month="Jul", price=24.0, recorded_at=datetime.utcnow() - timedelta(days=150)),
-                PriceHistory(month="Aug", price=24.8, recorded_at=datetime.utcnow() - timedelta(days=120)),
-                PriceHistory(month="Sep", price=25.6, recorded_at=datetime.utcnow() - timedelta(days=90)),
-                PriceHistory(month="Oct", price=26.4, recorded_at=datetime.utcnow() - timedelta(days=60)),
-                PriceHistory(month="Nov", price=27.2, recorded_at=datetime.utcnow() - timedelta(days=30)),
-                PriceHistory(month="Dec", price=28.5, recorded_at=datetime.utcnow()),
+                PriceHistory(ts=now_seed - timedelta(days=150), month="Jul", price=24.0, effective_usd=24.0, base_price=22.0, m_demand=1.05, m_supply=1.0, m_living=1.04, source="seed_synthetic", recorded_at=now_seed - timedelta(days=150)),
+                PriceHistory(ts=now_seed - timedelta(days=120), month="Aug", price=24.8, effective_usd=24.8, base_price=22.5, m_demand=1.06, m_supply=1.0, m_living=1.04, source="seed_synthetic", recorded_at=now_seed - timedelta(days=120)),
+                PriceHistory(ts=now_seed - timedelta(days=90), month="Sep", price=25.6, effective_usd=25.6, base_price=23.0, m_demand=1.08, m_supply=0.99, m_living=1.04, source="seed_synthetic", recorded_at=now_seed - timedelta(days=90)),
+                PriceHistory(ts=now_seed - timedelta(days=60), month="Oct", price=26.4, effective_usd=26.4, base_price=23.5, m_demand=1.10, m_supply=0.98, m_living=1.04, source="seed_synthetic", recorded_at=now_seed - timedelta(days=60)),
+                PriceHistory(ts=now_seed - timedelta(days=30), month="Nov", price=27.2, effective_usd=27.2, base_price=24.0, m_demand=1.11, m_supply=0.98, m_living=1.04, source="seed_synthetic", recorded_at=now_seed - timedelta(days=30)),
+                PriceHistory(ts=now_seed, month="Dec", price=28.5, effective_usd=28.5, base_price=24.5, m_demand=1.12, m_supply=0.98, m_living=1.08, source="seed_synthetic", recorded_at=now_seed),
             ]
             db.add_all(history)
             db.commit()
@@ -557,6 +569,7 @@ def seed_initial_data():
             credits=12400.0,
             shadow_credits=43400.0,
             price=28.50,
+            is_synthetic=True,
             created_at=today
         )
 
@@ -578,6 +591,7 @@ def seed_initial_data():
             credits=8200.0,
             shadow_credits=28700.0,
             price=26.00,
+            is_synthetic=True,
             created_at=today
         )
 
@@ -599,6 +613,7 @@ def seed_initial_data():
             credits=22000.0,
             shadow_credits=77000.0,
             price=29.75,
+            is_synthetic=True,
             created_at=today
         )
 
@@ -620,6 +635,7 @@ def seed_initial_data():
             credits=6800.0,
             shadow_credits=23800.0,
             price=26.00,
+            is_synthetic=True,
             created_at=today
         )
 
@@ -830,6 +846,8 @@ app.include_router(fraud_router, prefix="/fraud", tags=["Fraud Detection"])
 app.include_router(payment_router, prefix="/payment", tags=["Payment"])
 app.include_router(esg_router, prefix="/esg", tags=["ESG"])
 app.include_router(realtime_router)
+app.include_router(auth_router)
+app.include_router(stats_router)
 
 
 @app.get("/")

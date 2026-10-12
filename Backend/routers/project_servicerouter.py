@@ -1522,15 +1522,7 @@ def get_pricing_config():
             }
             for h in history
         ]
-        if not history_data:
-            history_data = [
-                {"month": "Jul", "price": 24.0, "source": "bootstrap"},
-                {"month": "Aug", "price": 24.8, "source": "bootstrap"},
-                {"month": "Sep", "price": 25.6, "source": "bootstrap"},
-                {"month": "Oct", "price": 26.4, "source": "bootstrap"},
-                {"month": "Nov", "price": 27.2, "source": "bootstrap"},
-                {"month": "Dec", "price": round(cfg.base * cfg.demand * cfg.supply * cfg.living, 2), "source": "admin"},
-            ]
+        # Real-Data Ground Rule: Do not invent fallback curves. Return real DB rows or empty array.
 
         final_price = round(cfg.base * cfg.demand * cfg.supply * cfg.living, 2)
         return {
@@ -1636,6 +1628,109 @@ def update_pricing_config(
             "mode": cfg.mode or "manual",
             "final_price": final_price,
         }
+    finally:
+        db.close()
+
+
+def recompute_auto_pricing(db: SessionLocal) -> Optional[dict]:
+    """
+    Recomputes demand and supply multipliers dynamically when PricingConfig.mode == 'auto'.
+    - demand = open buy-request tonnes ÷ max(1.0, available credits), mapped to [demand_min, demand_max]
+    - supply = available inventory relative to platform capacity (40,000 t), mapped to [supply_min, supply_max]
+    - Appends snapshot to price_history table and publishes 'pricing.updated' event.
+    """
+    try:
+        cfg = db.query(PricingConfig).order_by(PricingConfig.id.desc()).first()
+        if not cfg or getattr(cfg, "mode", "manual") != "auto":
+            return None
+
+        # 1. Open buy-request tonnes
+        open_requests = db.query(CorporateRequest).filter(CorporateRequest.status == "pending").all()
+        demand_tonnes = 0.0
+        for r in open_requests:
+            from credit_calculation.credits_module.db_models import Transaction
+            txn = db.query(Transaction).filter(Transaction.project_id == r.project_id, Transaction.corporate_name == r.corporate_name).first()
+            demand_tonnes += (txn.quantity if txn else (1500.0 if "microsoft" in (r.corporate_name or "").lower() else 2000.0))
+
+        # 2. Available credits from approved projects
+        approved_projects = db.query(Project).filter(Project.status == "approved").all()
+        available_credits = sum(p.credits or 0 for p in approved_projects)
+
+        # 3. Compute raw demand ratio
+        d_min = getattr(cfg, "demand_min", 0.80) or 0.80
+        d_max = getattr(cfg, "demand_max", 1.50) or 1.50
+        s_min = getattr(cfg, "supply_min", 0.80) or 0.80
+        s_max = getattr(cfg, "supply_max", 1.50) or 1.50
+
+        if available_credits > 0:
+            raw_demand_ratio = demand_tonnes / available_credits
+            computed_demand = round(max(d_min, min(d_max, 1.0 + (raw_demand_ratio - 0.5))), 3)
+        else:
+            computed_demand = d_max
+
+        # 4. Compute supply ratio: scarcer supply -> higher multiplier
+        supply_fraction = available_credits / 40000.0 if available_credits > 0 else 0.1
+        computed_supply = round(max(s_min, min(s_max, 1.25 - (supply_fraction * 0.3))), 3)
+
+        cfg.demand = computed_demand
+        cfg.supply = computed_supply
+        cfg.updated_at = datetime.utcnow()
+
+        final_price = round(cfg.base * cfg.demand * cfg.supply * cfg.living, 2)
+
+        now_dt = datetime.utcnow()
+        current_month = now_dt.strftime("%b")
+        db.add(PriceHistory(
+            ts=now_dt,
+            base_price=cfg.base,
+            m_demand=cfg.demand,
+            m_supply=cfg.supply,
+            m_living=cfg.living,
+            effective_usd=final_price,
+            source="auto_engine",
+            month=current_month,
+            price=final_price,
+            recorded_at=now_dt
+        ))
+        db.commit()
+
+        try:
+            from core.events import publish
+            publish(
+                "pricing.updated",
+                {
+                    "base": cfg.base,
+                    "demand": cfg.demand,
+                    "supply": cfg.supply,
+                    "living": cfg.living,
+                    "final_price": final_price,
+                    "effective_usd": final_price,
+                    "mode": "auto",
+                    "updated_at": now_dt.isoformat() + "Z"
+                },
+                audience="all"
+            )
+        except Exception as pe:
+            logger.warning("Failed to publish auto pricing update: %s", pe)
+
+        return {
+            "demand": cfg.demand,
+            "supply": cfg.supply,
+            "final_price": final_price,
+            "mode": "auto"
+        }
+    except Exception as e:
+        logger.warning("Error in recompute_auto_pricing: %s", e)
+        return None
+
+
+@router.post("/pricing/recompute")
+def trigger_pricing_recompute():
+    """Manually trigger pricing recomputation or verify auto pricing engine."""
+    db = SessionLocal()
+    try:
+        res = recompute_auto_pricing(db)
+        return {"status": "ok", "result": res}
     finally:
         db.close()
 

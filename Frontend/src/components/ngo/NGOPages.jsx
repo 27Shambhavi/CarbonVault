@@ -854,7 +854,6 @@ export function NGONewProject() {
 export function NGOSiteSuitability() {
   const [lat,setLat]     = useState('');
   const [lng,setLng]     = useState('');
-  const [apiKey,setApiKey] = useState('');
   const [checking,setChecking] = useState(false);
   const [result,setResult] = useState(null);
   const { showToast, ToastEl } = useToast();
@@ -899,10 +898,9 @@ export function NGOSiteSuitability() {
               <div><label style={lbl}>Latitude</label><input value={lat} onChange={e=>setLat(e.target.value)} placeholder="-3.4653" style={inp}/></div>
               <div><label style={lbl}>Longitude</label><input value={lng} onChange={e=>setLng(e.target.value)} placeholder="-62.2159" style={inp}/></div>
             </div>
-            <div style={{marginBottom:16}}>
-              <label style={lbl}>Site Suitability API Key</label>
-              <input type="password" value={apiKey} onChange={e=>setApiKey(e.target.value)} placeholder="Enter your API key..." style={inp}/>
-              <div style={{fontSize:11,color:T.t3,marginTop:5}}>API key is stored securely and used only for analysis requests.</div>
+            <div style={{marginBottom:16, display:'flex', alignItems:'center', gap:8, padding:'8px 12px', background:'rgba(45,212,191,0.06)', border:`1px solid rgba(45,212,191,0.18)`, borderRadius:8}}>
+              <span style={{fontSize:12}}>🔒</span>
+              <div style={{fontSize:11, color:T.t2}}>Satellite API credentials authenticated server-side via environment variables.</div>
             </div>
             <Btn style={{width:'100%',justifyContent:'center'}} onClick={handleCheck} disabled={checking}>
               {checking?'Analyzing Site...':'Check Suitability'}

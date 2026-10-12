@@ -234,7 +234,7 @@ export function Navbar() {
       {/* Bell */}
       <div style={{position:'relative'}}>
         {iconBtn(()=>setNotifOpen(true), <Bell size={15} color={T.teal}/>, 'Notifications')}
-        {unreadNotifCount > 0 && (
+        {user && unreadNotifCount > 0 && (
           <div style={{position:'absolute',top:-3,right:-3,width:16,height:16,background:`linear-gradient(135deg,${T.rose},#dc2626)`,borderRadius:'50%',fontSize:9,fontWeight:800,color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',boxShadow:`0 2px 8px rgba(244,63,94,0.5), 0 0 0 2px var(--bg0)`}}>
             {unreadNotifCount > 99 ? '99+' : unreadNotifCount}
           </div>

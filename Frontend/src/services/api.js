@@ -57,7 +57,7 @@ checkBackend().catch(() => {});
 export function isBackendOnline() { return _backendOnline; }
 
 // ── Generic fetch wrapper ──────────────────────────────────────────────────
-export async function request(url, options = {}) {
+export async function request(url, options = {}, retries = 1, backoffMs = 2000) {
   try {
     // Default 60s timeout to accommodate Render free-tier cold starts
     const controller = new AbortController();
@@ -93,12 +93,20 @@ export async function request(url, options = {}) {
     try { data = JSON.parse(text); } catch { data = text; }
 
     if (!res.ok) {
+      if ((res.status === 502 || res.status === 503 || res.status === 504) && retries > 0 && (!options.method || options.method === 'GET')) {
+        await new Promise(r => setTimeout(r, backoffMs));
+        return request(url, options, retries - 1, backoffMs * 2);
+      }
       return { data: null, error: (data && data.detail) || `Request failed (${res.status})` };
     }
 
     _backendOnline = true;
     return { data, error: null };
   } catch (err) {
+    if (retries > 0 && (!options.method || options.method === 'GET')) {
+      await new Promise(r => setTimeout(r, backoffMs));
+      return request(url, options, retries - 1, backoffMs * 2);
+    }
     _backendOnline = false;
     return { data: null, error: err.message || 'Network error' };
   }
@@ -351,6 +359,10 @@ export async function generateESGReport(corporateName, projectId = null) {
 
 export async function fetchPlatformStats() {
   return request(`${API_BASE}/projects/stats`);
+}
+
+export async function fetchPublicStats() {
+  return request(`${API_BASE}/public/stats`);
 }
 
 export async function fetchOverviewStats(role = 'admin', period = '30d') {

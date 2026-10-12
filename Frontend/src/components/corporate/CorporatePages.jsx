@@ -56,10 +56,10 @@ export function CorporateDashboard() {
     <div style={{padding:28}}>
       <SectionHeader title="Corporate Dashboard" subtitle="Microsoft Sustainability — carbon portfolio overview"/>
       <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:15,marginBottom:24}}>
-        <KPICard icon={Package}    label="Available Credits"     value={realTotalCredits.toLocaleString()} sub="Total tonnes CO₂e"    trend="up" color={T.violetLL || T.violetL}/>
-        <KPICard icon={TrendingUp} label="Active Projects"       value={projects.length}          sub="Projects supported"   trend="up" color={T.teal}/>
-        <KPICard icon={DollarSign} label="Total Value"           value={`$${Math.round(realTotalFunding).toLocaleString()}`} sub="Portfolio value" trend="up" color={T.emeraldL}/>
-        <KPICard icon={Star}       label="GRS Score"             value={grsData.score}               sub="Gold Verifier status" trend="up" color={T.goldL}/>
+        <KPICard icon={Package}    label="Available Credits"     value={realTotalCredits.toLocaleString()} sub="Total tonnes CO₂e" color={T.violetLL || T.violetL}/>
+        <KPICard icon={TrendingUp} label="Active Projects"       value={projects.length}          sub="Projects supported" color={T.teal}/>
+        <KPICard icon={DollarSign} label="Total Value"           value={`$${Math.round(realTotalFunding).toLocaleString()}`} sub="Portfolio value" color={T.emeraldL}/>
+        <KPICard icon={Star}       label="GRS Score"             value={grsData.score}               sub="Gold Verifier status" color={T.goldL}/>
       </div>
       <Card style={{marginBottom:22}}>
         <SectionHeader title="Supported Project Locations" subtitle="Approved plantation footprints (polygons from verification data)"/>
