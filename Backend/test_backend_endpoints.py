@@ -8,8 +8,9 @@ BASE_URL = os.getenv("TEST_BASE_URL", "http://127.0.0.1:8000")
 
 def _call_endpoint(method, path, **kwargs):
     url = f"{BASE_URL}{path}"
+    timeout = kwargs.pop("timeout", 30)
     try:
-        resp = requests.request(method, url, timeout=10, **kwargs)
+        resp = requests.request(method, url, timeout=timeout, **kwargs)
         status = resp.status_code
         ok = 200 <= status < 300
         print(f"[{'PASS' if ok else 'FAIL'}] {method} {path} -> {status}")
@@ -150,6 +151,23 @@ def run_tests():
                 _call_endpoint("GET", f"/certificates/{first_cid}/download?format=png")
         except Exception as ce:
             print("   Certificate test error:", ce)
+
+    print("\n--- TESTING REAL-TIME & LIVE DATA ENDPOINTS ---")
+    _call_endpoint("POST", "/realtime/ticket", json={"role": "admin"})
+    _call_endpoint("GET", "/realtime/events?limit=5")
+    _call_endpoint("GET", "/stats/overview?role=admin&period=30d")
+    _call_endpoint("GET", "/public/stats")
+
+    print("\n--- TESTING SATELLITE & CLIMATE ENDPOINTS ---")
+    _call_endpoint("GET", "/projects/PRJ-MAN-AMAZON/ndvi")
+    _call_endpoint("GET", "/projects/PRJ-MAN-AMAZON/climate")
+
+    print("\n--- TESTING MACHINE LEARNING ENDPOINTS ---")
+    _call_endpoint("GET", "/pricing/forecast?horizon_days=7")
+    _call_endpoint("GET", "/projects/PRJ-MAN-AMAZON/ml-assessment")
+
+    print("\n--- TESTING GROUNDED AI EXPLAINER ENDPOINT ---")
+    _call_endpoint("GET", "/projects/PRJ-MAN-AMAZON/ai-summary?audience=admin")
 
 if __name__ == "__main__":
     run_tests()

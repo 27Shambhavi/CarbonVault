@@ -1989,13 +1989,20 @@ def update_project_status(
         if target_status == "approved":
             credit_result = calculate_and_store_credits(project, db)
             db.refresh(project)
-            try:
-                from services.satellite import sync_project_ndvi
-                from services.climate import sync_project_climate
-                sync_project_ndvi(project.project_id, db, backfill_years=3, max_batches=6)
-                sync_project_climate(project.project_id, db, days=90)
-            except Exception as sync_e:
-                logger.warning("Error syncing satellite/climate on approval: %s", sync_e)
+            def _async_sync(pid: str):
+                from core.database import SessionLocal
+                bg_db = SessionLocal()
+                try:
+                    from services.satellite import sync_project_ndvi
+                    from services.climate import sync_project_climate
+                    sync_project_ndvi(pid, bg_db, backfill_years=3, max_batches=6)
+                    sync_project_climate(pid, bg_db, days=90)
+                except Exception as sync_e:
+                    logger.warning("Error syncing satellite/climate in background for %s: %s", pid, sync_e)
+                finally:
+                    bg_db.close()
+            import threading
+            threading.Thread(target=_async_sync, args=(project.project_id,), daemon=True).start()
 
         # Build response with updated data
         credits_entry = db.query(ProjectCredits).filter(ProjectCredits.project_id == project.project_id).first()

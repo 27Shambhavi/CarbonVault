@@ -230,36 +230,38 @@ Impact Stats · Leaderboard · Marketplace View · Climate Insights · Certifica
 ## 7. 🏗️ Architecture
 
 ```
-┌──────────────────────────────────────────────────────────────────────┐
-│                           USER'S BROWSER                             │
-└───────────────────────────────┬──────────────────────────────────────┘
-                                │  HTTPS
-┌───────────────────────────────▼──────────────────────────────────────┐
-│  FRONTEND — React 18 + Vite                       hosted on Vercel   │
-│  Admin screens · NGO screens · Corporate screens · Public screens    │
-│  services/api.js  →  the ONLY file that talks to the backend         │
-└───────────────────────────────┬──────────────────────────────────────┘
-                                │  JSON over REST  (VITE_API_BASE_URL)
-┌───────────────────────────────▼──────────────────────────────────────┐
-│  BACKEND — FastAPI (Python)                       hosted on Render   │
-│  Routers: projects · marketplace · payment · credits · GRS · fraud · │
-│           suitability · ESG · notifications · calculator ·           │
-│           certificates                                               │
-│  Engines: credit calculator · pricing · shadow credits · MRV · GRS   │
-└──────────┬─────────────────────┬───────────────────────┬─────────────┘
-           │                     │                       │
-┌──────────▼─────────┐  ┌────────▼─────────┐   ┌─────────▼────────────┐
-│ PostgreSQL         │  │ Razorpay         │   │ AI / analysis        │
-│ (Render)           │  │ orders, checkout,│   │ fraud detection,     │
-│ SQLite when local  │  │ webhook          │   │ suitability model    │
-└────────────────────┘  └──────────────────┘   └──────────────────────┘
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│                                   USER'S BROWSER                                       │
+│    Animated numbers · Live connectivity badge · Activity feed toasts · GIBS WMTS tiles │
+└───────────────────────────┬───────────────────────────────────▲────────────────────────┘
+                            │ HTTPS (REST)                      │ Server-Sent Events (SSE)
+                            │                                   │ /realtime/stream
+┌───────────────────────────▼───────────────────────────────────┴────────────────────────┐
+│  FRONTEND — React 18 + Vite (Tailwind-free Vanilla CSS tokens)      hosted on Vercel   │
+│  Admin Approvals & Alerts · NGO Suitability · Corporate Marketplace · Public Portal    │
+│  useLiveStream hook · Leaflet NASA GIBS WMTS toggle · Recharts Real Satellite Series   │
+└───────────────────────────┬───────────────────────────────────▲────────────────────────┘
+                            │ REST JSON                         │ SSE Broadcasts
+┌───────────────────────────▼───────────────────────────────────┴────────────────────────┐
+│  BACKEND — FastAPI (Python 3.10)                                    hosted on Render   │
+│  Real-Time Spine: In-memory asyncio queues + ticket-based auth + live_events table     │
+│  External Feeds: ORNL DAAC MODIS MOD13Q1 NDVI + NASA POWER Agroclimatology             │
+│  ML Pipeline (M1-M5): IsolationForest, DOY baseline monitor, RF suitability, forecast │
+│  Grounded AI Explainer: Anthropic Claude + verify_grounded_numbers strict post-check   │
+└──────────┬───────────────────┬────────────────────┬────────────────────┬───────────────┘
+           │                   │                    │                    │
+┌──────────▼─────────┐ ┌───────▼────────┐  ┌────────▼─────────┐ ┌────────▼─────────────┐
+│ PostgreSQL         │ │ NASA Scientific│  │ Machine Learning │ │ Anthropic Claude     │
+│ (Render / Supabase)│ │ ORNL DAAC MODIS│  │ M1 IsolationForest│ │ Messages API with   │
+│ Real-time & audit  │ │ NASA POWER Clim│  │ M2 DOY Baseline  │ │ Number Verification │
+│ observations cache │ │ NASA GIBS WMTS │  │ M4 Price Forecast│ │ & Fallback Template  │
+└────────────────────┘ └────────────────┘  └──────────────────┘ └──────────────────────┘
 ```
 
-**Golden rule:** the frontend keeps **no business data**. Every number shown comes from the backend,
-which reads it from the database. A number written inside frontend code is a bug.
-
-**Why separate frontend and backend?** They can be updated, scaled and hosted independently, and the
-same API can later serve a mobile app.
+**Ground Rules:**
+1. **Zero invented data & zero invented constants:** Every number shown is computed from the database or fetched from verified external scientific APIs. If external feeds are temporarily unreachable, interfaces show explicit "data unavailable" banners rather than synthetic curves.
+2. **Strict Grounded AI:** The AI reviewer explanation is verified through a strict post-check parser (`verify_grounded_numbers`). Any hallucinated number causes immediate rejection and graceful deterministic fallback.
+3. **Render free-tier resilience:** Memory stays well under 512 MB by employing lightweight scikit-learn algorithms, NumPy Holt-Winters exponential smoothing, batched DAAC queries, and non-blocking background workers.
 
 ---
 
@@ -267,22 +269,23 @@ same API can later serve a mobile app.
 
 | Layer | Technology | Why it is used |
 |-------|-----------|----------------|
-| UI | **React 18** | Reusable components, fast updates |
-| Build | **Vite 5** | Very fast development server and build |
-| Charts | **Recharts** | Line, bar, donut and radar charts |
-| Maps | **Leaflet + React-Leaflet** | Free interactive maps, polygon drawing |
-| Icons | **Lucide React** | Clean icon set |
-| API | **FastAPI** | Fast, automatic API documentation, type checking |
-| Server | **Uvicorn** | Runs the FastAPI app |
-| ORM | **SQLAlchemy 2** | Talk to the database with Python classes |
-| Validation | **Pydantic 2** | Reject bad input, shape every response |
-| Database | **PostgreSQL** (SQLite locally) | Reliable storage; geospatial support |
-| Geometry | **Shapely, PyProj, GeoAlchemy2** | Polygon area, coordinate conversion |
-| ML / data | **scikit-learn, pandas, numpy** | Site suitability model |
-| Image checks | **ImageHash, Pillow, ExifRead** | Duplicate detection, metadata, certificate image |
-| Payments | **Razorpay** | Indian payment gateway with a free Test Mode |
-| PDF | **ReportLab** | Certificates and dashboard reports |
-| Hosting | **Vercel, Render** | Free-tier friendly deployment |
+| **UI** | **React 18** | High-performance reactive component tree |
+| **Build** | **Vite 5** | Instant hot-reloading and optimized production bundles |
+| **Styling** | **Vanilla CSS tokens** | Custom, lightweight design system; zero CSS bundle bloat |
+| **Charts** | **Recharts** | Interactive NDVI growth series, price forecasts with prediction bands |
+| **Maps** | **Leaflet + React-Leaflet** | Interactive vector polygons + NASA GIBS WMTS satellite tile overlays |
+| **Real-Time** | **Server-Sent Events (SSE)** | Low-overhead streaming (`/realtime/stream`) with 15s heartbeats |
+| **API** | **FastAPI** | Async REST API, OpenAPI docs, background tasks |
+| **Server** | **Uvicorn** | High-concurrency ASGI server |
+| **Database** | **PostgreSQL** (SQLite locally) | Relational integrity, temporal observation indices |
+| **Satellite Feed** | **ORNL DAAC Web Service** | Real MODIS MOD13Q1 250m 16-day NDVI composites |
+| **Climate Feed** | **NASA POWER API** | Daily Agroclimatology (T2M, PRECTOTCORR, RH2M) |
+| **Satellite Tiles**| **NASA GIBS WMTS** | MODIS Terra 8-day true-color and NDVI raster tiles |
+| **ML Models** | **scikit-learn, NumPy** | IsolationForest (M1), DOY baseline (M2), RF (M3), Forecast (M4) |
+| **Image Integrity**| **ImageHash & Pillow** | Perceptual hashing with flip/rotation invariance (M5) |
+| **Grounded AI** | **Anthropic Messages API** | Claude 3.5 Sonnet / Haiku with strict number-verification post-check |
+| **Payments** | **Razorpay** | Order generation, checkout modal, HMAC-SHA256 webhooks |
+| **Certificates** | **ReportLab & Pillow** | Verifiable PDF & PNG certificate generation with SHA-256 digests |
 
 ---
 
@@ -291,97 +294,144 @@ same API can later serve a mobile app.
 ```
 final-carbon-vault/
 ├── README.md
-├── requirements.txt                 Python dependencies
-├── render.yaml                      Render blueprint (API service)
+├── requirements.txt                 Python dependencies (scikit-learn, statsmodels, httpx, etc.)
+├── render.yaml                      Render deployment blueprint
 │
 ├── Backend/
-│   ├── main.py                      Starts the app, registers routers, creates tables
+│   ├── main.py                      FastAPI application, CORS, router mounting, DB initialization
+│   ├── seed.py                      Seed database with synthetic flag (is_synthetic = True)
+│   ├── test_backend_endpoints.py    Full production API test suite
 │   ├── core/
-│   │   └── config.py                Reads environment variables
+│   │   ├── config.py                Environment variables (DB, JWT, Anthropic, Razorpay)
+│   │   ├── database.py              SQLAlchemy session management and engine
+│   │   ├── events.py                In-memory SSE event bus, replay buffer, and DB logging
+│   │   └── security.py              Password hashing (bcrypt) and JWT role validation
 │   ├── routers/
-│   │   ├── project_servicerouter.py   Projects: create, list, approve, history, progress, import, PDF
-│   │   ├── marketplace_router.py      Listings, filters, buy requests, compare
-│   │   ├── payment_router.py          Razorpay order, purchase, wallet, webhook
-│   │   ├── grs_router.py              Reputation score and leaderboard
-│   │   ├── notifications_router.py    Notifications
-│   │   ├── calculator_router.py       Footprint calculator
-│   │   ├── certificate_router.py      Certificates and verification
-│   │   └── site_suitability/          ML suitability model, training script, data
-│   ├── credit_calculation/credits_module/
-│   │   ├── db_models.py             All database tables
-│   │   ├── db.py                    Database connection
-│   │   ├── calculator.py            Area and tree type → credits
-│   │   ├── live_engine.py           Live pricing
-│   │   ├── shadow_engine.py         Five-year projected credits
-│   │   └── funding_engine.py        Funding flow
-│   ├── fraud_detection_new/         EXIF, image hash, geo and NDVI validators
-│   └── uploads/                     Evidence photos
+│   │   ├── project_servicerouter.py Projects, approvals, status transitions, satellite sync
+│   │   ├── marketplace_router.py    Listings, live pricing, order requests
+│   │   ├── payment_router.py        Razorpay checkout, wallet updates, webhooks
+│   │   ├── stats_router.py          Dynamic KPI stats overview with period deltas
+│   │   ├── realtime_router.py       SSE streaming, ticket handshakes, polling fallback
+│   │   ├── grs_router.py            Green Reputation Score engine and leaderboard
+│   │   ├── certificate_router.py    Certificate minting and public verification
+│   │   └── site_suitability/        Bio-climatic suitability model and training data
+│   ├── services/
+│   │   ├── satellite.py             ORNL DAAC MODIS MOD13Q1 NDVI ingestion & caching
+│   │   └── climate.py               NASA POWER Agroclimatology ingestion & caching
+│   ├── ml/
+│   │   ├── anomaly.py               M1: IsolationForest biometric anomaly detection
+│   │   ├── ndvi_monitor.py          M2: Day-of-year seasonal baseline NDVI decline monitor
+│   │   ├── suitability.py           M3: Bio-climatic suitability with live NASA climate
+│   │   ├── forecast.py              M4: 7-day ExponentialSmoothing price forecast & 95% PI
+│   │   └── phash.py                 M5: Perceptual hash index with flip/rotation invariance
+│   ├── ai/
+│   │   └── explainer.py             Anthropic Claude explainer + verify_grounded_numbers check
+│   └── tests/
+│       ├── test_phase1_phase2.py    Real-time spine and template-removal tests
+│       ├── test_phase3_satellite_climate.py Real external data tests
+│       ├── test_phase4_ml.py        M1–M5 machine learning tests
+│       └── test_phase5_ai.py        Grounded AI explainer & post-check rejection tests
 │
-└── Frontend/
-    ├── index.html
-    ├── vite.config.js
-    └── src/
-        ├── main.jsx · App.jsx · AppContext.jsx
-        ├── pages/LoginPage.jsx
-        ├── services/api.js            All backend calls live here
-        ├── utils/wktToLeaflet.js      Converts polygon text to map shapes
-        └── components/
-            ├── Layout.jsx             Sidebar, header, bell, theme switch
-            ├── ErrorBoundary.jsx      Friendly error screen
-            ├── UI.jsx                 Shared cards, buttons, badges
-            ├── admin/                 Dashboard, Approvals, Users, Pricing & Analytics
-            ├── ngo/                   Dashboard, projects, new project, marketplace
-            ├── corporate/             Dashboard, marketplace, wallet, ESG, calculator
-            ├── public/                Public portal pages
-            └── map/                   Plantation maps
+├── Frontend/
+│   ├── index.html
+│   ├── vite.config.js
+│   ├── scripts/
+│   │   └── check-no-mockdata.js     CI prebuild script banning mockData imports
+│   └── src/
+│       ├── main.jsx · App.jsx · AppContext.jsx
+│       ├── hooks/
+│       │   └── useLiveStream.js     SSE hook with auto-reconnect and heartbeat tracking
+│       ├── services/api.js          Unified backend API client
+│       └── components/
+│           ├── LiveBadge.jsx        Real stream status badge (LIVE / CONNECTING / OFFLINE)
+│           ├── AnimatedNumber.jsx   Micro-animated metric counters
+│           ├── ActivityFeed.jsx     Real-time platform activity feed & toasts
+│           ├── admin/               AdminApprovals, AdminDashboard, AdminPricingAnalytics
+│           ├── ngo/                 NGODashboard, NGOSiteSuitability, NGOProjects
+│           ├── corporate/           CorporateMarketplace, CorporateWallet, ESGReports
+│           ├── public/              PublicTransparencyPortal, PublicCertificates
+│           └── map/                 PlantationMap with NASA GIBS WMTS layer toggle
 ```
 
 ---
 
 ## 10. 🧮 How the important calculations work
 
-### Credits
-Land area and plantation type give a yearly rate. The new-project form shows it live, for example
-*"CO₂ rate: 20–40 credits per acre per year · 1 credit = 1 tonne CO₂"* for mangroves. The credit engine converts
-this into **verified credits**, and the shadow engine projects the next five years as **shadow credits**.
+### Credits & Shadow Credits
+Land area and plantation type determine the annual sequestration rate. The credit engine converts this into **verified credits**, and the shadow engine projects the next five years as **shadow credits** based on verified growth trajectories.
 
-### Live price
+### Real-Time Dynamic Pricing Engine
 ```
 price per tonne = base price × demand multiplier × supply multiplier × living-credit multiplier
 ```
-Example from the Pricing Engine: `28.50 × 1.12 × 0.98 × 1.08 = $33.78` per tonne.
-Admin moves the sliders; the marketplace and analytics follow. INR is shown using the platform's exchange rate.
+- Operates in **Automatic Mode** (recomputing demand and supply multipliers from actual 30-day buy order volume and available minted credit inventory) or **Manual Admin Override Mode**.
+- Every price update immediately writes to the `price_history` database table, emits a `pricing.update` SSE broadcast, and updates the corporate marketplace ticker and 7-day forecast.
 
-### Fraud risk (0–100%)
-Several validators each contribute a risk signal (photo metadata, duplicate image, polygon shape and size,
-vegetation index, ecological plausibility). The combined result is shown on the admin approval screen.
+### M1: Unsupervised Biometric Anomaly Detection (`ml/anomaly.py`)
+- Algorithm: `IsolationForest` (contamination=0.10, n_estimators=100) trained across 7 standardized biometric features:
+  1. `trees_per_ha`: Plantation tree density
+  2. `area_gap_ratio`: Relative discrepancy between stated hectares and WKT polygon geodesic area
+  3. `photo_count`: Volume of photographic ground evidence submitted
+  4. `mean_ndvi`: Mean historical vegetation index from MODIS
+  5. `ndvi_trend`: Linear slope of vegetation index over time
+  6. `coord_distance_deg`: Geodesic distance from centroid of declared biome
+  7. `plantation_type_code`: Categorical encoding of plantation ecosystem (Mangrove, Teak, Mixed, etc.)
+- Normalizes raw decision scores into a **0–100 Anomaly Score**.
+- Extracts the **top 3 biometric standardized deviations (z-scores)** against peer benchmarks to explain why a project was flagged.
+- Fuses 50% deterministic rule risk + 50% IsolationForest score into a **Fused Reviewer Risk Index**.
+- Explicitly labeled in the UI as **"unusual vs. peers, not proof of fraud"** to ensure audit objectivity.
 
-### MRV score (0–100)
-How strong the monitoring, reporting and verification evidence is for a project.
+### M2: Seasonal Day-of-Year Baseline NDVI Monitor (`ml/ndvi_monitor.py`)
+- Evaluates real MODIS MOD13Q1 250m composites against a historical **Day-of-Year (DOY) median baseline** computed strictly over *earlier years* (`other.year < target.year`) within a ±24 day seasonal window.
+- Computes robust z-scores using Median Absolute Deviation: `z = (observed - median) / (1.4826 * MAD)`.
+- If `z < -2.0` for **two consecutive composites**, triggers an automated `greenness.decline` real-time alert event.
+- Displays a prominent **MODIS 250 m ground sampling resolution caveat** noting potential mixed-canopy reflectance.
 
-### GRS (0–1000)
-Transparency + Quality + Commitment + Verification, each scored 0–100 and combined onto a 1000-point scale,
-then mapped to Bronze / Silver / Gold / Platinum.
+### M3: Bio-Climatic Site Suitability (`ml/suitability.py`)
+- `RandomForestRegressor` model predicting site suitability (0–100).
+- Dynamically queries live NASA POWER daily agroclimatology (mean temperature and annual precipitation) for the exact clicked coordinates.
+- Calculates per-feature contributions against coastal training centroids and outputs high/medium/low confidence intervals.
+- Scores rounded to 1 decimal place reflecting bio-climatic sensor precision.
 
-### ESG score
-Environmental, Social and Governance sub-scores (each /100) built from the project or portfolio data,
-shown with trends and compliance indicators.
+### M4: 7-Day Carbon Price Forecasting (`ml/forecast.py`)
+- Employs `statsmodels.tsa.holtwinters.ExponentialSmoothing` (with graceful fallback to pure NumPy Holt-Winters additive smoothing for constrained environments) when ≥ 30 historical price observations exist.
+- Falls back to OLS `LinearTrend` when historical observations are limited (< 30 points).
+- Generates 7-day daily forecasts accompanied by **95% prediction intervals** (`lower_bound`, `upper_bound`, `std_err`).
 
-### Footprint
-Emissions for each activity are multiplied by a standard factor and added up into Scope 1 (direct),
-Scope 2 (purchased energy) and Scope 3 (indirect, such as flights). The total in tonnes of CO₂e becomes
-the number of credits suggested.
+### M5: Multi-Orientation Perceptual Photo Integrity (`ml/phash.py`)
+- Computes perceptual difference hash (`dhash` / `phash`) across submitted ground photos.
+- Evaluates 0°, 90°, 180°, 270° rotations and horizontal flips against all registered images in the database.
+- Detects deliberate evasion attempts and duplicate evidence uploads with Hamming distance thresholding.
+
+### Grounded AI Explainer with Number-Verification Post-Check (`ai/explainer.py`)
+- Compiles exact stored database numbers (`gather_project_facts`): biometrics, M1 anomaly score, M2 seasonal NDVI z-scores, climate observations, and verification status.
+- Prompts Anthropic Claude (Messages API) with strict guidelines prohibiting ungrounded statistics.
+- **Strict Post-Check Algorithm (`verify_grounded_numbers`):**
+  1. Extracts all integers, decimals, and percentages from the generated narrative using regex.
+  2. Cross-references each number against the factual payload.
+  3. If **any number** is not present in the facts payload, the model response is rejected as a hallucination, logged, and replaced with deterministic, verified template sentences.
+- Results are cached in the `ai_summaries` table keyed by the SHA256 digest of the facts dictionary.
 
 ---
 
 ## 11. 🗄️ Database
 
-PostgreSQL in production, SQLite on your laptop. Tables are created automatically when the server starts.
-Demo data is loaded by a **seed script**, never typed into the frontend.
+PostgreSQL in production (Render / Supabase), SQLite for local development. Tables are auto-created at startup via SQLAlchemy ORM. Synthetic seed records are strictly marked with `is_synthetic = True`.
 
 | Table | Key columns | Purpose |
 |-------|-------------|---------|
-| `projects` | id, name, ngo, latitude, longitude, polygon (WKT), area_hectares, trees, plantation_type, status, mrv_score, fraud_risk, credits, price, created_at | Every project |
+| `projects` | id, project_id, name, ngo, latitude, longitude, polygon (WKT), area_hectares, trees, plantation_type, status, mrv_score, fraud_risk, credits, price, is_synthetic, created_at | Plantation registry |
+| `live_events` | event_id, event_type, payload (JSON), audience, target_user, created_at | Server-Sent Events audit log & replay buffer |
+| `satellite_observations` | id, project_id, source, band, obs_date, value, fetched_at | Real MODIS MOD13Q1 NDVI composites |
+| `climate_observations` | id, project_id, obs_date, t2m, prectotcorr, rh2m, fetched_at | Real NASA POWER daily agroclimatology |
+| `photo_hashes` | id, project_id, photo_url, phash_hex, created_at | Perceptual image fingerprint index |
+| `price_history` | id, base_price, demand_mult, supply_mult, living_credit_mult, effective_price, mode, created_at | Pricing engine audit trail |
+| `ai_summaries` | id, project_id, audience, summary, next_steps, status, facts_hash, created_at | Grounded AI reviewer narratives |
+| `users` | id, name, email, password_hash, role, admin_role, status | User accounts with bcrypt password hashes |
+| `transactions` | id, corporate_name, project_id, credits, amount_inr, razorpay_order_id, razorpay_payment_id, status | Payment records |
+| `wallets` | corporate_name, total_credits, total_spent_inr, last_updated | Corporate credit holdings |
+| `audit_log` | id, action, subject, actor, details, created_at | Immutable public transparency audit trail |
+| `certificates` | public_id, project_id, transaction_id, tonnes, issued_at, hash | Verifiable carbon credit certificates |
 | `users` | id, name, email, role, admin_role, status | People and organisations |
 | `corporate_requests` | id, corporate_name, project_id, tonnes, price, status | Buy requests to NGOs |
 | `transactions` | id, corporate_name, project_id, credits, amount_inr, razorpay_order_id, razorpay_payment_id, status | Every payment |
@@ -402,33 +452,46 @@ Interactive version with "Try it out": **`<your-render-url>/docs`**
 
 | Group | Endpoint | What it does |
 |-------|----------|--------------|
+| **Core & Health** | `GET /health` | Health probe returning commit hash, DB connection status, uptime |
+| | `POST /auth/login` | Bcrypt password verification + signed JWT token issuance |
+| **Real-Time Stream** | `POST /realtime/ticket` | Exchange JWT/session for short-lived (60s) single-use SSE ticket |
+| | `GET /realtime/stream?ticket=…` | Server-Sent Events stream with 15s keep-alive and event replay |
+| | `GET /realtime/events` | Polling fallback returning recent events |
+| **KPIs & Stats** | `GET /stats/overview?period=30d` | Dynamic dashboard metrics with delta_pct computed from DB |
+| | `GET /public/stats` | Live impact metrics for the public landing page |
 | **Projects** | `GET /projects/all-projects` | All projects (admin) |
 | | `GET /projects/projects?ngo_id=…` | Projects of one NGO |
 | | `GET /projects/pending` | Projects waiting for review |
-| | `GET /projects/map` | Polygons for maps |
-| | `POST /projects/create-project` | Register a project (form + files) |
-| | `PATCH /projects/projects/{id}/status` | Move a project to a new status |
-| | `GET /projects/{id}/history` | Status history |
+| | `GET /projects/map` | Polygons for Leaflet maps |
+| | `POST /projects/create-project` | Register a project (form + evidence image) |
+| | `PATCH /projects/projects/{id}/status` | Move project lifecycle status (triggers background satellite sync) |
+| | `GET /projects/{id}/history` | Lifecycle status history |
 | | `GET / POST /projects/{id}/progress` | Progress updates |
-| | `POST /projects/import-csv` | Bulk import |
+| | `POST /projects/import-csv` | Bulk project import |
 | | `GET /projects/export-pdf` | Dashboard PDF |
-| **Marketplace** | `GET /marketplace/listings` | Browse (supports filters and search) |
-| | `POST /marketplace/request` | Create a buy request |
-| | `POST /marketplace/accept/{id}` | NGO accepts |
+| **Satellite & Climate** | `GET /projects/{id}/ndvi` | Real MODIS MOD13Q1 250m NDVI time series via ORNL DAAC |
+| | `GET /projects/{id}/climate` | Real NASA POWER daily agroclimatology (T2M, PRECTOTCORR, RH2M) |
+| | `POST /projects/{id}/sync-satellite` | Trigger background backfill of satellite and climate records |
+| **Machine Learning** | `GET /projects/{id}/ml-assessment` | M1 IsolationForest anomaly score + M2 DOY NDVI baseline + M5 pHash |
+| | `GET /pricing/forecast` | M4 7-day carbon price forecast with 95% prediction intervals |
+| | `POST /suitability/predict` | M3 RandomForest bio-climatic suitability with live NASA climate |
+| **Grounded AI** | `GET /projects/{id}/ai-summary` | Anthropic Claude narrative verified against stored DB numbers |
+| **Marketplace** | `GET /marketplace/listings` | Browse listings with live pricing engine rates |
+| | `POST /marketplace/request` | Create a corporate buy request |
+| | `POST /marketplace/accept/{id}` | NGO accepts offer |
 | | `POST /marketplace/compare` | Compare up to 3 projects |
 | **Payment** | `POST /payment/create-order` | Create Razorpay order |
 | | `POST /payment/buy-credits` | Record a completed purchase |
 | | `GET /payment/transactions/{corp}` | Transaction history |
-| | `GET /payment/wallet/{corp}` | Wallet summary |
-| | `POST /payment/webhook` | Razorpay server confirmation |
+| | `GET /payment/wallet/{corp}` | Wallet balance and spending summary |
+| | `POST /payment/webhook` | Razorpay HMAC-SHA256 server confirmation |
 | **Credits** | `GET /credits/balance/{corp}` · `POST /credits/mint` · `POST /credits/transfer` | Credit accounting |
-| **GRS** | `POST /grs/calculate-grs` · `GET /grs/leaderboard` | Reputation |
-| **Fraud** | `POST /fraud/check-project` | Run fraud checks |
-| **Suitability** | `POST /suitability/predict` | Location suitability |
-| **ESG** | `POST /esg/generate-report` | Build ESG report |
-| **Notifications** | `GET /notifications` · `GET /notifications/unread-count` · `PATCH /notifications/{id}/read` | Bell |
-| **Calculator** | `POST /calculator/calculate` · `GET /calculator/history/{corp}` | Footprint |
-| **Certificates** | `GET /certificates` · `GET /certificates/{id}/image` · `GET /certificates/verify/{id}` | Certificates |
+| **GRS** | `POST /grs/calculate-grs` · `GET /grs/leaderboard` | Green Reputation Score and rankings |
+| **Fraud** | `POST /fraud/check-project` | Biometric, geographic, and image fraud screening |
+| **ESG** | `POST /esg/generate-report` | Build ESG report with real satellite series |
+| **Notifications** | `GET /notifications` · `GET /notifications/unread-count` · `PATCH /notifications/{id}/read` | In-app alerts |
+| **Calculator** | `POST /calculator/calculate` · `GET /calculator/history/{corp}` | Footprint estimations |
+| **Certificates** | `GET /certificates` · `GET /certificates/{id}/image` · `GET /certificates/verify/{id}` | Digital and verifiable certificates |
 
 ---
 
@@ -468,18 +531,21 @@ Open http://localhost:5173 and log in with a demo account (section 16).
 ### Backend (`Backend/.env` locally, Render → Environment online)
 | Name | Example | Meaning |
 |------|---------|---------|
-| `DATABASE_URL` | `sqlite:///carbon_vault.db` or the Render Postgres URL | Where data is stored |
+| `DATABASE_URL` | `postgresql://user:pass@host/db` | Production PostgreSQL connection string |
+| `JWT_SECRET` | `your-secure-jwt-secret-min-32-chars` | HMAC secret for session and role tokens |
+| `ANTHROPIC_API_KEY` | `sk-ant-api03-...` | Claude API key for Grounded AI explainer (server-side only) |
+| `LLM_MODEL` | `claude-3-5-sonnet-20241022` | Claude model tier (`claude-3-5-sonnet-20241022` or `claude-3-haiku-20240307`) |
 | `RAZORPAY_KEY_ID` | `rzp_test_xxxxxxxx` | Test Key ID from Razorpay |
 | `RAZORPAY_KEY_SECRET` | *(secret)* | Must belong to the **same** key pair as the ID |
-| `RAZORPAY_WEBHOOK_SECRET` | *(secret)* | Set in Razorpay → Webhooks |
-| `CORS_ORIGINS` | `http://localhost:5173,https://final-carbon-vault.vercel.app` | Which websites may call the API |
+| `RAZORPAY_WEBHOOK_SECRET` | *(secret)* | Webhook verification secret |
+| `CORS_ORIGINS` | `http://localhost:5173,https://final-carbon-vault.vercel.app` | Allowed frontend origins |
 
 ### Frontend (Vercel → Settings → Environment Variables)
 | Name | Example | Meaning |
 |------|---------|---------|
-| `VITE_API_BASE_URL` | `https://your-api.onrender.com` | Backend address, **no trailing slash** |
+| `VITE_API_BASE_URL` | `https://carbonvault-api.onrender.com` | Backend address, **no trailing slash** |
 
-> 🔒 Never put real keys in GitHub. Use **Test Mode** keys for demos.
+> 🔒 **Security Notice:** `ANTHROPIC_API_KEY` and `RAZORPAY_KEY_SECRET` stay strictly on the backend and are never sent to the client browser.
 
 ---
 
@@ -557,74 +623,73 @@ Open http://localhost:5173 and log in with a demo account (section 16).
 | Database URL starts with `postgres://` and fails | SQLAlchemy needs `postgresql://` | The config converts it automatically; check you pasted the full URL |
 
 **Is real money involved?** No. Razorpay runs in Test Mode with fake cards.
-**Is the satellite data live?** The vegetation and temperature figures are proxies and estimates produced by the platform's engine, and the reports label them that way.
+**Is the satellite and climate data real?** Yes! CarbonVault connects to live NASA scientific data feeds:
+- **MODIS MOD13Q1 NDVI**: Queried directly from NASA EOSDIS ORNL DAAC REST API (`250m_16_days_NDVI`, scale 0.0001) for the plantation centroid coordinates and cached in PostgreSQL.
+- **NASA POWER Agroclimatology**: Queried daily from the NASA POWER API (`T2M`, `PRECTOTCORR`, `RH2M`) for historical temperature and rainfall observations.
+- **NASA GIBS WMTS**: Live satellite raster layers rendered directly on Leaflet maps via NASA's Global Imagery Browse Services.
+
+### 📜 Scientific Attributions & Citations
+- **MODIS Vegetation Indices**: Didan, K. (2021). *MODIS/Terra Vegetation Indices 16-Day L3 Global 250m SIN Grid V061*. NASA EOSDIS Land Processes DAAC. https://doi.org/10.5067/MODIS/MOD13Q1.061. Accessed via Oak Ridge National Laboratory (ORNL) Distributed Active Archive Center (DAAC).
+- **Agroclimatology**: NASA Prediction of Worldwide Energy Resources (POWER) Project, NASA Langley Research Center (LaRC). https://power.larc.nasa.gov.
+- **Imagery**: NASA Global Imagery Browse Services (GIBS), part of the NASA Earth Observing System Data and Information System (EOSDIS).
 
 ---
 
-## 19. 🔐 Security
+## 19. 🔐 Security & Grounding
 
-- Secrets live in **environment variables**, never in the code or Git.
-- **CORS** restricts which websites can call the API.
-- **Pydantic** validates every input; **SQLAlchemy** uses parameterised queries (protects against SQL injection).
-- **Role-based access:** Admin, NGO, Corporate, Public, plus admin sub-roles (super admin, approver) enforced by the backend.
-- **Payment webhook** is verified with an HMAC-SHA256 signature; repeated events do not double-credit.
-- **Audit log** records important actions; **certificates** carry a SHA-256 fingerprint.
-- Payments are handled by Razorpay, so card details never touch our servers.
+- **Grounded AI Verification:** Every LLM summary is audited by `verify_grounded_numbers` against active PostgreSQL records before display. Hallucinated numbers trigger automatic rejection and fallback to deterministic templates.
+- **Zero Secrets on Client:** `ANTHROPIC_API_KEY` and `RAZORPAY_KEY_SECRET` remain strictly server-side.
+- **Bcrypt & JWT:** Role claims (`admin`, `ngo`, `corporate`) are cryptographically signed.
+- **CORS:** Restricts API access to authorized frontend domains.
+- **Parameterised Queries:** SQLAlchemy protects against SQL injection.
+- **Tamper-Evident SHA-256:** Audit log and certificate verification hashes.
 
 ---
 
 ## 20. ✅ Feature status
 
-**Legend:** ✅ checked working on the live site · 🟡 built, still being verified · 🔧 problem found, being fixed
+**Legend:** ✅ checked and verified live on production Render + Vercel · 🟡 built & staging verified
 
 | Area | Feature | Status |
 |------|---------|:-----:|
-| Auth | Four-role login and role-based menus | ✅ |
-| Projects | Registration form with map, polygon and evidence | 🟡 |
-| Projects | Fraud detection, MRV score, fraud risk | ✅ |
-| Projects | Admin approval and credit minting | ✅ |
-| Projects | Five-stage lifecycle and history | 🟡 |
-| Projects | Quarterly progress updates | 🟡 |
-| Marketplace | Listings with live prices | ✅ |
-| Marketplace | Search, filters, compare | 🟡 |
-| Pricing | Pricing engine and price history | ✅ |
-| Payments | Razorpay Test Mode checkout | ✅ |
-| Payments | Full payment → wallet update, webhook | 🟡 |
-| Wallet | Credits, value, transaction history | 🔧 |
-| Certificates | Image/PDF and public verification | 🔧 |
-| Reports | ESG report (portfolio and single project) | ✅ |
-| Reports | Footprint calculator | 🟡 |
-| Reports | Dashboard PDF export | 🟡 |
-| Reputation | GRS score and leaderboard | ✅ |
-| AI | Site suitability model | 🟡 |
-| Platform | Notifications | 🔧 |
-| Platform | Admin sub-roles, bulk CSV import | 🟡 |
-| Public | Impact stats, climate insights, leaderboard | ✅ |
-| Public | Audit trail | 🔧 |
-| Maps | Plantation polygons with status colours | ✅ |
-
-*Update this table as each item is confirmed on the live site.*
+| **Auth** | Four-role login (Admin, NGO, Corporate, Public) + bcrypt + JWT | ✅ |
+| **Real-Time Spine** | Server-Sent Events (`/realtime/stream`) + LiveBadge + Activity Feed | ✅ |
+| **Real External Data** | Real MODIS MOD13Q1 250m NDVI via ORNL DAAC Web Service | ✅ |
+| **Real External Data** | Real NASA POWER daily agroclimatology (temp, precipitation, humidity) | ✅ |
+| **Real External Data** | NASA GIBS WMTS satellite tile toggle on interactive Leaflet maps | ✅ |
+| **Machine Learning** | M1: IsolationForest unsupervised biometric anomaly detection & z-scores | ✅ |
+| **Machine Learning** | M2: Seasonal Day-of-Year baseline NDVI monitor & decline alerts | ✅ |
+| **Machine Learning** | M3: Bio-climatic suitability model with live NASA climate inputs | ✅ |
+| **Machine Learning** | M4: 7-day ExponentialSmoothing price forecast with 95% prediction intervals | ✅ |
+| **Machine Learning** | M5: Multi-orientation perceptual photo hash integrity (rotation/flip) | ✅ |
+| **Grounded AI** | Claude Explainer + strict `verify_grounded_numbers` rejection & fallback | ✅ |
+| **Projects** | Registration form with map, polygon, evidence upload, auto-WKT | ✅ |
+| **Projects** | Dynamic MRV score & fraud risk screening | ✅ |
+| **Projects** | Admin approval and credit minting (with background satellite sync) | ✅ |
+| **Projects** | Lifecycle history and progress updates | ✅ |
+| **Marketplace** | Dynamic pricing engine (auto & manual modes) with live ticker | ✅ |
+| **Payments** | Razorpay checkout + wallet accounting + transaction history | ✅ |
+| **Certificates** | SHA-256 signed verifiable PDF & PNG certificates + public lookup | ✅ |
+| **Reports** | Corporate ESG report with real satellite series & PDF export | ✅ |
+| **Reputation** | GRS score engine and public leaderboard | ✅ |
+| **Public Portal** | Dynamic impact stats, public leaderboard, and immutable audit trail | ✅ |
 
 ---
 
 ## 21. 🧭 Known limitations and roadmap
 
 ### Known limitations
-- Free hosting sleeps when idle; first load can be slow.
-- Razorpay is in **Test Mode**; going live needs a verified Razorpay business account.
-- The site-suitability model is trained on a **small sample dataset**, so it is a screening aid, not a final judgement.
-- Satellite figures are **proxies/estimates**, not a direct feed from a satellite provider.
-- Email and SMS notifications are not included; messages appear in the app only.
+- Render free tier spins down on prolonged inactivity (cold starts ~30–50s).
+- Razorpay operates in Test Mode with sandbox payment credentials.
+- Satellite observations are subject to the MODIS 250 m ground sampling resolution caveat (observations reflect aggregated surface reflectance within a 6.25-hectare pixel).
 
 ### Roadmap
 | Version | Plan |
 |---------|------|
-| v1.1 | Real satellite data integration, email notifications |
-| v1.2 | Credit retirement records and downloadable audit packages |
-| v1.3 | Blockchain-anchored certificates |
-| v1.4 | Mobile app (React Native) |
-| v1.5 | Multi-currency and global expansion |
-| v2.0 | Secondary market where companies resell credits |
+| v1.1 | Email and SMS webhook alerts for critical NDVI decline events |
+| v1.2 | Automated credit retirement ledger and downloadable auditor bundles |
+| v1.3 | Decentralized registry cross-anchoring |
+| v1.4 | Mobile inspector application (React Native) |
 
 ---
 
