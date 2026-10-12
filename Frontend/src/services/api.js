@@ -167,6 +167,21 @@ export async function fetchMapPendingProjects() {
   return res;
 }
 
+/** Real MODIS NDVI observations (ORNL DAAC Web Service) */
+export async function fetchProjectNdvi(projectId) {
+  return request(`${API_BASE}/projects/${projectId}/ndvi`);
+}
+
+/** Real NASA POWER agroclimatology observations (Daily T2M, PRECTOTCORR, RH2M) */
+export async function fetchProjectClimate(projectId, days = 90) {
+  return request(`${API_BASE}/projects/${projectId}/climate?days=${days}`);
+}
+
+/** Manually trigger satellite and climate backfill */
+export async function syncProjectSatellite(projectId) {
+  return request(`${API_BASE}/projects/${projectId}/sync-satellite`, { method: 'POST' });
+}
+
 /** Fetch ALL projects (admin) */
 export async function fetchAllProjects() {
   const res = await request(`${API_BASE}/projects/all-projects`);

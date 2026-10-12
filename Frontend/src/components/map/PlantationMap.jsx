@@ -179,8 +179,43 @@ export function ProjectMap({
     );
   }
 
+  const [showGibsNdvi, setShowGibsNdvi] = useState(false);
+
   return (
     <div style={shellStyle}>
+      {/* NASA GIBS WMTS Layer Toggle */}
+      <div style={{
+        position: 'absolute',
+        top: 10,
+        right: 10,
+        zIndex: 1000,
+      }}>
+        <button
+          type="button"
+          onClick={() => setShowGibsNdvi(!showGibsNdvi)}
+          style={{
+            background: showGibsNdvi ? 'rgba(16,185,129,0.92)' : 'rgba(13,17,32,0.88)',
+            color: showGibsNdvi ? '#ffffff' : T.t1,
+            border: `1px solid ${showGibsNdvi ? 'var(--emerald, #10b981)' : T.border2}`,
+            borderRadius: 7,
+            padding: '5px 11px',
+            fontSize: 11,
+            fontWeight: 700,
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            backdropFilter: 'blur(8px)',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+            transition: 'all 0.18s'
+          }}
+          title="Toggle NASA EOSDIS GIBS MODIS Terra NDVI 8-day composite layer"
+        >
+          <span>🛰️</span>
+          <span>{showGibsNdvi ? 'GIBS NDVI: ON' : 'GIBS NDVI Layer'}</span>
+        </button>
+      </div>
+
       <MapContainer
         center={centerTuple}
         zoom={zoom ?? 2}
@@ -189,6 +224,15 @@ export function ProjectMap({
         worldCopyJump
       >
         <TileLayer attribution={TILE_ATTRIB} url={TILE_URL} maxZoom={19} />
+        {showGibsNdvi && (
+          <TileLayer
+            attribution='Imagery &copy; <a href="https://earthdata.nasa.gov/gibs" target="_blank">NASA EOSDIS GIBS</a>'
+            url="https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/MODIS_Terra_NDVI_8Day/default/default/GoogleMapsCompatible_Level9/{z}/{y}/{x}.png"
+            maxZoom={9}
+            opacity={0.72}
+            zIndex={100}
+          />
+        )}
         {bounds && <FitBounds bounds={bounds} />}
 
         {features.flatMap((f) => {

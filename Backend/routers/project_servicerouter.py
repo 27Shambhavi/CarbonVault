@@ -1985,10 +1985,17 @@ def update_project_status(
 
         credit_result = None
 
-        # If approved, auto-calculate credits
+        # If approved, auto-calculate credits and backfill satellite observations
         if target_status == "approved":
             credit_result = calculate_and_store_credits(project, db)
             db.refresh(project)
+            try:
+                from services.satellite import sync_project_ndvi
+                from services.climate import sync_project_climate
+                sync_project_ndvi(project.project_id, db, backfill_years=3, max_batches=6)
+                sync_project_climate(project.project_id, db, days=90)
+            except Exception as sync_e:
+                logger.warning("Error syncing satellite/climate on approval: %s", sync_e)
 
         # Build response with updated data
         credits_entry = db.query(ProjectCredits).filter(ProjectCredits.project_id == project.project_id).first()
@@ -2340,3 +2347,57 @@ def get_projects_pending_map():
         return {"projects": out}
     finally:
         db.close()
+
+
+# -------------------------
+# Real External Satellite & Climate Data (Phase 3)
+# -------------------------
+
+@router.get("/{project_id}/ndvi")
+@router.get("/projects/{project_id}/ndvi")
+def get_project_ndvi(project_id: str):
+    """
+    Return real MODIS NDVI observations for a project.
+    Reads stored satellite observations or triggers live ORNL DAAC backfill.
+    """
+    db = SessionLocal()
+    try:
+        from services.satellite import get_project_ndvi_series
+        return get_project_ndvi_series(project_id, db)
+    finally:
+        db.close()
+
+
+@router.get("/{project_id}/climate")
+@router.get("/projects/{project_id}/climate")
+def get_project_climate(project_id: str, days: int = 90):
+    """
+    Return real NASA POWER daily agroclimatology observations for a project.
+    Reads stored climate observations or triggers live NASA POWER fetch.
+    """
+    db = SessionLocal()
+    try:
+        from services.climate import get_project_climate_series
+        return get_project_climate_series(project_id, db, days=days)
+    finally:
+        db.close()
+
+
+@router.post("/{project_id}/sync-satellite")
+@router.post("/projects/{project_id}/sync-satellite")
+def trigger_project_satellite_sync(project_id: str):
+    """Manually trigger satellite NDVI and NASA POWER climate sync for a project."""
+    db = SessionLocal()
+    try:
+        from services.satellite import sync_project_ndvi
+        from services.climate import sync_project_climate
+        ndvi_count = sync_project_ndvi(project_id, db)
+        climate_count = sync_project_climate(project_id, db)
+        return {
+            "status": "ok",
+            "project_id": project_id,
+            "new_ndvi_observations": ndvi_count,
+            "new_climate_observations": climate_count
+        }
+    finally:
+        db.close()

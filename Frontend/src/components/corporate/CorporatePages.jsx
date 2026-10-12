@@ -927,32 +927,76 @@ export function CorporateESG() {
               </div>
             </div>
 
-            {/* NDVI Trend Chart */}
+            {/* NDVI Real Satellite Series */}
             <div style={{marginBottom:20}} className="chart-container">
-              <div style={{fontSize:12,fontWeight:700,color:T.t2,marginBottom:12}}>NDVI Monthly Trend (Vegetation Index)</div>
-              <ResponsiveContainer width="100%" height={200}>
-                <LineChart data={report.environmental.ndvi_trend}>
-                  <defs><linearGradient id="ndviGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={T.emeraldL} stopOpacity={0.3}/><stop offset="100%" stopColor={T.emeraldL} stopOpacity={0}/></linearGradient></defs>
-                  <XAxis dataKey="month" tick={{fill:T.t3,fontSize:10}} axisLine={false} tickLine={false}/>
-                  <YAxis domain={[0,1]} tick={{fill:T.t3,fontSize:10}} axisLine={false} tickLine={false}/>
-                  <Tooltip content={<ChartTooltip/>}/>
-                  <Line type="monotone" dataKey="value" stroke={T.emeraldL} strokeWidth={2} dot={{r:3,fill:T.emeraldL}} isAnimationActive={false}/>
-                </LineChart>
-              </ResponsiveContainer>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
+                <div style={{fontSize:12,fontWeight:700,color:T.t2}}>
+                  NDVI Satellite Growth Series (MODIS Terra 250m)
+                </div>
+                <div style={{fontSize:10.5,color:T.emeraldL,fontWeight:600}}>
+                  Source: MODIS MOD13Q1 via ORNL DAAC
+                </div>
+              </div>
+              {report.environmental.ndvi_trend && report.environmental.ndvi_trend.length > 0 ? (
+                <ResponsiveContainer width="100%" height={200}>
+                  <LineChart data={report.environmental.ndvi_trend}>
+                    <defs><linearGradient id="ndviGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={T.emeraldL} stopOpacity={0.3}/><stop offset="100%" stopColor={T.emeraldL} stopOpacity={0}/></linearGradient></defs>
+                    <XAxis dataKey="month" tick={{fill:T.t3,fontSize:10}} axisLine={false} tickLine={false}/>
+                    <YAxis domain={['auto', 'auto']} tick={{fill:T.t3,fontSize:10}} axisLine={false} tickLine={false}/>
+                    <Tooltip content={<ChartTooltip/>}/>
+                    <Line type="monotone" dataKey="value" stroke={T.emeraldL} strokeWidth={2} dot={{r:3,fill:T.emeraldL}} isAnimationActive={false}/>
+                  </LineChart>
+                </ResponsiveContainer>
+              ) : (
+                <div style={{textAlign:'center',padding:'36px 0',color:T.t3,fontSize:13,background:'rgba(255,255,255,0.02)',borderRadius:8}}>
+                  no satellite data yet
+                </div>
+              )}
             </div>
 
-            {/* LST Trend Chart */}
+            {/* Real Climate / Temperature Series */}
             <div className="chart-container">
-              <div style={{fontSize:12,fontWeight:700,color:T.t2,marginBottom:12}}>Land Surface Temperature Trend (°C)</div>
-              <ResponsiveContainer width="100%" height={200}>
-                <LineChart data={report.environmental.lst_trend}>
-                  <defs><linearGradient id="lstGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={T.skyL} stopOpacity={0.3}/><stop offset="100%" stopColor={T.skyL} stopOpacity={0}/></linearGradient></defs>
-                  <XAxis dataKey="month" tick={{fill:T.t3,fontSize:10}} axisLine={false} tickLine={false}/>
-                  <YAxis domain={[20,28]} tick={{fill:T.t3,fontSize:10}} axisLine={false} tickLine={false}/>
-                  <Tooltip content={<ChartTooltip/>}/>
-                  <Line type="monotone" dataKey="value" stroke={T.skyL} strokeWidth={2} dot={{r:3,fill:T.skyL}} isAnimationActive={false}/>
-                </LineChart>
-              </ResponsiveContainer>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
+                <div style={{fontSize:12,fontWeight:700,color:T.t2}}>
+                  2m Air Temperature Series (°C)
+                </div>
+                <div style={{fontSize:10.5,color:T.skyL,fontWeight:600}}>
+                  Source: NASA POWER Agroclimatology
+                </div>
+              </div>
+              {report.environmental.lst_trend && report.environmental.lst_trend.length > 0 ? (
+                <ResponsiveContainer width="100%" height={200}>
+                  <LineChart data={report.environmental.lst_trend}>
+                    <defs><linearGradient id="lstGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={T.skyL} stopOpacity={0.3}/><stop offset="100%" stopColor={T.skyL} stopOpacity={0}/></linearGradient></defs>
+                    <XAxis dataKey="month" tick={{fill:T.t3,fontSize:10}} axisLine={false} tickLine={false}/>
+                    <YAxis domain={['auto', 'auto']} tick={{fill:T.t3,fontSize:10}} axisLine={false} tickLine={false}/>
+                    <Tooltip content={<ChartTooltip/>}/>
+                    <Line type="monotone" dataKey="value" stroke={T.skyL} strokeWidth={2} dot={{r:3,fill:T.skyL}} isAnimationActive={false}/>
+                  </LineChart>
+                </ResponsiveContainer>
+              ) : (
+                <div style={{textAlign:'center',padding:'36px 0',color:T.t3,fontSize:13,background:'rgba(255,255,255,0.02)',borderRadius:8}}>
+                  no climate data yet
+                </div>
+              )}
+            </div>
+
+            {/* Official Attribution Lines */}
+            <div style={{
+              marginTop: 18,
+              padding: '11px 14px',
+              background: 'rgba(255,255,255,0.03)',
+              borderRadius: 8,
+              border: `1px solid ${T.border}`,
+              fontSize: 11,
+              color: T.t3,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 4
+            }}>
+              <div>🛰️ <strong>MODIS data via ORNL DAAC:</strong> Terra MOD13Q1 250m 16-day vegetation composite observations.</div>
+              <div>🌡️ <strong>NASA POWER acknowledgement:</strong> Agroclimatology daily meteorological series courtesy of NASA Langley Research Center.</div>
+              <div>🗺️ <strong>Map Layer:</strong> NASA EOSDIS GIBS (Global Imagery Browse Services).</div>
             </div>
           </Card>
 

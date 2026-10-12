@@ -799,7 +799,40 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning("Error running certificate backfill on startup: %s", e)
     logger.info("[OK] Database ready at: %s", DATABASE_URL)
+
+    # Start background scheduler for daily satellite sync (APScheduler)
+    scheduler = None
+    try:
+        from apscheduler.schedulers.background import BackgroundScheduler
+        scheduler = BackgroundScheduler()
+        def daily_satellite_sync_job():
+            logger.info("Running daily satellite NDVI and climate sync job...")
+            db_s = SessionLocal()
+            try:
+                from services.satellite import sync_project_ndvi
+                from services.climate import sync_project_climate
+                from credit_calculation.credits_module.db_models import Project
+                for p in db_s.query(Project).filter(Project.status == "approved").all():
+                    sync_project_ndvi(p.project_id, db_s, backfill_years=1, max_batches=2)
+                    sync_project_climate(p.project_id, db_s, days=30)
+            except Exception as se:
+                logger.warning("Error in daily satellite sync job: %s", se)
+            finally:
+                db_s.close()
+
+        scheduler.add_job(daily_satellite_sync_job, 'interval', hours=24, id='daily_satellite_sync')
+        scheduler.start()
+        logger.info("[OK] APScheduler started for daily satellite composite sync")
+    except Exception as sche_err:
+        logger.warning("Could not start APScheduler: %s", sche_err)
+
     yield
+
+    if scheduler:
+        try:
+            scheduler.shutdown(wait=False)
+        except Exception:
+            pass
 
 
 app = FastAPI(

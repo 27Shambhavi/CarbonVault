@@ -90,31 +90,55 @@ def generate_esg_report(req: ESGReportRequest):
         total_offset = max(100.0, round(total_offset, 2))
         total_spent_usd = max(2800.0, round(total_spent_usd, 2))
 
-        # Dynamic environmental indicators
-        base_ndvi = 0.58 if not single_project else 0.65
-        ndvi_trend = [
-            {"month": "Jan", "value": round(base_ndvi - 0.10, 2)},
-            {"month": "Feb", "value": round(base_ndvi - 0.08, 2)},
-            {"month": "Mar", "value": round(base_ndvi - 0.05, 2)},
-            {"month": "Apr", "value": round(base_ndvi - 0.02, 2)},
-            {"month": "May", "value": round(base_ndvi + 0.02, 2)},
-            {"month": "Jun", "value": round(base_ndvi + 0.05, 2)},
-            {"month": "Jul", "value": round(base_ndvi + 0.04, 2)},
-            {"month": "Aug", "value": round(base_ndvi + 0.02, 2)},
-            {"month": "Sep", "value": round(base_ndvi + 0.01, 2)},
-            {"month": "Oct", "value": round(base_ndvi - 0.01, 2)},
-            {"month": "Nov", "value": round(base_ndvi - 0.04, 2)},
-            {"month": "Dec", "value": round(base_ndvi - 0.06, 2)},
-        ]
+        # Real Environmental Indicators: read stored satellite and climate observations
+        from credit_calculation.credits_module.db_models import SatelliteObservation, ClimateObservation
 
-        lst_trend = [
-            {"month": "Jan", "value": 22.1}, {"month": "Feb", "value": 22.8},
-            {"month": "Mar", "value": 23.5}, {"month": "Apr", "value": 24.2},
-            {"month": "May", "value": 25.1}, {"month": "Jun", "value": 26.3},
-            {"month": "Jul", "value": 27.2}, {"month": "Aug", "value": 26.8},
-            {"month": "Sep", "value": 25.4}, {"month": "Oct", "value": 24.1},
-            {"month": "Nov", "value": 22.9}, {"month": "Dec", "value": 21.8},
-        ]
+        target_pids = [single_project.project_id] if single_project else [cp["project_id"] for cp in carbon_by_project if "project_id" in cp]
+
+        stored_ndvi = db.query(SatelliteObservation).filter(
+            SatelliteObservation.project_id.in_(target_pids),
+            SatelliteObservation.band == "250m_16_days_NDVI"
+        ).order_by(SatelliteObservation.obs_date.asc()).all()
+
+        stored_climate = db.query(ClimateObservation).filter(
+            ClimateObservation.project_id.in_(target_pids)
+        ).order_by(ClimateObservation.obs_date.asc()).all()
+
+        if stored_ndvi:
+            # Format real series
+            ndvi_trend = [
+                {
+                    "month": o.obs_date.strftime("%b %d"),
+                    "obs_date": o.obs_date.strftime("%Y-%m-%d"),
+                    "value": round(o.value, 4),
+                    "source": o.source
+                }
+                for o in stored_ndvi[-12:]
+            ]
+            base_ndvi = round(sum(o["value"] for o in ndvi_trend) / len(ndvi_trend), 3)
+            ndvi_status = "observed"
+        else:
+            ndvi_trend = []
+            base_ndvi = None
+            ndvi_status = "no satellite data yet"
+
+        if stored_climate:
+            lst_trend = [
+                {
+                    "month": c.obs_date.strftime("%b %d"),
+                    "obs_date": c.obs_date.strftime("%Y-%m-%d"),
+                    "value": round(c.t2m, 1) if c.t2m is not None else None,
+                    "precipitation_mm": round(c.prectotcorr, 1) if c.prectotcorr is not None else None,
+                    "source": "NASA POWER Daily"
+                }
+                for c in stored_climate[-12:] if c.t2m is not None
+            ]
+            lst_avg = round(sum(c["value"] for c in lst_trend) / len(lst_trend), 1) if lst_trend else None
+            lst_status = "observed"
+        else:
+            lst_trend = []
+            lst_avg = None
+            lst_status = "no satellite data yet"
 
         # Social metrics scaled with offset tonnes
         scale_ratio = total_offset / 50000.0
@@ -175,10 +199,17 @@ def generate_esg_report(req: ESGReportRequest):
                 "carbon_offset_value_usd": total_spent_usd,
                 "ndvi_avg": base_ndvi,
                 "ndvi_trend": ndvi_trend,
-                "lst_avg_celsius": 24.3,
+                "ndvi_status": ndvi_status,
+                "lst_avg_celsius": lst_avg,
                 "lst_trend": lst_trend,
+                "lst_status": lst_status,
                 "biodiversity_score": 0.82 if not single_project else round(float(single_project.env_score or 80) / 100.0, 2),
                 "water_conservation_ml": int(total_offset * 315),
+            },
+            "attributions": {
+                "satellite": "MODIS data via ORNL DAAC (MOD13Q1 Terra 250m 16-day composites)",
+                "climate": "NASA POWER Project (Agroclimatology, NASA Langley Research Center)",
+                "imagery": "NASA EOSDIS GIBS (Global Imagery Browse Services)"
             },
             "social": {
                 "communities_supported": communities,

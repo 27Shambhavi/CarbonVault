@@ -7,15 +7,19 @@ import {
   updateProjectStatus,
   fetchProjectHistory,
   deleteProject,
-  getImageUrl
+  getImageUrl,
+  fetchProjectNdvi,
+  fetchProjectClimate,
+  syncProjectSatellite,
 } from '../../services/api.js';
 import { Card, SectionHeader, Badge, MRVScore, Modal, Btn, T } from '../UI.jsx';
 import { ProjectMap } from '../GoogleMap.jsx';
 import BulkImportModal from './BulkImportModal.jsx';
+import { LineChart, Line, XAxis, YAxis, Tooltip as ChartTooltip, ResponsiveContainer } from 'recharts';
 import {
   CheckCircle, XCircle, MessageSquare, AlertTriangle, ImageOff,
   ZoomIn, Leaf, DollarSign, Clock, ArrowRight, ShieldCheck, History,
-  RotateCcw, Sparkles, Trash2, Lock, Upload
+  RotateCcw, Sparkles, Trash2, Lock, Upload, CloudRain, Sun, Activity
 } from 'lucide-react';
 
 const STAGES = [
@@ -57,6 +61,12 @@ export default function AdminApprovals() {
   const [history, setHistory] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
 
+  // Satellite NDVI & Climate State (Phase 3)
+  const [ndviData, setNdviData] = useState(null);
+  const [climateData, setClimateData] = useState(null);
+  const [satelliteLoading, setSatelliteLoading] = useState(false);
+  const [syncingSatellite, setSyncingSatellite] = useState(false);
+
   const loadMapFeatures = () => {
     Promise.all([fetchMapProjects(), fetchMapPendingProjects()]).then(([a, b]) => {
       const approved = a.data?.projects || [];
@@ -97,8 +107,35 @@ export default function AdminApprovals() {
       .finally(() => setHistoryLoading(false));
   };
 
+  const loadSatelliteData = (id) => {
+    if (!id) return;
+    setSatelliteLoading(true);
+    Promise.all([
+      fetchProjectNdvi(id),
+      fetchProjectClimate(id, 90)
+    ]).then(([ndviRes, climateRes]) => {
+      if (!ndviRes.error && ndviRes.data) setNdviData(ndviRes.data);
+      else setNdviData(null);
+      if (!climateRes.error && climateRes.data) setClimateData(climateRes.data);
+      else setClimateData(null);
+    }).finally(() => setSatelliteLoading(false));
+  };
+
+  const handleSyncSatellite = async () => {
+    if (!selId) return;
+    setSyncingSatellite(true);
+    try {
+      await syncProjectSatellite(selId);
+      await loadSatelliteData(selId);
+    } catch {}
+    setSyncingSatellite(false);
+  };
+
   useEffect(() => {
-    if (selId) loadHistory(selId);
+    if (selId) {
+      loadHistory(selId);
+      loadSatelliteData(selId);
+    }
   }, [selId]);
 
   // Derive selected project from list
@@ -427,6 +464,138 @@ export default function AdminApprovals() {
                     <div style={{ fontSize: 12, color: T.t3, fontWeight: 600 }}>No field evidence image uploaded</div>
                   </div>
                 )}
+              </div>
+
+              {/* ── Real Satellite NDVI & NASA POWER Climate Panel (Phase 3) ── */}
+              <div style={{
+                background: 'rgba(255,255,255,0.02)',
+                border: `1px solid ${T.border}`,
+                borderRadius: 12,
+                padding: '16px 18px',
+                marginBottom: 20
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                  <div>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: T.t1, display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span>🛰️</span> Real MODIS NDVI Growth Series (250m Terra)
+                    </div>
+                    <div style={{ fontSize: 10.5, color: T.t3, marginTop: 2 }}>
+                      Source: MODIS MOD13Q1 via ORNL DAAC (16-day composites)
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleSyncSatellite}
+                    disabled={syncingSatellite}
+                    style={{
+                      background: 'rgba(16,185,129,0.12)',
+                      border: '1px solid rgba(16,185,129,0.3)',
+                      borderRadius: 6,
+                      padding: '4px 10px',
+                      fontSize: 11,
+                      fontWeight: 600,
+                      color: T.emeraldL,
+                      cursor: syncingSatellite ? 'not-allowed' : 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 5
+                    }}
+                    title="Fetch latest composites from ORNL DAAC and NASA POWER"
+                  >
+                    <RotateCcw size={11} className={syncingSatellite ? 'spin' : ''} />
+                    {syncingSatellite ? 'Syncing...' : 'Sync Satellite'}
+                  </button>
+                </div>
+
+                {satelliteLoading ? (
+                  <div style={{ padding: '28px 0', textAlign: 'center', color: T.t3, fontSize: 12 }}>
+                    Querying ORNL DAAC and NASA POWER for real observations…
+                  </div>
+                ) : ndviData && ndviData.observations && ndviData.observations.length > 0 ? (
+                  <>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 8, marginBottom: 14 }}>
+                      <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 8, padding: '8px 12px' }}>
+                        <div style={{ fontSize: 10, color: T.t3, textTransform: 'uppercase' }}>Latest NDVI</div>
+                        <div style={{ fontSize: 18, fontWeight: 800, color: T.emeraldL, fontFamily: 'Fraunces, serif' }}>
+                          {ndviData.latest ? ndviData.latest.value : '—'}
+                        </div>
+                      </div>
+                      <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 8, padding: '8px 12px' }}>
+                        <div style={{ fontSize: 10, color: T.t3, textTransform: 'uppercase' }}>Observed Date</div>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: T.t1, marginTop: 3 }}>
+                          {ndviData.latest ? ndviData.latest.obs_date : '—'}
+                        </div>
+                      </div>
+                      <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 8, padding: '8px 12px' }}>
+                        <div style={{ fontSize: 10, color: T.t3, textTransform: 'uppercase' }}>3-Year Mean</div>
+                        <div style={{ fontSize: 18, fontWeight: 800, color: T.teal, fontFamily: 'Fraunces, serif' }}>
+                          {ndviData.mean_ndvi ? ndviData.mean_ndvi : '—'}
+                        </div>
+                      </div>
+                      <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 8, padding: '8px 12px' }}>
+                        <div style={{ fontSize: 10, color: T.t3, textTransform: 'uppercase' }}>Composites</div>
+                        <div style={{ fontSize: 18, fontWeight: 800, color: T.t2, fontFamily: 'Fraunces, serif' }}>
+                          {ndviData.count}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div style={{ height: 180, width: '100%', marginBottom: 14 }}>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={ndviData.observations.map(o => ({ date: o.obs_date.slice(5), fullDate: o.obs_date, value: o.value }))}>
+                          <XAxis dataKey="date" tick={{ fill: T.t3, fontSize: 9.5 }} axisLine={false} tickLine={false} />
+                          <YAxis domain={['auto', 'auto']} tick={{ fill: T.t3, fontSize: 9.5 }} axisLine={false} tickLine={false} />
+                          <ChartTooltip content={({ active, payload }) => {
+                            if (active && payload && payload.length) {
+                              const d = payload[0].payload;
+                              return (
+                                <div style={{ background: 'var(--menu-bg, #090c18)', border: `1px solid ${T.border2}`, padding: '7px 11px', borderRadius: 6, fontSize: 11 }}>
+                                  <div style={{ color: T.t3 }}>Date: {d.fullDate}</div>
+                                  <div style={{ color: T.emeraldL, fontWeight: 700 }}>NDVI: {d.value}</div>
+                                  <div style={{ color: T.t3, fontSize: 9.5 }}>Source: MODIS Terra 250m</div>
+                                </div>
+                              );
+                            }
+                            return null;
+                          }} />
+                          <Line type="monotone" dataKey="value" stroke={T.emeraldL} strokeWidth={2} dot={{ r: 2.5, fill: T.emeraldL }} isAnimationActive={false} />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </>
+                ) : (
+                  <div style={{ textAlign: 'center', padding: '24px 0', color: T.t3, fontSize: 12.5, background: 'rgba(255,255,255,0.015)', borderRadius: 8, marginBottom: 12 }}>
+                    no satellite data yet (Click 'Sync Satellite' or approve project to backfill)
+                  </div>
+                )}
+
+                {/* Real NASA POWER Climate Indicators */}
+                {climateData && climateData.climatology_summary && (
+                  <div style={{
+                    background: 'rgba(14,165,233,0.05)',
+                    border: '1px solid rgba(14,165,233,0.18)',
+                    borderRadius: 8,
+                    padding: '10px 14px',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    marginBottom: 10
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: T.skyL, fontWeight: 600 }}>
+                      <CloudRain size={13} />
+                      <span>NASA POWER Agroclimatology (90-Day Live)</span>
+                    </div>
+                    <div style={{ display: 'flex', gap: 14, fontSize: 11, color: T.t2 }}>
+                      <span>Temp: <strong style={{ color: T.t1 }}>{climateData.climatology_summary.mean_temperature_c}°C</strong></span>
+                      <span>Rainfall: <strong style={{ color: T.t1 }}>{climateData.climatology_summary.total_precipitation_mm} mm</strong></span>
+                      <span>Humidity: <strong style={{ color: T.t1 }}>{climateData.climatology_summary.mean_relative_humidity_pct}%</strong></span>
+                    </div>
+                  </div>
+                )}
+
+                <div style={{ fontSize: 10, color: T.t3, lineHeight: 1.4 }}>
+                  Attribution: MODIS data via ORNL DAAC (MOD13Q1) &bull; NASA POWER Daily Agroclimatology
+                </div>
               </div>
 
               {/* ── Multi-Stage Action Buttons ── */}
