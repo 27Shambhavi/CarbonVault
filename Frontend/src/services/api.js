@@ -187,6 +187,11 @@ export async function fetchProjectMlAssessment(projectId) {
   return request(`${API_BASE}/projects/${projectId}/ml-assessment`);
 }
 
+/** Phase 5: Fetch Grounded AI project narrative with post-check verification */
+export async function fetchProjectAiSummary(projectId, audience = 'admin') {
+  return request(`${API_BASE}/projects/${projectId}/ai-summary?audience=${audience}`);
+}
+
 /** Fetch ALL projects (admin) */
 export async function fetchAllProjects() {
   const res = await request(`${API_BASE}/projects/all-projects`);

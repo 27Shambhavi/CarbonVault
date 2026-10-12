@@ -2445,4 +2445,20 @@ def get_project_ml_assessment(project_id: str):
         }
     finally:
         db.close()
+
+
+@router.get("/{project_id}/ai-summary")
+@router.get("/projects/{project_id}/ai-summary")
+def get_project_ai_summary_endpoint(project_id: str, audience: str = "admin"):
+    """
+    Phase 5: Grounded AI narrative summary with strict post-check verification.
+    Audience: 'admin' | 'ngo' | 'corporate'
+    """
+    db = SessionLocal()
+    try:
+        from ai.explainer import explain_project
+        return explain_project(project_id, db, audience=audience)
+    finally:
+        db.close()
+
 
