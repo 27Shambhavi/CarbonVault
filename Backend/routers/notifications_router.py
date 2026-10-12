@@ -62,6 +62,28 @@ def create_notification(
         db.commit()
         db.refresh(notif)
         logger.info("Notification created [%s]: %s (role=%s)", type, title, recipient_role)
+
+        # Dispatch real-time SSE event
+        try:
+            from core.events import publish
+            aud = f"role:{recipient_role}" if (recipient_role and recipient_role != "all") else (f"user:{recipient_email}" if recipient_email else "all")
+            publish(
+                "notification.created",
+                {
+                    "id": notif.id,
+                    "title": notif.title,
+                    "message": notif.message,
+                    "type": notif.type,
+                    "recipient_role": notif.recipient_role,
+                    "related_project_id": notif.related_project_id,
+                    "time": "just now",
+                    "created_at": notif.created_at.isoformat() + "Z"
+                },
+                audience=aud
+            )
+        except Exception as pe:
+            logger.warning("Failed to publish notification event: %s", pe)
+
         return notif
     except Exception as e:
         db.rollback()

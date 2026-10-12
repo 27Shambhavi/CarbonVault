@@ -645,8 +645,27 @@ async def create_project(
             )
             db.add(init_history)
             db.commit()
-        except Exception as hist_err:
-            logger.warning("Failed to record initial status history: %s", hist_err)
+        except Exception as h_err:
+            logger.warning("Failed to record init status history: %s", h_err)
+
+        # Dispatch real-time SSE event
+        try:
+            from core.events import publish
+            publish(
+                "project.created",
+                {
+                    "project_id": project_id,
+                    "name": project_name,
+                    "ngo_name": ngo_name,
+                    "status": "pending",
+                    "area_hectares": area_hectares,
+                    "trees": number_of_trees,
+                    "plantation_type": pt
+                },
+                audience="all"
+            )
+        except Exception as pe:
+            logger.warning("Failed to publish project.created: %s", pe)
 
         # Response
         return {
@@ -1470,6 +1489,11 @@ class PricingConfigRequest(BaseModel):
     demand: float
     supply: float
     living: float
+    mode: Optional[str] = None
+    demand_min: Optional[float] = None
+    demand_max: Optional[float] = None
+    supply_min: Optional[float] = None
+    supply_max: Optional[float] = None
 
 @router.get("/pricing")
 def get_pricing_config():
@@ -1478,21 +1502,34 @@ def get_pricing_config():
     try:
         cfg = db.query(PricingConfig).order_by(PricingConfig.id.desc()).first()
         if not cfg:
-            cfg = PricingConfig(base=28.50, demand=1.12, supply=0.98, living=1.08, updated_at=datetime.utcnow())
+            cfg = PricingConfig(base=28.50, demand=1.12, supply=0.98, living=1.08, mode="manual", updated_at=datetime.utcnow())
             db.add(cfg)
             db.commit()
             db.refresh(cfg)
 
         history = db.query(PriceHistory).order_by(PriceHistory.id.asc()).all()
-        history_data = [{"month": h.month, "price": h.price} for h in history]
+        history_data = [
+            {
+                "id": h.id,
+                "month": h.month or (h.ts.strftime("%b") if h.ts else "N/A"),
+                "price": h.effective_usd if h.effective_usd is not None else h.price,
+                "base_price": h.base_price,
+                "m_demand": h.m_demand,
+                "m_supply": h.m_supply,
+                "m_living": h.m_living,
+                "source": h.source or "admin",
+                "ts": h.ts.isoformat() if h.ts else (h.recorded_at.isoformat() if h.recorded_at else None)
+            }
+            for h in history
+        ]
         if not history_data:
             history_data = [
-                {"month": "Jul", "price": 24.0},
-                {"month": "Aug", "price": 24.8},
-                {"month": "Sep", "price": 25.6},
-                {"month": "Oct", "price": 26.4},
-                {"month": "Nov", "price": 27.2},
-                {"month": "Dec", "price": round(cfg.base * cfg.demand * cfg.supply * cfg.living, 2)},
+                {"month": "Jul", "price": 24.0, "source": "bootstrap"},
+                {"month": "Aug", "price": 24.8, "source": "bootstrap"},
+                {"month": "Sep", "price": 25.6, "source": "bootstrap"},
+                {"month": "Oct", "price": 26.4, "source": "bootstrap"},
+                {"month": "Nov", "price": 27.2, "source": "bootstrap"},
+                {"month": "Dec", "price": round(cfg.base * cfg.demand * cfg.supply * cfg.living, 2), "source": "admin"},
             ]
 
         final_price = round(cfg.base * cfg.demand * cfg.supply * cfg.living, 2)
@@ -1501,6 +1538,11 @@ def get_pricing_config():
             "demand": cfg.demand,
             "supply": cfg.supply,
             "living": cfg.living,
+            "mode": getattr(cfg, "mode", "manual") or "manual",
+            "demand_min": getattr(cfg, "demand_min", 0.80) or 0.80,
+            "demand_max": getattr(cfg, "demand_max", 1.50) or 1.50,
+            "supply_min": getattr(cfg, "supply_min", 0.80) or 0.80,
+            "supply_max": getattr(cfg, "supply_max", 1.50) or 1.50,
             "final_price": final_price,
             "history": history_data,
         }
@@ -1513,7 +1555,7 @@ def update_pricing_config(
     x_admin_role: Optional[str] = Header(None),
     x_admin_email: Optional[str] = Header(None)
 ):
-    """Save updated pricing config to DB and append price snapshot to history."""
+    """Save updated pricing config to DB, append price snapshot to history, and publish realtime event."""
     db = SessionLocal()
     try:
         check_admin_permission(x_admin_role, x_admin_email, required_role="super_admin", db=db)
@@ -1525,16 +1567,34 @@ def update_pricing_config(
         cfg.demand = req.demand
         cfg.supply = req.supply
         cfg.living = req.living
+        if req.mode is not None:
+            cfg.mode = req.mode
+        if req.demand_min is not None:
+            cfg.demand_min = req.demand_min
+        if req.demand_max is not None:
+            cfg.demand_max = req.demand_max
+        if req.supply_min is not None:
+            cfg.supply_min = req.supply_min
+        if req.supply_max is not None:
+            cfg.supply_max = req.supply_max
         cfg.updated_at = datetime.utcnow()
 
         final_price = round(req.base * req.demand * req.supply * req.living, 2)
 
         # Record snapshot in PriceHistory
-        current_month = datetime.utcnow().strftime("%b")
+        now_dt = datetime.utcnow()
+        current_month = now_dt.strftime("%b")
         db.add(PriceHistory(
+            ts=now_dt,
+            base_price=req.base,
+            m_demand=req.demand,
+            m_supply=req.supply,
+            m_living=req.living,
+            effective_usd=final_price,
+            source="admin",
             month=current_month,
             price=final_price,
-            recorded_at=datetime.utcnow()
+            recorded_at=now_dt
         ))
         db.commit()
 
@@ -1547,12 +1607,33 @@ def update_pricing_config(
             db=db
         )
 
+        # Dispatch real-time SSE event
+        try:
+            from core.events import publish
+            publish(
+                "pricing.updated",
+                {
+                    "base": cfg.base,
+                    "demand": cfg.demand,
+                    "supply": cfg.supply,
+                    "living": cfg.living,
+                    "final_price": final_price,
+                    "effective_usd": final_price,
+                    "mode": cfg.mode or "manual",
+                    "updated_at": now_dt.isoformat() + "Z"
+                },
+                audience="all"
+            )
+        except Exception as pe:
+            logger.warning("Failed to publish pricing event: %s", pe)
+
         return {
             "message": "Pricing configuration saved successfully",
             "base": cfg.base,
             "demand": cfg.demand,
             "supply": cfg.supply,
             "living": cfg.living,
+            "mode": cfg.mode or "manual",
             "final_price": final_price,
         }
     finally:
@@ -1839,7 +1920,36 @@ def update_project_status(
                 related_project_id=project.project_id
             )
         except Exception as notif_err:
-            logger.warning("Failed to emit notification on project status change: %s", notif_err)
+            logger.warning("Failed to emit notification: %s", notif_err)
+
+        # Dispatch real-time SSE event
+        try:
+            from core.events import publish
+            publish(
+                "project.status_changed",
+                {
+                    "project_id": project.project_id,
+                    "name": project.name,
+                    "status": target_status,
+                    "from_status": old_status,
+                    "comment": target_comment,
+                    "changed_by": target_user
+                },
+                audience="all"
+            )
+            if target_status == "approved" and project.credits:
+                publish(
+                    "credits.minted",
+                    {
+                        "project_id": project.project_id,
+                        "name": project.name,
+                        "credits": project.credits,
+                        "price": project.price
+                    },
+                    audience="all"
+                )
+        except Exception as pe:
+            logger.warning("Failed to publish status change event: %s", pe)
 
         return {
             "message": f"Project status updated to {target_status}",

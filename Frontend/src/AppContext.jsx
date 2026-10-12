@@ -1,5 +1,7 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { fetchNotifications, markNotificationRead, markAllNotificationsRead, setApiAdminContext } from './services/api.js';
+import { useLiveStream } from './hooks/useLiveStream.js';
+import { LiveToastContainer } from './components/LiveToast.jsx';
 
 export const demoAccounts = [
   { id: 1, name: 'Alex Mercer', email: 'admin@carbonvault.com', role: 'admin', admin_role: 'super_admin', org: 'Platform HQ' },
@@ -22,6 +24,18 @@ export function AppProvider({ children }) {
   // Dynamic notifications state
   const [notifications, setNotifications] = useState([]);
   const [unreadNotifCount, setUnreadNotifCount] = useState(0);
+
+  // Live Toast notifications
+  const [toasts, setToasts] = useState([]);
+
+  const addToast = useCallback((toast) => {
+    const id = Date.now() + Math.random().toString(36).slice(2, 6);
+    setToasts((prev) => [...prev.slice(-3), { id, ...toast }]);
+  }, []);
+
+  const dismissToast = useCallback((id) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  }, []);
 
   // Theme: default is 'dark', persisted via localStorage
   const [theme, setThemeState] = useState(() => {
@@ -51,6 +65,9 @@ export function AppProvider({ children }) {
     document.documentElement.setAttribute('data-theme', theme);
   }, [theme]);
 
+  // Connect Real-Time SSE Stream Hook
+  const liveStream = useLiveStream(user);
+
   const refreshNotifications = useCallback(async () => {
     try {
       const role = user?.role;
@@ -58,7 +75,7 @@ export function AppProvider({ children }) {
       const res = await fetchNotifications({ role, email });
       if (Array.isArray(res.data)) {
         setNotifications(res.data);
-        const unread = res.data.filter(n => !n.read).length;
+        const unread = res.data.filter((n) => !n.read).length;
         setUnreadNotifCount(unread);
       }
     } catch (err) {
@@ -67,8 +84,8 @@ export function AppProvider({ children }) {
   }, [user]);
 
   const markNotifAsRead = async (id) => {
-    setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
-    setUnreadNotifCount(c => Math.max(0, c - 1));
+    setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)));
+    setUnreadNotifCount((c) => Math.max(0, c - 1));
     try {
       await markNotificationRead(id);
     } catch (e) {
@@ -77,7 +94,7 @@ export function AppProvider({ children }) {
   };
 
   const markAllNotifsAsRead = async () => {
-    setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
     setUnreadNotifCount(0);
     try {
       await markAllNotificationsRead({ role: user?.role, email: user?.email });
@@ -85,6 +102,66 @@ export function AppProvider({ children }) {
       console.warn('Failed to mark all notifications read:', e);
     }
   };
+
+  // Increment to trigger re-fetch in Dashboard / My Projects / Marketplace
+  const triggerRefresh = useCallback(() => setRefreshKey((k) => k + 1), []);
+
+  // React to live stream events in real time
+  useEffect(() => {
+    if (!liveStream.lastEvent) return;
+    const ev = liveStream.lastEvent;
+    const payload = ev.payload || {};
+
+    // Trigger instant re-fetch on data updates
+    if (
+      [
+        'project.created',
+        'project.status_changed',
+        'credits.minted',
+        'pricing.updated',
+        'payment.completed',
+        'marketplace.buy_request',
+        'marketplace.request_accepted',
+        'notification.created',
+      ].includes(ev.type)
+    ) {
+      triggerRefresh();
+      refreshNotifications();
+    }
+
+    // Emit live toast
+    if (ev.type === 'project.status_changed') {
+      addToast({
+        type: ev.type,
+        title: `Project Status: ${payload.status ? String(payload.status).toUpperCase() : 'Updated'}`,
+        message: `Project ${payload.project_id || payload.name || ''} is now ${payload.status}.`,
+      });
+    } else if (ev.type === 'credits.minted') {
+      addToast({
+        type: ev.type,
+        title: 'Credits Minted',
+        message: `${Number(payload.credits || 0).toLocaleString()} tCO₂e issued for ${payload.project_id || 'project'}.`,
+      });
+    } else if (ev.type === 'pricing.updated') {
+      addToast({
+        type: ev.type,
+        title: 'Live Price Updated',
+        message: `Carbon price updated to $${Number(payload.effective_usd || payload.final_price || 0).toFixed(2)}/t.`,
+      });
+    } else if (ev.type === 'marketplace.buy_request') {
+      addToast({
+        type: ev.type,
+        title: 'New Buy Request',
+        message: `${payload.corporate_name} offered $${Number(payload.offered_price || 0).toFixed(2)}/t.`,
+      });
+    } else if (ev.type === 'payment.completed') {
+      addToast({
+        type: ev.type,
+        title: 'Payment Completed',
+        message: `${payload.corporate_name} purchased ${Number(payload.quantity || 0).toLocaleString()} tonnes.`,
+      });
+    }
+  }, [liveStream.lastEvent, triggerRefresh, refreshNotifications, addToast]);
 
   useEffect(() => {
     refreshNotifications();
@@ -113,7 +190,9 @@ export function AppProvider({ children }) {
       setPage('dashboard');
       return;
     }
-    const account = demoAccounts.find(a => a.role === role && (!customAdminRole || a.admin_role === customAdminRole)) || demoAccounts.find(a => a.role === role);
+    const account =
+      demoAccounts.find((a) => a.role === role && (!customAdminRole || a.admin_role === customAdminRole)) ||
+      demoAccounts.find((a) => a.role === role);
     if (!account) return;
     setUser(account);
     if (account.role === 'admin') {
@@ -130,20 +209,43 @@ export function AppProvider({ children }) {
     setPage('dashboard');
   };
 
-  // Increment to trigger re-fetch in Dashboard / My Projects after project creation
-  const triggerRefresh = () => setRefreshKey(k => k + 1);
-
   return (
-    <AppContext.Provider value={{
-      user, page, setPage, login, logout,
-      notifOpen, setNotifOpen, profileOpen, setProfileOpen,
-      sidebarOpen, setSidebarOpen, refreshKey, triggerRefresh,
-      theme, setTheme, toggleTheme,
-      notifications, unreadNotifCount, refreshNotifications,
-      markNotifAsRead, markAllNotifsAsRead,
-      switchAdminRole,
-    }}>
+    <AppContext.Provider
+      value={{
+        user,
+        page,
+        setPage,
+        login,
+        logout,
+        notifOpen,
+        setNotifOpen,
+        profileOpen,
+        setProfileOpen,
+        sidebarOpen,
+        setSidebarOpen,
+        refreshKey,
+        triggerRefresh,
+        theme,
+        setTheme,
+        toggleTheme,
+        notifications,
+        unreadNotifCount,
+        refreshNotifications,
+        markNotifAsRead,
+        markAllNotifsAsRead,
+        switchAdminRole,
+        // Live Real-Time Spine exports
+        liveStatus: liveStream.status,
+        lastEventAt: liveStream.lastEventAt,
+        liveEvents: liveStream.events,
+        subscribeToEvent: liveStream.subscribe,
+        addToast,
+        toasts,
+        dismissToast,
+      }}
+    >
       {children}
+      <LiveToastContainer toasts={toasts} onDismiss={dismissToast} />
     </AppContext.Provider>
   );
 }

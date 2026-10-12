@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useApp } from '../AppContext.jsx';
 import { T, gc } from './UI.jsx';
+import { LiveBadge } from './LiveBadge.jsx';
 import {
   Leaf, Bell, Settings, User, LogOut, ChevronRight, X, Menu,
   LayoutDashboard, Users, FolderCheck, DollarSign, BarChart3,
@@ -151,7 +152,7 @@ export function Sidebar() {
 }
 
 export function Navbar() {
-  const {user,page,setPage,setNotifOpen,sidebarOpen,setSidebarOpen,logout,theme,toggleTheme,unreadNotifCount,switchAdminRole} = useApp();
+  const {user,page,setPage,setNotifOpen,sidebarOpen,setSidebarOpen,logout,theme,toggleTheme,unreadNotifCount,switchAdminRole,liveStatus,lastEventAt} = useApp();
   const [menuOpen,setMenuOpen] = useState(false);
 
   if (!user) return null;
@@ -174,6 +175,9 @@ export function Navbar() {
         <span style={{fontSize:12,color:T.t3}}>{rc.label}</span>
         <span style={{fontSize:12,color:T.t4}}>/</span>
         <span style={{fontSize:13,fontWeight:600,color:T.t2}}>{pageTitle}</span>
+        <div style={{ marginLeft: 12 }}>
+          <LiveBadge status={liveStatus} lastEventAt={lastEventAt} />
+        </div>
       </div>
 
       {/* Admin Role Switcher (Super Admin vs Project Approver) */}

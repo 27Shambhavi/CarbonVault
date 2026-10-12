@@ -39,6 +39,7 @@ from routers.esg_router import router as esg_router
 from routers.notifications_router import router as notifications_router
 from routers.calculator_router import router as calculator_router
 from routers.certificate_router import router as certificate_router
+from routers.realtime_router import router as realtime_router
 
 
 def migrate_db():
@@ -182,6 +183,131 @@ def migrate_db():
         cursor.execute("UPDATE users SET admin_role = 'super_admin' WHERE role = 'admin' AND (admin_role IS NULL OR admin_role = '')")
     except Exception:
         pass
+
+    # Ensure live_events table exists
+    try:
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS live_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                type TEXT NOT NULL,
+                payload TEXT NOT NULL,
+                audience TEXT DEFAULT 'all',
+                created_at DATETIME NOT NULL
+            )
+        """)
+        logger.info("Ensured live_events table exists")
+    except Exception as e:
+        logger.warning("Error creating live_events table: %s", e)
+
+    # Ensure satellite_observations table exists
+    try:
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS satellite_observations (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                project_id TEXT NOT NULL,
+                source TEXT NOT NULL,
+                band TEXT NOT NULL,
+                obs_date DATE NOT NULL,
+                value REAL NOT NULL,
+                fetched_at DATETIME NOT NULL
+            )
+        """)
+        logger.info("Ensured satellite_observations table exists")
+    except Exception as e:
+        logger.warning("Error creating satellite_observations table: %s", e)
+
+    # Ensure climate_observations table exists
+    try:
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS climate_observations (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                project_id TEXT NOT NULL,
+                obs_date DATE NOT NULL,
+                t2m REAL,
+                prectotcorr REAL,
+                rh2m REAL,
+                fetched_at DATETIME NOT NULL
+            )
+        """)
+        logger.info("Ensured climate_observations table exists")
+    except Exception as e:
+        logger.warning("Error creating climate_observations table: %s", e)
+
+    # Ensure ml_assessments table exists
+    try:
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS ml_assessments (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                project_id TEXT NOT NULL,
+                model TEXT NOT NULL,
+                score REAL NOT NULL,
+                reasons TEXT,
+                confidence TEXT,
+                model_version TEXT DEFAULT '1.0.0',
+                created_at DATETIME NOT NULL
+            )
+        """)
+        logger.info("Ensured ml_assessments table exists")
+    except Exception as e:
+        logger.warning("Error creating ml_assessments table: %s", e)
+
+    # Ensure ai_summaries table exists
+    try:
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS ai_summaries (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                project_id TEXT NOT NULL,
+                facts_hash TEXT NOT NULL,
+                summary TEXT NOT NULL,
+                next_steps TEXT,
+                status TEXT DEFAULT 'grounded',
+                created_at DATETIME NOT NULL
+            )
+        """)
+        logger.info("Ensured ai_summaries table exists")
+    except Exception as e:
+        logger.warning("Error creating ai_summaries table: %s", e)
+
+    # Ensure photo_hashes table exists
+    try:
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS photo_hashes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                project_id TEXT NOT NULL,
+                filename TEXT NOT NULL,
+                hash_original TEXT NOT NULL,
+                hash_hflip TEXT NOT NULL,
+                hash_rot90 TEXT NOT NULL,
+                created_at DATETIME NOT NULL
+            )
+        """)
+        logger.info("Ensured photo_hashes table exists")
+    except Exception as e:
+        logger.warning("Error creating photo_hashes table: %s", e)
+
+    # Column migrations
+    extra_cols = [
+        ("projects", "is_synthetic", "BOOLEAN DEFAULT 0"),
+        ("users", "password_hash", "TEXT"),
+        ("price_history", "ts", "DATETIME"),
+        ("price_history", "base_price", "REAL"),
+        ("price_history", "m_demand", "REAL"),
+        ("price_history", "m_supply", "REAL"),
+        ("price_history", "m_living", "REAL"),
+        ("price_history", "effective_usd", "REAL"),
+        ("price_history", "source", "TEXT DEFAULT 'admin'"),
+        ("pricing_config", "mode", "TEXT DEFAULT 'manual'"),
+        ("pricing_config", "demand_min", "REAL DEFAULT 0.80"),
+        ("pricing_config", "demand_max", "REAL DEFAULT 1.50"),
+        ("pricing_config", "supply_min", "REAL DEFAULT 0.80"),
+        ("pricing_config", "supply_max", "REAL DEFAULT 1.50"),
+    ]
+    for table_name, col_name, col_type in extra_cols:
+        try:
+            cursor.execute(f"ALTER TABLE {table_name} ADD COLUMN {col_name} {col_type}")
+            logger.info("Added column %s.%s", table_name, col_name)
+        except Exception:
+            pass
 
     # Ensure PRJ-MAN-SUNDAR belongs to demo NGO (EcoGuard Brazil, id 1) and audit trail reflects it
     try:
@@ -703,6 +829,7 @@ app.include_router(credit_router, tags=["Credits"])
 app.include_router(fraud_router, prefix="/fraud", tags=["Fraud Detection"])
 app.include_router(payment_router, prefix="/payment", tags=["Payment"])
 app.include_router(esg_router, prefix="/esg", tags=["ESG"])
+app.include_router(realtime_router)
 
 
 @app.get("/")

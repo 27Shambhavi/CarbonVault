@@ -87,6 +87,22 @@ def create_buy_request(request: BuyRequest):
         except Exception as notif_err:
             pass
 
+        try:
+            from core.events import publish
+            publish(
+                "marketplace.buy_request",
+                {
+                    "id": new_request.id,
+                    "corporate_name": request.corporate_name,
+                    "project_id": request.project_id,
+                    "offered_price": request.offered_price,
+                    "project_name": project.name,
+                },
+                audience="all"
+            )
+        except Exception as evt_err:
+            pass
+
         return {"message": "Request created"}
     finally:
         db.close()
@@ -111,6 +127,22 @@ def accept_request(request_id: int):
             )
             db.add(funding)
         db.commit()
+
+        try:
+            from core.events import publish
+            publish(
+                "marketplace.request_accepted",
+                {
+                    "request_id": request_id,
+                    "project_id": request.project_id,
+                    "corporate_name": request.corporate_name,
+                    "offered_price": request.offered_price,
+                },
+                audience="all"
+            )
+        except Exception as evt_err:
+            pass
+
         return {"message": "Request accepted, payment simulated"}
     finally:
         db.close()

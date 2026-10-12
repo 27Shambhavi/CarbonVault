@@ -42,6 +42,9 @@ class Project(Base):
     price = Column(Float, nullable=True)             # price per credit in USD
     created_at = Column(Date)
 
+    # Synthetic data flag
+    is_synthetic = Column(Boolean, default=False)
+
     # Relationships
     ngo = relationship("NGO")
 
@@ -135,6 +138,7 @@ class User(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, index=True)
     email = Column(String, unique=True, index=True)
+    password_hash = Column(String, nullable=True)
     role = Column(String)  # 'admin', 'ngo', 'buyer'
     admin_role = Column(String, default="super_admin")  # 'super_admin' or 'approver'
     projects = Column(Integer, default=0)
@@ -151,6 +155,11 @@ class PricingConfig(Base):
     demand = Column(Float, default=1.12)
     supply = Column(Float, default=0.98)
     living = Column(Float, default=1.08)
+    mode = Column(String, default="manual")  # 'manual' or 'auto'
+    demand_min = Column(Float, default=0.80)
+    demand_max = Column(Float, default=1.50)
+    supply_min = Column(Float, default=0.80)
+    supply_max = Column(Float, default=1.50)
     updated_at = Column(DateTime)
 
 
@@ -158,9 +167,17 @@ class PriceHistory(Base):
     __tablename__ = "price_history"
 
     id = Column(Integer, primary_key=True, index=True)
-    month = Column(String)
-    price = Column(Float)
-    recorded_at = Column(DateTime)
+    ts = Column(DateTime, index=True, nullable=True)
+    base_price = Column(Float, nullable=True)
+    m_demand = Column(Float, nullable=True)
+    m_supply = Column(Float, nullable=True)
+    m_living = Column(Float, nullable=True)
+    effective_usd = Column(Float, nullable=True)
+    source = Column(String, default="admin", nullable=True)
+    # Legacy fields
+    month = Column(String, nullable=True)
+    price = Column(Float, nullable=True)
+    recorded_at = Column(DateTime, nullable=True)
 
 
 class Notification(Base):
@@ -237,3 +254,84 @@ class Certificate(Base):
     # Relationships
     project = relationship("Project")
     transaction = relationship("Transaction")
+
+
+class LiveEvent(Base):
+    __tablename__ = "live_events"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    type = Column(String, index=True, nullable=False)
+    payload = Column(Text, nullable=False)  # JSON-encoded payload
+    audience = Column(String, default="all", index=True, nullable=False)
+    created_at = Column(DateTime, nullable=False)
+
+
+class SatelliteObservation(Base):
+    __tablename__ = "satellite_observations"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    project_id = Column(String, ForeignKey("projects.project_id"), index=True, nullable=False)
+    source = Column(String, nullable=False)  # e.g. "MODIS MOD13Q1"
+    band = Column(String, nullable=False)    # e.g. "250m_16_days_NDVI"
+    obs_date = Column(Date, index=True, nullable=False)
+    value = Column(Float, nullable=False)
+    fetched_at = Column(DateTime, nullable=False)
+
+    project = relationship("Project")
+
+
+class ClimateObservation(Base):
+    __tablename__ = "climate_observations"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    project_id = Column(String, ForeignKey("projects.project_id"), index=True, nullable=False)
+    obs_date = Column(Date, index=True, nullable=False)
+    t2m = Column(Float, nullable=True)         # Temperature at 2m (deg C)
+    prectotcorr = Column(Float, nullable=True) # Precipitation (mm/day)
+    rh2m = Column(Float, nullable=True)        # Relative Humidity at 2m (%)
+    fetched_at = Column(DateTime, nullable=False)
+
+    project = relationship("Project")
+
+
+class MLAssessment(Base):
+    __tablename__ = "ml_assessments"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    project_id = Column(String, ForeignKey("projects.project_id"), index=True, nullable=False)
+    model = Column(String, index=True, nullable=False)  # "anomaly", "ndvi_monitor", "suitability", "phash"
+    score = Column(Float, nullable=False)
+    reasons = Column(Text, nullable=True)               # JSON array of reasons/features
+    confidence = Column(String, nullable=True)          # "low", "medium", "high"
+    model_version = Column(String, default="1.0.0")
+    created_at = Column(DateTime, nullable=False)
+
+    project = relationship("Project")
+
+
+class AISummary(Base):
+    __tablename__ = "ai_summaries"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    project_id = Column(String, ForeignKey("projects.project_id"), index=True, nullable=False)
+    facts_hash = Column(String, index=True, nullable=False)
+    summary = Column(Text, nullable=False)
+    next_steps = Column(Text, nullable=True)             # JSON array
+    status = Column(String, default="grounded")          # "grounded", "fallback", "rejected"
+    created_at = Column(DateTime, nullable=False)
+
+    project = relationship("Project")
+
+
+class PhotoHash(Base):
+    __tablename__ = "photo_hashes"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    project_id = Column(String, ForeignKey("projects.project_id"), index=True, nullable=False)
+    filename = Column(String, nullable=False)
+    hash_original = Column(String, nullable=False)
+    hash_hflip = Column(String, nullable=False)
+    hash_rot90 = Column(String, nullable=False)
+    created_at = Column(DateTime, nullable=False)
+
+    project = relationship("Project")

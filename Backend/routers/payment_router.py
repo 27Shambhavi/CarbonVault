@@ -275,7 +275,7 @@ def buy_credits(req: BuyCreditsRequest):
             audit_entry = AuditLog(
                 action="payment",
                 name=req.project_id,
-                detail=f"{req.corporate_name} purchased {req.quantity:,.0f} credits of '{project.name}' for ₹{req.amount:,.2f} (Cert: {cert_id})",
+                detail=f"{req.corporate_name} purchased {req.quantity:,.0f} credits of '{project.name}' for ₹{req.amount:,.2f} (Cert: {cert_pub_id})",
                 user=req.corporate_name,
                 timestamp=datetime.utcnow()
             )
@@ -290,13 +290,41 @@ def buy_credits(req: BuyCreditsRequest):
             create_notification(
                 db=db,
                 title="Credits Purchased & Certificate Issued",
-                message=f"{req.corporate_name} purchased {req.quantity:,.0f} credits of '{project.name}'. Impact Certificate {cert_id} generated.",
+                message=f"{req.corporate_name} purchased {req.quantity:,.0f} credits of '{project.name}'. Impact Certificate {cert_pub_id} generated.",
                 type="payment",
                 recipient_role="all",
                 related_project_id=req.project_id
             )
         except Exception as notif_err:
             logger.warning("Failed to emit notification on payment: %s", notif_err)
+
+        # Dispatch real-time SSE events
+        try:
+            from core.events import publish
+            publish(
+                "payment.completed",
+                {
+                    "transaction_id": txn.id,
+                    "project_id": req.project_id,
+                    "project_name": project.name,
+                    "corporate_name": req.corporate_name,
+                    "quantity": req.quantity,
+                    "amount_inr": req.amount,
+                    "certificate_id": cert_pub_id,
+                },
+                audience="all"
+            )
+            publish(
+                "wallet.updated",
+                {
+                    "corporate_name": req.corporate_name,
+                    "total_credits": wallet.total_credits,
+                    "total_spent_inr": wallet.total_spent_inr,
+                },
+                audience=f"user:{req.corporate_name}"
+            )
+        except Exception as pe:
+            logger.warning("Failed to publish payment events: %s", pe)
 
         logger.info(
             "Transaction recorded: %s bought %.2f credits of %s for ₹%.2f (Cert: %s)",
