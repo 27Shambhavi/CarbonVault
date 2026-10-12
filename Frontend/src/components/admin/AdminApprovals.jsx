@@ -11,6 +11,7 @@ import {
   fetchProjectNdvi,
   fetchProjectClimate,
   syncProjectSatellite,
+  fetchProjectMlAssessment,
 } from '../../services/api.js';
 import { Card, SectionHeader, Badge, MRVScore, Modal, Btn, T } from '../UI.jsx';
 import { ProjectMap } from '../GoogleMap.jsx';
@@ -67,6 +68,10 @@ export default function AdminApprovals() {
   const [satelliteLoading, setSatelliteLoading] = useState(false);
   const [syncingSatellite, setSyncingSatellite] = useState(false);
 
+  // ML Intelligence & Anomaly Assessment (Phase 4)
+  const [mlData, setMlData] = useState(null);
+  const [mlLoading, setMlLoading] = useState(false);
+
   const loadMapFeatures = () => {
     Promise.all([fetchMapProjects(), fetchMapPendingProjects()]).then(([a, b]) => {
       const approved = a.data?.projects || [];
@@ -110,15 +115,22 @@ export default function AdminApprovals() {
   const loadSatelliteData = (id) => {
     if (!id) return;
     setSatelliteLoading(true);
+    setMlLoading(true);
     Promise.all([
       fetchProjectNdvi(id),
-      fetchProjectClimate(id, 90)
-    ]).then(([ndviRes, climateRes]) => {
+      fetchProjectClimate(id, 90),
+      fetchProjectMlAssessment(id),
+    ]).then(([ndviRes, climateRes, mlRes]) => {
       if (!ndviRes.error && ndviRes.data) setNdviData(ndviRes.data);
       else setNdviData(null);
       if (!climateRes.error && climateRes.data) setClimateData(climateRes.data);
       else setClimateData(null);
-    }).finally(() => setSatelliteLoading(false));
+      if (!mlRes.error && mlRes.data) setMlData(mlRes.data);
+      else setMlData(null);
+    }).finally(() => {
+      setSatelliteLoading(false);
+      setMlLoading(false);
+    });
   };
 
   const handleSyncSatellite = async () => {
@@ -466,7 +478,109 @@ export default function AdminApprovals() {
                 )}
               </div>
 
-              {/* ── Real Satellite NDVI & NASA POWER Climate Panel (Phase 3) ── */}
+              {/* ── Phase 4: ML Intelligence & Biometric Anomaly Panel (M1 & M5) ── */}
+              <div style={{
+                background: 'rgba(255,255,255,0.02)',
+                border: `1px solid ${T.border}`,
+                borderRadius: 12,
+                padding: '16px 18px',
+                marginBottom: 20
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                  <div>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: T.t1, display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span>🤖</span> ML Biometric Screening & Peer Anomaly (IsolationForest)
+                    </div>
+                    <div style={{ fontSize: 10.5, color: T.t3, marginTop: 2 }}>
+                      Fused Fraud Risk &bull; Label: <em style={{ color: T.t2 }}>unusual vs. peers, not proof of fraud</em>
+                    </div>
+                  </div>
+                  {mlData?.anomaly && (
+                    <Badge color={mlData.anomaly.confidence === 'high' ? 'teal' : mlData.anomaly.confidence === 'medium' ? 'gold' : 'sky'}>
+                      {mlData.anomaly.confidence ? `${mlData.anomaly.confidence.toUpperCase()} CONFIDENCE` : 'CALIBRATING'}
+                    </Badge>
+                  )}
+                </div>
+
+                {mlLoading ? (
+                  <div style={{ padding: '16px 0', textAlign: 'center', color: T.t3, fontSize: 12 }}>
+                    Evaluating biometric features against regional peer models…
+                  </div>
+                ) : mlData?.anomaly ? (
+                  <>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 14 }}>
+                      <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 8, padding: '10px 14px' }}>
+                        <div style={{ fontSize: 10, color: T.t3, textTransform: 'uppercase' }}>IsolationForest Score</div>
+                        <div style={{ fontSize: 20, fontWeight: 800, color: mlData.anomaly.anomaly_score > 60 ? T.roseL : mlData.anomaly.anomaly_score > 35 ? T.goldL : T.emeraldL, fontFamily: 'Fraunces, serif', marginTop: 2 }}>
+                          {mlData.anomaly.anomaly_score}/100
+                        </div>
+                        <div style={{ fontSize: 10, color: T.t3, marginTop: 2 }}>Unsupervised peer anomaly</div>
+                      </div>
+                      <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 8, padding: '10px 14px' }}>
+                        <div style={{ fontSize: 10, color: T.t3, textTransform: 'uppercase' }}>Rule-Based Risk</div>
+                        <div style={{ fontSize: 20, fontWeight: 800, color: T.t2, fontFamily: 'Fraunces, serif', marginTop: 2 }}>
+                          {mlData.anomaly.rule_risk}/100
+                        </div>
+                        <div style={{ fontSize: 10, color: T.t3, marginTop: 2 }}>Deterministic checks</div>
+                      </div>
+                      <div style={{ background: 'rgba(45,212,191,0.05)', border: `1px solid rgba(45,212,191,0.18)`, borderRadius: 8, padding: '10px 14px' }}>
+                        <div style={{ fontSize: 10, color: T.teal, textTransform: 'uppercase', fontWeight: 700 }}>Fused Risk Index</div>
+                        <div style={{ fontSize: 20, fontWeight: 800, color: T.tealL, fontFamily: 'Fraunces, serif', marginTop: 2 }}>
+                          {mlData.anomaly.fused_risk}/100
+                        </div>
+                        <div style={{ fontSize: 10, color: T.t3, marginTop: 2 }}>50% rules + 50% IsolationForest</div>
+                      </div>
+                    </div>
+
+                    {/* Top 3 Anomaly Reasons */}
+                    <div style={{ marginBottom: 12 }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: T.t2, marginBottom: 6 }}>
+                        Top Biometric Feature Deviations vs Peers:
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                        {mlData.anomaly.top_reasons?.map((reason, idx) => (
+                          <div key={idx} style={{ fontSize: 11.5, color: T.t2, display: 'flex', alignItems: 'baseline', gap: 6 }}>
+                            <span style={{ color: T.teal, fontSize: 10 }}>●</span>
+                            <span>{reason}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* M5 Photo Perceptual Hash Screening */}
+                    {mlData?.photo_screening && (
+                      <div style={{
+                        background: mlData.photo_screening.is_fraud_flagged ? 'rgba(244,63,94,0.08)' : 'rgba(16,185,129,0.06)',
+                        border: `1px solid ${mlData.photo_screening.is_fraud_flagged ? 'rgba(244,63,94,0.25)' : 'rgba(16,185,129,0.2)'}`,
+                        borderRadius: 8,
+                        padding: '8px 12px',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        fontSize: 11.5
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: mlData.photo_screening.is_fraud_flagged ? T.roseL : T.emeraldL, fontWeight: 600 }}>
+                          <ShieldCheck size={14} />
+                          <span>Photo Hash Integrity (pHash Invariance)</span>
+                        </div>
+                        <div style={{ color: T.t2 }}>
+                          {mlData.photo_screening.is_fraud_flagged ? (
+                            <strong style={{ color: T.roseL }}>Flagged Duplicate Photo ({mlData.photo_screening.duplicate_count} matches)</strong>
+                          ) : (
+                            <span style={{ color: T.emeraldL }}>✓ Clean (Unique Perceptual Signature)</span>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div style={{ textAlign: 'center', padding: '14px 0', color: T.t3, fontSize: 12 }}>
+                    No ML biometric assessment computed yet. Click 'Sync Satellite' to trigger screening.
+                  </div>
+                )}
+              </div>
+
+              {/* ── Real Satellite NDVI & NASA POWER Climate Panel (Phase 3 & 4 M2) ── */}
               <div style={{
                 background: 'rgba(255,255,255,0.02)',
                 border: `1px solid ${T.border}`,
@@ -480,7 +594,7 @@ export default function AdminApprovals() {
                       <span>🛰️</span> Real MODIS NDVI Growth Series (250m Terra)
                     </div>
                     <div style={{ fontSize: 10.5, color: T.t3, marginTop: 2 }}>
-                      Source: MODIS MOD13Q1 via ORNL DAAC (16-day composites)
+                      Source: MODIS MOD13Q1 via ORNL DAAC &bull; M2 Day-of-Year Baseline Monitoring
                     </div>
                   </div>
                   <button
@@ -506,6 +620,27 @@ export default function AdminApprovals() {
                     {syncingSatellite ? 'Syncing...' : 'Sync Satellite'}
                   </button>
                 </div>
+
+                {/* M2 Greenness Decline Alert Banner */}
+                {mlData?.ndvi_monitor?.decline_alert_active && (
+                  <div style={{
+                    background: 'rgba(244,63,94,0.1)',
+                    border: '1px solid rgba(244,63,94,0.35)',
+                    borderRadius: 8,
+                    padding: '9px 13px',
+                    marginBottom: 12,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    fontSize: 12,
+                    color: T.roseL
+                  }}>
+                    <AlertTriangle size={15} />
+                    <div>
+                      <strong>Persistent Greenness Decline Alert:</strong> {mlData.ndvi_monitor.consecutive_drops} consecutive 16-day composites have fallen below 2σ robust seasonal baseline.
+                    </div>
+                  </div>
+                )}
 
                 {satelliteLoading ? (
                   <div style={{ padding: '28px 0', textAlign: 'center', color: T.t3, fontSize: 12 }}>
@@ -540,9 +675,24 @@ export default function AdminApprovals() {
                       </div>
                     </div>
 
-                    <div style={{ height: 180, width: '100%', marginBottom: 14 }}>
+                    <div style={{ height: 190, width: '100%', marginBottom: 10 }}>
                       <ResponsiveContainer width="100%" height="100%">
-                        <LineChart data={ndviData.observations.map(o => ({ date: o.obs_date.slice(5), fullDate: o.obs_date, value: o.value }))}>
+                        <LineChart data={
+                          mlData?.ndvi_monitor?.series && mlData.ndvi_monitor.series.length > 0
+                            ? mlData.ndvi_monitor.series.map(o => ({
+                                date: o.obs_date ? o.obs_date.slice(5) : '',
+                                fullDate: o.obs_date,
+                                value: o.observed_ndvi,
+                                baseline: o.baseline_median,
+                                upper: o.band_upper,
+                                lower: o.band_lower,
+                              }))
+                            : ndviData.observations.map(o => ({
+                                date: o.obs_date ? o.obs_date.slice(5) : '',
+                                fullDate: o.obs_date,
+                                value: o.value,
+                              }))
+                        }>
                           <XAxis dataKey="date" tick={{ fill: T.t3, fontSize: 9.5 }} axisLine={false} tickLine={false} />
                           <YAxis domain={['auto', 'auto']} tick={{ fill: T.t3, fontSize: 9.5 }} axisLine={false} tickLine={false} />
                           <ChartTooltip content={({ active, payload }) => {
@@ -551,16 +701,28 @@ export default function AdminApprovals() {
                               return (
                                 <div style={{ background: 'var(--menu-bg, #090c18)', border: `1px solid ${T.border2}`, padding: '7px 11px', borderRadius: 6, fontSize: 11 }}>
                                   <div style={{ color: T.t3 }}>Date: {d.fullDate}</div>
-                                  <div style={{ color: T.emeraldL, fontWeight: 700 }}>NDVI: {d.value}</div>
-                                  <div style={{ color: T.t3, fontSize: 9.5 }}>Source: MODIS Terra 250m</div>
+                                  <div style={{ color: T.emeraldL, fontWeight: 700 }}>Observed NDVI: {d.value}</div>
+                                  {d.baseline !== undefined && <div style={{ color: '#38bdf8' }}>Seasonal Baseline: {d.baseline}</div>}
+                                  {d.upper !== undefined && <div style={{ color: T.t3, fontSize: 10 }}>Band: [{d.lower} – {d.upper}]</div>}
                                 </div>
                               );
                             }
                             return null;
                           }} />
-                          <Line type="monotone" dataKey="value" stroke={T.emeraldL} strokeWidth={2} dot={{ r: 2.5, fill: T.emeraldL }} isAnimationActive={false} />
+                          <Line type="monotone" dataKey="value" stroke={T.emeraldL} strokeWidth={2} dot={{ r: 2.5, fill: T.emeraldL }} isAnimationActive={false} name="Observed NDVI" />
+                          {mlData?.ndvi_monitor?.series && (
+                            <>
+                              <Line type="monotone" dataKey="baseline" stroke="#38bdf8" strokeDasharray="3 3" strokeWidth={1.5} dot={false} isAnimationActive={false} name="Baseline (DOY Median)" />
+                              <Line type="monotone" dataKey="upper" stroke="rgba(56,189,248,0.25)" strokeDasharray="2 2" strokeWidth={1} dot={false} isAnimationActive={false} name="+2σ Upper" />
+                              <Line type="monotone" dataKey="lower" stroke="rgba(56,189,248,0.25)" strokeDasharray="2 2" strokeWidth={1} dot={false} isAnimationActive={false} name="-2σ Lower" />
+                            </>
+                          )}
                         </LineChart>
                       </ResponsiveContainer>
+                    </div>
+
+                    <div style={{ fontSize: 10, color: T.t3, fontStyle: 'italic', marginBottom: 12 }}>
+                      {mlData?.ndvi_monitor?.resolution_caveat || "MODIS 250 m resolution caveat: values represent mixed canopy averages within a 250m ground pixel."}
                     </div>
                   </>
                 ) : (

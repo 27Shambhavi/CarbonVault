@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
 import { AreaChart, Area, BarChart, Bar, RadarChart, Radar, PolarGrid, PolarAngleAxis, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { useApp } from '../../AppContext.jsx';
-import { fetchPricingConfig, savePricingConfig, fetchPlatformStats, fetchAllProjects, fetchClimateAnalytics } from '../../services/api.js';
+import { fetchPricingConfig, savePricingConfig, fetchPlatformStats, fetchAllProjects, fetchClimateAnalytics, fetchPricingForecast } from '../../services/api.js';
 import { Card, SectionHeader, KPICard, Btn, T, withAlpha } from '../UI.jsx';
-import { DollarSign, TrendingUp, Package, Activity, Save, RotateCcw, ShieldAlert, Lock, Cpu, Sliders } from 'lucide-react';
+import { DollarSign, TrendingUp, Package, Activity, Save, RotateCcw, ShieldAlert, Lock, Cpu, Sliders, ArrowUpRight, ArrowDownRight, Minus } from 'lucide-react';
 
 const CT = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null;
@@ -37,6 +37,7 @@ export function AdminPricing() {
     supply_max: 1.50,
   });
   const [history, setHistory] = useState([]);
+  const [forecastData, setForecastData] = useState(null);
   const [saving, setSaving] = useState(false);
   const [savedMsg, setSavedMsg] = useState('');
 
@@ -59,6 +60,10 @@ export function AdminPricing() {
           setHistory(res.data.history);
         }
       }
+    }).catch(() => {});
+
+    fetchPricingForecast().then((fRes) => {
+      if (fRes.data) setForecastData(fRes.data);
     }).catch(() => {});
   };
 
@@ -364,6 +369,61 @@ export function AdminPricing() {
               </AreaChart>
             </ResponsiveContainer>
           </Card>
+
+          {/* M4: 7-Day Price Forecast Band */}
+          {forecastData && (
+            <Card style={{ marginTop: 16 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: T.t1, display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <TrendingUp size={14} color={T.teal} />
+                    <span>7-Day Price Forecast Band (M4)</span>
+                  </div>
+                  <div style={{ fontSize: 10.5, color: T.t3, marginTop: 2 }}>
+                    Model: {forecastData.model} &bull; Status: <span style={{ color: forecastData.status === 'limited data' ? T.goldL : T.teal }}>{forecastData.status}</span>
+                  </div>
+                </div>
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 4,
+                  fontSize: 11,
+                  fontWeight: 700,
+                  color: forecastData.trend_direction === 'upward' ? T.emeraldL : forecastData.trend_direction === 'downward' ? T.roseL : T.skyL,
+                  background: 'rgba(255,255,255,0.03)',
+                  padding: '4px 8px',
+                  borderRadius: 6
+                }}>
+                  {forecastData.trend_direction === 'upward' ? <ArrowUpRight size={13} /> : forecastData.trend_direction === 'downward' ? <ArrowDownRight size={13} /> : <Minus size={13} />}
+                  <span>{forecastData.trend_direction?.toUpperCase()}</span>
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 6, marginBottom: 8 }}>
+                {forecastData.forecast?.map((pt, idx) => (
+                  <div key={idx} style={{
+                    background: 'rgba(255,255,255,0.02)',
+                    border: `1px solid rgba(255,255,255,0.06)`,
+                    borderRadius: 6,
+                    padding: '6px 4px',
+                    textAlign: 'center'
+                  }}>
+                    <div style={{ fontSize: 9.5, color: T.t3 }}>{pt.date?.slice(5)}</div>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: T.tealL, margin: '2px 0' }}>
+                      ${pt.predicted_price?.toFixed(2)}
+                    </div>
+                    <div style={{ fontSize: 8.5, color: T.t3 }}>
+                      [{pt.lower_bound?.toFixed(1)}-{pt.upper_bound?.toFixed(1)}]
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div style={{ fontSize: 10, color: T.t3 }}>
+                Prediction intervals represent 95% uncertainty envelope (±1.96σ).
+              </div>
+            </Card>
+          )}
         </div>
       </div>
     </div>

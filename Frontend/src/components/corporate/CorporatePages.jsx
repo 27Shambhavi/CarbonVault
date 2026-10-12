@@ -1,7 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useApp } from '../../AppContext.jsx';
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts';
-import { fetchAllProjects, fetchMapProjects, fetchMarketplaceListings, createBuyRequest, createOrder, buyCredits, fetchTransactions, fetchWallet, generateESGReport, loadRazorpayScript } from '../../services/api.js';
+import {
+  fetchAllProjects, fetchMapProjects, fetchMarketplaceListings,
+  createBuyRequest, createOrder, buyCredits, fetchTransactions, fetchWallet,
+  generateESGReport, loadRazorpayScript, fetchPricingForecast, fetchPricingConfig
+} from '../../services/api.js';
 import { Card, SectionHeader, Table, Badge, MRVScore, KPICard, Modal, Btn, T, ScoreGauge, withAlpha } from '../UI.jsx';
 import { ProjectMap } from '../GoogleMap.jsx';
 import CertificateModal from '../CertificateModal.jsx';
@@ -123,6 +127,9 @@ export function CorporateMarketplace() {
   const [selectedForCompare, setSelectedForCompare] = useState([]);
   const [compareModalOpen, setCompareModalOpen] = useState(false);
 
+  const [forecast, setForecast] = useState(null);
+  const [pricingConfig, setPricingConfig] = useState(null);
+
   const loadListings = () => {
     setLoading(true);
     fetchMarketplaceListings(filters)
@@ -136,8 +143,14 @@ export function CorporateMarketplace() {
       .finally(() => setLoading(false));
   };
 
+  const loadPricingData = () => {
+    fetchPricingConfig().then(res => { if (res.data) setPricingConfig(res.data); }).catch(() => {});
+    fetchPricingForecast().then(res => { if (res.data) setForecast(res.data); }).catch(() => {});
+  };
+
   useEffect(() => {
     loadListings();
+    loadPricingData();
   }, [refreshKey, filters.plantation_type, filters.min_mrv]);
 
   const handleApplyFilter = (e) => {
@@ -278,6 +291,68 @@ export function CorporateMarketplace() {
         title="Carbon Credit Marketplace"
         subtitle="Browse verified ecological restoration projects, compare quality metrics, and purchase audited credits"
       />
+
+      {/* Live Dynamic Price Ticker & M4 Forecast Sparkline */}
+      <div style={{
+        background: 'rgba(255,255,255,0.02)',
+        border: `1px solid ${T.border}`,
+        borderRadius: 12,
+        padding: '14px 18px',
+        marginBottom: 20,
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        flexWrap: 'wrap',
+        gap: 14
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+          <div>
+            <div style={{ fontSize: 10.5, color: T.t3, textTransform: 'uppercase', letterSpacing: '0.6px' }}>
+              Dynamic Market Price
+            </div>
+            <div style={{ fontSize: 24, fontWeight: 900, color: T.tealL, fontFamily: 'Fraunces, serif', display: 'flex', alignItems: 'baseline', gap: 6 }}>
+              ${pricingConfig?.final_price ? pricingConfig.final_price.toFixed(2) : '28.50'}
+              <span style={{ fontSize: 11, color: T.t3, fontFamily: 'Plus Jakarta Sans, sans-serif' }}>/ t CO₂e</span>
+            </div>
+          </div>
+          {forecast && (
+            <div style={{
+              background: forecast.trend_direction === 'upward' ? 'rgba(16,185,129,0.1)' : forecast.trend_direction === 'downward' ? 'rgba(244,63,94,0.1)' : 'rgba(56,189,248,0.1)',
+              border: `1px solid ${forecast.trend_direction === 'upward' ? 'rgba(16,185,129,0.25)' : forecast.trend_direction === 'downward' ? 'rgba(244,63,94,0.25)' : 'rgba(56,189,248,0.25)'}`,
+              borderRadius: 8,
+              padding: '6px 10px',
+              fontSize: 11,
+              fontWeight: 700,
+              color: forecast.trend_direction === 'upward' ? T.emeraldL : forecast.trend_direction === 'downward' ? T.roseL : T.skyL,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4
+            }}>
+              <span>{forecast.trend_direction === 'upward' ? '↗' : forecast.trend_direction === 'downward' ? '↘' : '→'}</span>
+              <span>7d Forecast: {forecast.trend_direction?.toUpperCase()}</span>
+            </div>
+          )}
+        </div>
+
+        {forecast?.forecast && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <div style={{ fontSize: 10.5, color: T.t3, marginRight: 4 }}>7-Day Horizon:</div>
+            {forecast.forecast.map((pt, i) => (
+              <div key={i} style={{
+                background: 'rgba(255,255,255,0.03)',
+                borderRadius: 6,
+                padding: '4px 6px',
+                textAlign: 'center',
+                fontSize: 10,
+                color: T.t2
+              }}>
+                <div style={{ fontSize: 8.5, color: T.t3 }}>{pt.date?.slice(5)}</div>
+                <div style={{ fontWeight: 700, color: T.tealL }}>${pt.predicted_price?.toFixed(1)}</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       {/* Multi-Parameter Search & Filter Bar */}
       <Card style={{ marginBottom: 20, padding: 16 }}>

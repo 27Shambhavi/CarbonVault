@@ -820,9 +820,35 @@ async def lifespan(app: FastAPI):
             finally:
                 db_s.close()
 
+        def nightly_ml_refresh_job():
+            logger.info("Running nightly ML retrain and assessment refresh job...")
+            db_ml = SessionLocal()
+            try:
+                from ml.anomaly import run_anomaly_detection
+                from ml.ndvi_monitor import run_ndvi_monitor
+                from ml.suitability import assess_site_suitability
+                from ml.phash import run_project_photo_screening
+                from credit_calculation.credits_module.db_models import Project
+                for p in db_ml.query(Project).all():
+                    run_anomaly_detection(p.project_id, db_ml)
+                    run_ndvi_monitor(p.project_id, db_ml)
+                    assess_site_suitability(
+                        float(p.latitude or 12.0),
+                        float(p.longitude or 78.0),
+                        project_id=p.project_id,
+                        db=db_ml
+                    )
+                    run_project_photo_screening(p.project_id, db_ml)
+                logger.info("[OK] Nightly ML assessments completed.")
+            except Exception as me:
+                logger.warning("Error in nightly ML refresh job: %s", me)
+            finally:
+                db_ml.close()
+
         scheduler.add_job(daily_satellite_sync_job, 'interval', hours=24, id='daily_satellite_sync')
+        scheduler.add_job(nightly_ml_refresh_job, 'interval', hours=24, id='nightly_ml_refresh')
         scheduler.start()
-        logger.info("[OK] APScheduler started for daily satellite composite sync")
+        logger.info("[OK] APScheduler started for daily satellite sync and nightly ML retraining")
     except Exception as sche_err:
         logger.warning("Could not start APScheduler: %s", sche_err)
 

@@ -2400,4 +2400,49 @@ def trigger_project_satellite_sync(project_id: str):
             "new_climate_observations": climate_count
         }
     finally:
-        db.close()
+        db.close()
+
+
+@router.get("/pricing/forecast")
+def get_pricing_forecast_endpoint(horizon_days: int = 7):
+    """
+    M4: Generate 7-day carbon credit price forecast using statsmodels ExponentialSmoothing.
+    Falls back to linear trend when < 30 observations.
+    """
+    db = SessionLocal()
+    try:
+        from ml.forecast import generate_price_forecast
+        return generate_price_forecast(db, horizon_days=horizon_days)
+    finally:
+        db.close()
+
+
+@router.get("/{project_id}/ml-assessment")
+@router.get("/projects/{project_id}/ml-assessment")
+def get_project_ml_assessment(project_id: str):
+    """
+    Consolidated Phase 4 ML assessment for project:
+    - M1: IsolationForest Anomaly detection + fused risk
+    - M2: Robust NDVI Monitor + baseline band + decline alerts
+    - M5: Photo Perceptual Hash screening
+    """
+    db = SessionLocal()
+    try:
+        from ml.anomaly import run_anomaly_detection
+        from ml.ndvi_monitor import run_ndvi_monitor
+        from ml.phash import run_project_photo_screening
+
+        anomaly = run_anomaly_detection(project_id, db)
+        ndvi = run_ndvi_monitor(project_id, db)
+        phash = run_project_photo_screening(project_id, db)
+
+        return {
+            "project_id": project_id,
+            "anomaly": anomaly,
+            "ndvi_monitor": ndvi,
+            "photo_screening": phash,
+            "timestamp": datetime.utcnow().isoformat() + "Z"
+        }
+    finally:
+        db.close()
+

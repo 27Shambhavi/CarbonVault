@@ -182,6 +182,11 @@ export async function syncProjectSatellite(projectId) {
   return request(`${API_BASE}/projects/${projectId}/sync-satellite`, { method: 'POST' });
 }
 
+/** Phase 4: Fetch consolidated ML assessment (M1 IsolationForest Anomaly, M2 Robust NDVI Monitor, M5 Photo Screening) */
+export async function fetchProjectMlAssessment(projectId) {
+  return request(`${API_BASE}/projects/${projectId}/ml-assessment`);
+}
+
 /** Fetch ALL projects (admin) */
 export async function fetchAllProjects() {
   const res = await request(`${API_BASE}/projects/all-projects`);

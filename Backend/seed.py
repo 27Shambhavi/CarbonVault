@@ -55,6 +55,28 @@ def run_seed():
                 c.type, c.sha256_hash[:16]
             )
 
+        # Seed ML model assessments in ml_assessments table
+        logger.info("Generating and storing baseline ML assessments for seeded projects...")
+        try:
+            from ml.anomaly import run_anomaly_detection
+            from ml.ndvi_monitor import run_ndvi_monitor
+            from ml.suitability import assess_site_suitability
+            from ml.phash import run_project_photo_screening
+
+            for p in db.query(Project).all():
+                run_anomaly_detection(p.project_id, db)
+                run_ndvi_monitor(p.project_id, db)
+                assess_site_suitability(
+                    float(p.latitude or 12.0),
+                    float(p.longitude or 78.0),
+                    project_id=p.project_id,
+                    db=db
+                )
+                run_project_photo_screening(p.project_id, db)
+            logger.info("[OK] ML assessments stored for all platform projects.")
+        except Exception as mle:
+            logger.warning("Could not precompute all ML assessments: %s", mle)
+
         print(f"\n[OK] Seed & backfill complete! {len(certs)} certificates verified in registry.")
 
     except Exception as e:
