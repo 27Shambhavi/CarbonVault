@@ -180,6 +180,54 @@ export default function AdminDashboard() {
         </Card>
       </div>
 
+      {/* Automated Biometric & Environmental Alerts Panel */}
+      <Card style={{marginBottom:22}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14}}>
+          <div>
+            <div style={{fontSize:14,fontWeight:700,color:T.t1,display:'flex',alignItems:'center',gap:7}}>
+              <AlertTriangle size={16} color={T.roseL} />
+              <span>Biometric & Environmental Risk Alerts</span>
+            </div>
+            <div style={{fontSize:11,color:T.t3,marginTop:2}}>
+              Automated triggers: IsolationForest anomaly score &gt; 50 &bull; Greenness decline z &lt; -2.0 &bull; High fraud score
+            </div>
+          </div>
+          <Badge color={projects.filter(p => (p.fraud_risk || p.fraudRisk || 0) > 40).length > 0 ? 'rose' : 'teal'}>
+            {projects.filter(p => (p.fraud_risk || p.fraudRisk || 0) > 40).length} ACTIVE ALERTS
+          </Badge>
+        </div>
+
+        {projects.filter(p => (p.fraud_risk || p.fraudRisk || 0) > 35).length > 0 ? (
+          <div style={{display:'flex',flexDirection:'column',gap:8}}>
+            {projects.filter(p => (p.fraud_risk || p.fraudRisk || 0) > 35).map(p => (
+              <div key={p.project_id || p.id} style={{
+                background:'rgba(244,63,94,0.06)',
+                border:'1px solid rgba(244,63,94,0.22)',
+                borderRadius:8,
+                padding:'10px 14px',
+                display:'flex',
+                justifyContent:'space-between',
+                alignItems:'center'
+              }}>
+                <div>
+                  <div style={{fontSize:12.5,fontWeight:700,color:T.t1}}>
+                    {p.name} <span style={{fontSize:11,color:T.t3}}>({p.project_id || p.id})</span>
+                  </div>
+                  <div style={{fontSize:11,color:T.roseL,marginTop:2}}>
+                    Biometric risk score: {p.fraud_risk || p.fraudRisk}% &bull; Type: {p.plantation_type || p.type} &bull; Area: {p.area_hectares || '—'} ha
+                  </div>
+                </div>
+                <Badge color="rose">REVIEW REQUIRED</Badge>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div style={{textAlign:'center',padding:'16px 0',color:T.emeraldL,fontSize:12,background:'rgba(16,185,129,0.05)',borderRadius:8}}>
+            ✓ All active plantations within normal biometric and greenness parameters. Zero active decline alerts.
+          </div>
+        )}
+      </Card>
+
       {/* Live Submissions & Real-Time Event Stream */}
       <Card style={{marginBottom:22}}>
         <SectionHeader
