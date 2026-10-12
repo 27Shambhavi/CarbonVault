@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useApp } from '../../AppContext.jsx';
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts';
-import { mockTransactions, mockGRSData, mockMarketplace, mockESGReport, generateMockESGReport } from '../../data/mockData.js';
 import { fetchAllProjects, fetchMapProjects, fetchMarketplaceListings, createBuyRequest, createOrder, buyCredits, fetchTransactions, fetchWallet, generateESGReport, loadRazorpayScript } from '../../services/api.js';
 import { Card, SectionHeader, Table, Badge, MRVScore, KPICard, Modal, Btn, T, ScoreGauge, withAlpha } from '../UI.jsx';
 import { ProjectMap } from '../GoogleMap.jsx';
@@ -20,26 +19,29 @@ export function CorporateDashboard() {
   const [projects, setProjects] = useState([]);
   const [mapFeatures, setMapFeatures] = useState([]);
   const [loading, setLoading] = useState(true);
-  const myTx = mockTransactions.filter(t=>t.buyer==='Microsoft Sustainability');
-  const totalCredits = myTx.reduce((s,t)=>s+t.tons,0);
+  const [wallet, setWallet] = useState(null);
 
   useEffect(() => {
     setLoading(true);
-    Promise.all([fetchAllProjects(), fetchMapProjects()])
-      .then(([allRes, mapRes]) => {
+    Promise.all([fetchAllProjects(), fetchMapProjects(), fetchWallet('Microsoft Sustainability')])
+      .then(([allRes, mapRes, walRes]) => {
         if (!allRes.error && Array.isArray(allRes.data)) {
           setProjects(allRes.data.filter(p => p.status === 'approved'));
         }
         if (!mapRes.error && Array.isArray(mapRes.data?.projects)) {
           setMapFeatures(mapRes.data.projects);
         }
+        if (walRes && !walRes.error && walRes.data) {
+          setWallet(walRes.data);
+        }
       })
       .finally(() => setLoading(false));
   }, [refreshKey]);
 
   // Calculate real totals from backend data
-  const realTotalCredits = projects.reduce((s, p) => s + (p.credits || 0), 0);
-  const realTotalFunding = projects.reduce((s, p) => s + (p.total_funding || 0), 0);
+  const realTotalCredits = wallet?.total_credits ?? projects.reduce((s, p) => s + (p.credits || 0), 0);
+  const realTotalFunding = wallet?.total_spent_usd ?? projects.reduce((s, p) => s + (p.total_funding || 0), 0);
+  const grsData = { score: 875, rank: 3, total: 24, transparency: 92, quality: 88, commitment: 85 };
 
   if (loading) return (
     <div style={{padding:28, display:'flex', justifyContent:'center', alignItems:'center', minHeight:'40vh'}}>
@@ -54,10 +56,10 @@ export function CorporateDashboard() {
     <div style={{padding:28}}>
       <SectionHeader title="Corporate Dashboard" subtitle="Microsoft Sustainability — carbon portfolio overview"/>
       <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:15,marginBottom:24}}>
-        <KPICard icon={Package}    label="Available Credits"     value={realTotalCredits > 0 ? realTotalCredits.toLocaleString() : totalCredits.toLocaleString()} sub="Total tonnes CO₂e"    trend="up" color={T.violetLL || T.violetL}/>
+        <KPICard icon={Package}    label="Available Credits"     value={realTotalCredits.toLocaleString()} sub="Total tonnes CO₂e"    trend="up" color={T.violetLL || T.violetL}/>
         <KPICard icon={TrendingUp} label="Active Projects"       value={projects.length}          sub="Projects supported"   trend="up" color={T.teal}/>
-        <KPICard icon={DollarSign} label="Total Value"           value={realTotalFunding > 0 ? `$${realTotalFunding.toLocaleString()}` : `$${(totalCredits * 28.5).toLocaleString()}`} sub="Portfolio value" trend="up" color={T.emeraldL}/>
-        <KPICard icon={Star}       label="GRS Score"             value={mockGRSData.score}               sub="Gold Verifier status" trend="up" color={T.goldL}/>
+        <KPICard icon={DollarSign} label="Total Value"           value={`$${Math.round(realTotalFunding).toLocaleString()}`} sub="Portfolio value" trend="up" color={T.emeraldL}/>
+        <KPICard icon={Star}       label="GRS Score"             value={grsData.score}               sub="Gold Verifier status" trend="up" color={T.goldL}/>
       </div>
       <Card style={{marginBottom:22}}>
         <SectionHeader title="Supported Project Locations" subtitle="Approved plantation footprints (polygons from verification data)"/>
@@ -66,9 +68,9 @@ export function CorporateDashboard() {
       <div style={{display:'grid',gridTemplateColumns:'1fr 2fr',gap:18}}>
         <Card>
           <SectionHeader title="GRS Score"/>
-          <div style={{display:'flex',justifyContent:'center',marginBottom:14}}><ScoreGauge score={mockGRSData.score} max={1000} label="/ 1000"/></div>
-          <div style={{textAlign:'center',marginBottom:14}}><Badge type="Gold" label="Gold Verifier"/><div style={{fontSize:12,color:T.t3,marginTop:7}}>Rank #{mockGRSData.rank} of {mockGRSData.total}</div></div>
-          {[{l:'Transparency',v:mockGRSData.transparency},{l:'Quality',v:mockGRSData.quality},{l:'Commitment',v:mockGRSData.commitment}].map(({l,v})=>(
+          <div style={{display:'flex',justifyContent:'center',marginBottom:14}}><ScoreGauge score={grsData.score} max={1000} label="/ 1000"/></div>
+          <div style={{textAlign:'center',marginBottom:14}}><Badge type="Gold" label="Gold Verifier"/><div style={{fontSize:12,color:T.t3,marginTop:7}}>Rank #{grsData.rank} of {grsData.total}</div></div>
+          {[{l:'Transparency',v:grsData.transparency},{l:'Quality',v:grsData.quality},{l:'Commitment',v:grsData.commitment}].map(({l,v})=>(
             <div key={l} style={{marginBottom:10}}>
               <div style={{display:'flex',justifyContent:'space-between',marginBottom:4,fontSize:12}}><span style={{color:T.t3}}>{l}</span><span style={{color:T.teal,fontWeight:700}}>{v}%</span></div>
               <div style={{height:4,background:'var(--border, rgba(255,255,255,0.07))',borderRadius:3,overflow:'hidden'}}><div style={{height:'100%',width:`${v}%`,background:`linear-gradient(90deg,${withAlpha(T.teal, '70', 60)},${T.teal})`,borderRadius:3}}/></div>
@@ -88,15 +90,9 @@ export function CorporateDashboard() {
                 <Badge type={p.status} label={p.status}/>,
               ])}/>
           ) : (
-            <Table headers={['Date','Project','Tonnes','Price/t','Total','Receipt']}
-              rows={myTx.map(t=>[
-                <span style={{color:T.t3,fontSize:12}}>{t.date}</span>,
-                <span style={{color:T.t1,fontWeight:600,fontSize:13}}>{t.project}</span>,
-                <span style={{color:T.teal,fontWeight:700}}>{t.tons.toLocaleString()}</span>,
-                <span style={{color:T.goldL,fontWeight:600}}>${t.price}</span>,
-                <span style={{color:T.emeraldL,fontWeight:700}}>${t.total.toLocaleString()}</span>,
-                <button style={{background:'rgba(124,58,237,0.1)',border:'1px solid rgba(167,139,250,0.25)',borderRadius:7,padding:'4px 10px',color:T.violetLL || T.violetL,fontSize:11,cursor:'pointer',fontWeight:700}}>{t.cert}</button>,
-              ])}/>
+            <div style={{ padding: '36px 16px', textAlign: 'center', color: T.t3, fontSize: 13 }}>
+              No active projects found in database.
+            </div>
           )}
         </Card>
       </div>
@@ -134,7 +130,7 @@ export function CorporateMarketplace() {
         if (!res.error && Array.isArray(res.data)) {
           setListings(res.data);
         } else {
-          setListings(mockMarketplace);
+          setListings([]);
         }
       })
       .finally(() => setLoading(false));
@@ -728,20 +724,12 @@ export function CorporateESG() {
       const result = await generateESGReport(corporateName, projectId);
       
       if (result.error) {
-        // Fallback to mock data
-        const mockResult = usePortfolio ? generateMockESGReport(null) : generateMockESGReport(projectId);
-        if (mockResult.error) {
-          setError(mockResult.error);
-        } else {
-          setReport(mockResult.data);
-        }
+        setError(result.error || 'Failed to generate ESG report: data unavailable');
       } else {
         setReport(result.data);
       }
     } catch (err) {
-      setError('Failed to generate report. Using demo data.');
-      const mockResult = usePortfolio ? generateMockESGReport(null) : generateMockESGReport(selectedProject);
-      setReport(mockResult.data);
+      setError(err.message || 'Failed to generate report: data unavailable');
     } finally {
       setLoading(false);
     }

@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { AreaChart, Area, LineChart, Line, BarChart, Bar, RadarChart, Radar, PolarGrid, PolarAngleAxis, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { useApp } from '../../AppContext.jsx';
-import { mockPricing, mockCreditsOverTime, mockCreditsByType } from '../../data/mockData.js';
 import { fetchPricingConfig, savePricingConfig, fetchPlatformStats, fetchAllProjects, fetchClimateAnalytics } from '../../services/api.js';
 import { Card, SectionHeader, KPICard, Btn, T, withAlpha } from '../UI.jsx';
 import { DollarSign, TrendingUp, Package, Activity, Save, RotateCcw, ShieldAlert, Lock } from 'lucide-react';
@@ -18,7 +17,7 @@ export function AdminPricing() {
   const { user } = useApp();
   const isApprover = user?.admin_role === 'approver';
 
-  const [p, setP] = useState(mockPricing);
+  const [p, setP] = useState({ base: 28.50, demand: 1.12, supply: 0.98, living: 1.08 });
   const [history, setHistory] = useState([]);
   const [saving, setSaving] = useState(false);
   const [savedMsg, setSavedMsg] = useState('');
@@ -89,9 +88,7 @@ export function AdminPricing() {
     );
   };
 
-  const priceHistoryData = history.length > 0
-    ? history
-    : mockCreditsOverTime.map((d, i) => ({ month: d.month, price: 24 + i * 0.8 }));
+  const priceHistoryData = history.length > 0 ? history : [];
 
   return (
     <div style={{ padding: 28 }}>
@@ -210,7 +207,7 @@ export function AdminAnalytics() {
   });
   const creditsByTypeData = Object.keys(typeMap).length > 0
     ? Object.entries(typeMap).map(([name, value]) => ({ name, value }))
-    : mockCreditsByType;
+    : [];
 
   const radarData = climate?.co_benefits && climate.co_benefits.length > 0
     ? climate.co_benefits.map(c => ({ metric: c.metric, score: c.value }))
@@ -225,7 +222,7 @@ export function AdminAnalytics() {
 
   const historyData = pricing?.history && pricing.history.length > 0
     ? pricing.history.map(h => ({ month: h.month, credits: Math.round(h.price * 1400) }))
-    : mockCreditsOverTime;
+    : [];
 
   const revenueDisplay = stats?.total_funding_usd ? `$${Math.round(stats.total_funding_usd / 1000)}K` : '$580K';
   const availableCredits = stats?.total_credits ? Math.round(stats.total_credits).toLocaleString() : '48,800';

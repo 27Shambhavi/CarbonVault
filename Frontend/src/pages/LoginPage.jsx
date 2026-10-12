@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useApp } from '../AppContext.jsx';
 import { fetchPlatformStats } from '../services/api.js';
+import AppFooter from '../components/Footer.jsx';
 import { T, withAlpha } from '../components/UI.jsx';
 import { Leaf, ShieldCheck, BarChart3, Eye, EyeOff, Zap, TrendingUp, Award, TreePine, Building2, Globe, Sun, Moon } from 'lucide-react';
 
@@ -58,7 +59,7 @@ export default function LoginPage() {
   ];
 
   return (
-    <div style={{minHeight:'100vh', display:'flex', background:T.bg0, position:'relative', overflow:'hidden', fontFamily:'Plus Jakarta Sans, sans-serif'}}>
+    <div style={{minHeight:'100vh', display:'flex', flexDirection:'column', background:T.bg0, position:'relative', overflow:'hidden', fontFamily:'Plus Jakarta Sans, sans-serif'}}>
       <style>{`
         @keyframes float { 0%,100%{transform:translateY(0) scale(1)} 50%{transform:translateY(-18px) scale(1.05)} }
         @keyframes fadeUp { from{opacity:0;transform:translateY(22px)} to{opacity:1;transform:translateY(0)} }
@@ -87,8 +88,9 @@ export default function LoginPage() {
         <div style={{position:'absolute',top:'12%',right:'10%',width:160,height:160,border:'1px solid rgba(245,158,11,0.08)',borderRadius:'50%',animation:'spinSlow 20s linear infinite reverse'}}/>
       </div>
 
-      {/* LEFT PANEL */}
-      <div style={{flex:1,display:'flex',flexDirection:'column',justifyContent:'center',padding:'32px 56px',position:'relative',zIndex:1}}>
+      <div style={{flex:1, display:'flex', position:'relative', zIndex:1, flexWrap:'wrap'}}>
+        {/* LEFT PANEL */}
+        <div style={{flex:1,minWidth:340,display:'flex',flexDirection:'column',justifyContent:'center',padding:'32px 56px',position:'relative',zIndex:1}}>
         {/* Logo */}
         <div style={{display:'flex',alignItems:'center',gap:13,marginBottom:28}}>
           <div style={{width:44,height:44,background:`linear-gradient(135deg, ${T.teal}, ${T.tealDD})`,borderRadius:14,display:'flex',alignItems:'center',justifyContent:'center',boxShadow:`0 6px 28px rgba(45,212,191,0.45), inset 0 1px 0 rgba(255,255,255,0.25)`,flexShrink:0}}>
@@ -223,9 +225,9 @@ export default function LoginPage() {
         </div>
 
         <div style={{position:'absolute',bottom:0,left:0,right:0,height:1,background:`linear-gradient(90deg,transparent,rgba(45,212,191,0.3),transparent)`}}/>
-        
-        
       </div>
+      </div>
+      <AppFooter />
     </div>
   );
 }

@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useApp } from '../../AppContext.jsx';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
-import { mockCreditsByType } from '../../data/mockData.js';
 import {
   fetchPlatformStats,
   fetchAllProjects,

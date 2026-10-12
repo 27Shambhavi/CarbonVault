@@ -4,8 +4,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "lint": "eslint src",
-    "prebuild": "npm run lint",
+    "check:mockdata": "node scripts/check-no-mockdata.js",
+    "lint": "node scripts/check-no-mockdata.js && eslint src",
+    "prebuild": "node scripts/check-no-mockdata.js && npm run lint",
     "build": "vite build",
     "preview": "vite preview"
   },

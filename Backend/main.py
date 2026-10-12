@@ -737,13 +737,27 @@ def get_commit_hash():
     return "unknown"
 
 
+SERVER_STARTED_AT = datetime.utcnow().isoformat() + "Z"
+
+
 @app.get("/health")
 def health():
     commit = get_commit_hash()
+    db_status = "ok"
+    try:
+        from sqlalchemy import text
+        db = SessionLocal()
+        db.execute(text("SELECT 1"))
+        db.close()
+    except Exception as e:
+        logger.warning("DB health check failed: %s", e)
+        db_status = "error"
     return {
         "status": "ok",
         "commit": commit,
         "commit_hash": commit,
+        "started_at": SERVER_STARTED_AT,
+        "db": db_status,
         "timestamp": datetime.utcnow().isoformat() + "Z"
     }
 

@@ -2,6 +2,7 @@ import { AppProvider, useApp } from './AppContext.jsx';
 import LoginPage from './pages/LoginPage.jsx';
 import { ErrorBoundary } from './components/ErrorBoundary.jsx';
 import { Sidebar, Navbar, NotificationCenter } from './components/Layout.jsx';
+import AppFooter from './components/Footer.jsx';
 import { SettingsPage, ProfilePage } from './components/SettingsProfile.jsx';
 import { T } from './components/UI.jsx';
 
@@ -84,6 +85,7 @@ function AppShell() {
             <PageRouter />
           </ErrorBoundary>
         </main>
+        <AppFooter />
       </div>
       <NotificationCenter />
     </div>

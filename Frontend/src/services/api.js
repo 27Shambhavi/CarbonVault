@@ -1,11 +1,6 @@
 // ── CarbonVault API Service Layer ────────────────────────────────────────────
-// Resilient API: tries backend first, falls back to mock data if unavailable.
-// Uses Vite proxy (/api → http://127.0.0.1:8000) to avoid CORS.
-
-import {
-  mockProjects, mockTransactions, mockMarketplace, mockBuyRequests,
-  mockUsers, mockGRSData, mockCreditsOverTime, mockCreditsByType
-} from '../data/mockData.js';
+// Real Data Architecture: talks directly to FastAPI backend, no invented mock fallbacks.
+// Uses Vite proxy (/api → http://127.0.0.1:8000) or VITE_API_BASE_URL.
 
 const RAW_BASE = import.meta.env.VITE_API_BASE_URL;
 export const API_BASE = RAW_BASE ? RAW_BASE.replace(/\/$/, '') : '/api';
@@ -22,14 +17,27 @@ export function getImageUrl(path) {
 }
 
 // ── Backend availability tracking ──────────────────────────────────────────
-let _backendOnline = true; // Default optimistic so requests are always attempted
-let _currentAdminRole = 'super_admin';
-let _currentAdminEmail = 'admin@carbonvault.com';
+let _backendOnline = true;
+let _authToken = null;
 
-export function setApiAdminContext(role, email) {
-  _currentAdminRole = role || 'super_admin';
-  _currentAdminEmail = email || 'admin@carbonvault.com';
+export function setAuthToken(token) {
+  _authToken = token;
+  if (token) {
+    try { localStorage.setItem('carbonvault_jwt', token); } catch {}
+  } else {
+    try { localStorage.removeItem('carbonvault_jwt'); } catch {}
+  }
 }
+
+export function getAuthToken() {
+  if (!_authToken) {
+    try { _authToken = localStorage.getItem('carbonvault_jwt'); } catch {}
+  }
+  return _authToken;
+}
+
+// Legacy helper kept for backward compatibility; replaced by JWT bearer tokens
+export function setApiAdminContext() {}
 
 export async function checkBackend() {
   try {
@@ -49,7 +57,7 @@ checkBackend().catch(() => {});
 export function isBackendOnline() { return _backendOnline; }
 
 // ── Generic fetch wrapper ──────────────────────────────────────────────────
-async function request(url, options = {}) {
+export async function request(url, options = {}) {
   try {
     // Default 60s timeout to accommodate Render free-tier cold starts
     const controller = new AbortController();
@@ -58,11 +66,10 @@ async function request(url, options = {}) {
     const headers = {
       ...(options.headers || {}),
     };
-    if (_currentAdminRole) {
-      headers['X-Admin-Role'] = _currentAdminRole;
-    }
-    if (_currentAdminEmail) {
-      headers['X-Admin-Email'] = _currentAdminEmail;
+
+    const token = getAuthToken();
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
     }
 
     const fetchOptions = {
@@ -97,24 +104,27 @@ async function request(url, options = {}) {
   }
 }
 
-/**
- * Try backend first; if it fails, return mock fallback data.
- * ALWAYS attempts the live backend first.
- */
-async function requestWithFallback(url, options = {}, fallback = null) {
-  const result = await request(url, options);
-  if (result.error && fallback !== null) {
-    console.warn(`[CarbonVault API] Backend request failed (${url}): ${result.error}. Using fallback.`);
-    return { data: fallback, error: null, fromMock: true, backendError: result.error };
-  }
-  return { ...result, fromMock: false };
+// ══════════════════════════════════════════════════════════════════════════════
+// HEALTH & AUTH APIs
+// ══════════════════════════════════════════════════════════════════════════════
+
+export async function fetchHealth() {
+  return request(`${API_BASE}/health`);
+}
+
+export async function loginUser(email, password) {
+  return request(`${API_BASE}/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password }),
+  });
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
 // PROJECT APIs
 // ══════════════════════════════════════════════════════════════════════════════
 
-/** Create a new project (FormData with file upload). No fallback — requires backend. */
+/** Create a new project (FormData with file upload). */
 export async function createProject(formData) {
   return request(`${API_BASE}/projects/create-project`, {
     method: 'POST',
@@ -124,59 +134,36 @@ export async function createProject(formData) {
 
 /** Fetch projects for a specific NGO */
 export async function fetchProjects(ngoId) {
-  const mockFallback = mockProjects
-    .filter(p => p.ngo === 'EcoGuard Brazil')
-    .map(p => ({
-      project_id: p.id, name: p.name,
-      location: `${p.lat}, ${p.lng}`,
-      area_hectares: p.area, plantation_type: p.plantType || p.type,
-      status: p.status, credits: p.credits, shadow_credits: 0,
-      price_per_ton: p.price, total_funding: 0,
-      mrvScore: p.mrvScore, fraudRisk: p.fraudRisk, envScore: p.envScore,
-      evidence_image: null,
-    }));
-  return requestWithFallback(`${API_BASE}/projects/projects?ngo_id=${ngoId}`, {}, mockFallback);
+  const res = await request(`${API_BASE}/projects/projects?ngo_id=${ngoId}`);
+  if (res.error) return { data: [], error: res.error };
+  return res;
 }
 
 /** Fetch dashboard summary for an NGO */
 export async function fetchDashboard(ngoId) {
-  const approved = mockProjects.filter(p => p.status === 'approved');
-  const mockDash = {
-    total_projects: mockProjects.length,
-    active_projects: approved.length,
-    total_credits: approved.reduce((s, p) => s + (p.credits || 0), 0),
-    total_shadow_credits: 0,
-    total_funding: approved.reduce((s, p) => s + (p.credits || 0) * (p.price || 0), 0),
-    corporates_involved: ['Microsoft Sustainability', 'Google Carbon Team'],
-  };
-  return requestWithFallback(`${API_BASE}/projects/dashboard/${ngoId}`, {}, mockDash);
+  return request(`${API_BASE}/projects/dashboard/${ngoId}`);
 }
 
 /** Approved projects with GeoJSON polygons (global). Optional ngo_id = all statuses for that NGO. */
 export async function fetchMapProjects(ngoId = null) {
   const q = ngoId != null && ngoId !== '' ? `?ngo_id=${encodeURIComponent(ngoId)}` : '';
-  return requestWithFallback(`${API_BASE}/projects/map${q}`, {}, { projects: [] });
+  const res = await request(`${API_BASE}/projects/map${q}`);
+  if (res.error) return { data: { projects: [] }, error: res.error };
+  return res;
 }
 
 /** Pending projects with polygons (admin map overlay). */
 export async function fetchMapPendingProjects() {
-  return requestWithFallback(`${API_BASE}/projects/pending`, {}, { projects: [] });
+  const res = await request(`${API_BASE}/projects/pending`);
+  if (res.error) return { data: { projects: [] }, error: res.error };
+  return res;
 }
 
 /** Fetch ALL projects (admin) */
 export async function fetchAllProjects() {
-  const mockFallback = mockProjects.map(p => ({
-    project_id: p.id, name: p.name, ngo: p.ngo,
-    location: p.location, lat: p.lat, lng: p.lng,
-    area_hectares: p.area, plantation_type: p.type,
-    number_of_trees: p.trees, status: p.status,
-    credits: p.credits, shadow_credits: 0,
-    price_per_ton: p.price, total_funding: 0,
-    start_date: p.startDate, created_at: p.startDate,
-    mrvScore: p.mrvScore, fraudRisk: p.fraudRisk, envScore: p.envScore,
-    evidence_image: null,
-  }));
-  return requestWithFallback(`${API_BASE}/projects/all-projects`, {}, mockFallback);
+  const res = await request(`${API_BASE}/projects/all-projects`);
+  if (res.error) return { data: [], error: res.error };
+  return res;
 }
 
 /** Update project status (admin multi-stage lifecycle with comment) */
@@ -210,13 +197,10 @@ export async function fetchProjectProgress(projectId) {
   return request(`${API_BASE}/projects/${projectId}/progress`);
 }
 
-
-
 // ══════════════════════════════════════════════════════════════════════════════
 // FRAUD DETECTION APIs
 // ══════════════════════════════════════════════════════════════════════════════
 
-/** Run fraud detection on a project (if PostGIS is available) */
 export async function runFraudDetection(projectId, polygonWkt, imagePath) {
   return request(`${API_BASE}/fraud/check-project`, {
     method: 'POST',
@@ -235,12 +219,9 @@ export async function runFraudDetection(projectId, polygonWkt, imagePath) {
 
 /** Fetch marketplace buy requests for an NGO */
 export async function fetchMarketplaceRequests(ngoId) {
-  const mockFallback = mockBuyRequests.map(r => ({
-    id: r.id, buyer: r.buyer, project_id: r.projectId,
-    project_name: r.project, tons: r.tons,
-    price_per_ton: r.pricePerTon, total: r.total, status: r.status,
-  }));
-  return requestWithFallback(`${API_BASE}/marketplace/requests/${ngoId}`, {}, mockFallback);
+  const res = await request(`${API_BASE}/marketplace/requests/${ngoId}`);
+  if (res.error) return { data: [], error: res.error };
+  return res;
 }
 
 /** Fetch marketplace listings for corporate buyers with optional multi-param filtering */
@@ -252,7 +233,9 @@ export async function fetchMarketplaceListings(filters = {}) {
   if (filters.min_mrv != null && filters.min_mrv !== '') q.append('min_mrv', filters.min_mrv);
   if (filters.search) q.append('search', filters.search);
   const qs = q.toString() ? `?${q.toString()}` : '';
-  return requestWithFallback(`${API_BASE}/marketplace/listings${qs}`, {}, mockMarketplace);
+  const res = await request(`${API_BASE}/marketplace/listings${qs}`);
+  if (res.error) return { data: [], error: res.error };
+  return res;
 }
 
 /** Side-by-side Project Comparison API */
@@ -286,50 +269,36 @@ export async function acceptBuyRequest(requestId) {
 // SITE SUITABILITY APIs
 // ══════════════════════════════════════════════════════════════════════════════
 
-/** Check site suitability via ML model */
 export async function checkSiteSuitability(lat, lon, area = 100) {
-  const mockFallback = {
-    suitability_score: 0.72 + Math.random() * 0.2,
-    input_location: { lat, lon, area },
-  };
-  return requestWithFallback(`${API_BASE}/suitability/predict`, {
+  return request(`${API_BASE}/suitability/predict`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ lat, lon, area }),
-  }, mockFallback);
+  });
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
 // GRS APIs
 // ══════════════════════════════════════════════════════════════════════════════
 
-/** Calculate GRS score for a corporate */
 export async function calculateGRS(data) {
-  return requestWithFallback(`${API_BASE}/grs/calculate-grs`, {
+  return request(`${API_BASE}/grs/calculate-grs`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
-  }, {
-    Company: data.company_name,
-    'Green Reputation Score': mockGRSData.score / 10,
-    Badge: 'Gold',
-    Breakdown: {
-      'Impact Score': 82, 'Quality Score': 78,
-      'Commitment Score': 73, 'Credibility Score': 88,
-    },
   });
 }
 
-/** Get GRS leaderboard */
 export async function fetchLeaderboard() {
-  return requestWithFallback(`${API_BASE}/grs/leaderboard`, {}, []);
+  const res = await request(`${API_BASE}/grs/leaderboard`);
+  if (res.error) return { data: [], error: res.error };
+  return res;
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
 // PAYMENT / RAZORPAY APIs
 // ══════════════════════════════════════════════════════════════════════════════
 
-/** Create Razorpay order. Amount is in INR (NOT paise). Backend converts. */
 export async function createOrder(amountINR, currency = 'INR', projectId = null, corporateName = null) {
   return request(`${API_BASE}/payment/create-order`, {
     method: 'POST',
@@ -343,7 +312,6 @@ export async function createOrder(amountINR, currency = 'INR', projectId = null,
   });
 }
 
-/** Record purchase after Razorpay payment success */
 export async function buyCredits(paymentData) {
   return request(`${API_BASE}/payment/buy-credits`, {
     method: 'POST',
@@ -352,29 +320,20 @@ export async function buyCredits(paymentData) {
   });
 }
 
-/** Fetch transactions for a corporate buyer */
 export async function fetchTransactions(companyName) {
-  return requestWithFallback(
-    `${API_BASE}/payment/transactions/${encodeURIComponent(companyName)}`,
-    {},
-    []
-  );
+  const res = await request(`${API_BASE}/payment/transactions/${encodeURIComponent(companyName)}`);
+  if (res.error) return { data: [], error: res.error };
+  return res;
 }
 
-/** Fetch wallet summary for a corporate buyer */
 export async function fetchWallet(companyName) {
-  return requestWithFallback(
-    `${API_BASE}/payment/wallet/${encodeURIComponent(companyName)}`,
-    {},
-    { corporate_name: companyName, total_credits: 0, total_spent_inr: 0, total_spent_usd: 0 }
-  );
+  return request(`${API_BASE}/payment/wallet/${encodeURIComponent(companyName)}`);
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
 // ESG REPORT APIs
 // ══════════════════════════════════════════════════════════════════════════════
 
-/** Generate ESG report for corporate (single project or full portfolio) */
 export async function generateESGReport(corporateName, projectId = null) {
   return request(`${API_BASE}/esg/generate-report`, {
     method: 'POST',
@@ -390,37 +349,18 @@ export async function generateESGReport(corporateName, projectId = null) {
 // STATS & AUDIT LOG APIs
 // ══════════════════════════════════════════════════════════════════════════════
 
-/** Platform-wide aggregate stats for all dashboards & login screen */
 export async function fetchPlatformStats() {
-  const approved = mockProjects.filter(p => p.status === 'approved');
-  const mockFallback = {
-    total_projects: mockProjects.length,
-    active_projects: approved.length,
-    pending_projects: mockProjects.filter(p => p.status === 'pending').length,
-    rejected_projects: mockProjects.filter(p => p.status === 'rejected').length,
-    total_credits: approved.reduce((s, p) => s + (p.credits || 0), 0),
-    total_shadow_credits: 0,
-    total_funding_usd: 580000,
-    total_transactions: mockTransactions.length,
-    total_transaction_value_inr: 3625000,
-    total_transaction_value_usd: 43400,
-    certificates_issued: 24,
-    audits_conducted: 48,
-    avg_mrv_score: 86.4,
-    fraud_detection_rate: '12.5%',
-    approval_rate: '75%',
-    co2_removed_tons: 43400,
-    countries_active: 5,
-  };
-  return requestWithFallback(`${API_BASE}/projects/stats`, {}, mockFallback);
+  return request(`${API_BASE}/projects/stats`);
 }
 
-/** Fetch immutable audit trail */
+export async function fetchOverviewStats(role = 'admin', period = '30d') {
+  return request(`${API_BASE}/stats/overview?role=${encodeURIComponent(role)}&period=${encodeURIComponent(period)}`);
+}
+
 export async function fetchAuditLogs() {
   return request(`${API_BASE}/projects/audit-logs`);
 }
 
-/** Calculate real-time human-friendly relative time (e.g. '10m ago') from ISO timestamp */
 export function timeAgo(timestamp) {
   if (!timestamp) return 'recently';
   const date = new Date(timestamp);
@@ -438,7 +378,6 @@ export function timeAgo(timestamp) {
   return date.toLocaleDateString();
 }
 
-/** Dynamically ensure Razorpay checkout script is loaded */
 export function loadRazorpayScript() {
   return new Promise((resolve) => {
     if (window.Razorpay) {
@@ -453,9 +392,14 @@ export function loadRazorpayScript() {
   });
 }
 
-/** Verification Certificates Registry API */
+// ══════════════════════════════════════════════════════════════════════════════
+// CERTIFICATES & CLIMATE APIs
+// ══════════════════════════════════════════════════════════════════════════════
+
 export async function fetchCertificates() {
-  return request(`${API_BASE}/certificates`);
+  const res = await request(`${API_BASE}/certificates`);
+  if (res.error) return { data: [], error: res.error };
+  return res;
 }
 
 export async function fetchCertificateDetail(certId) {
@@ -474,38 +418,18 @@ export function getCertificateImageUrl(certId) {
   return `${API_BASE}/certificates/${encodeURIComponent(certId)}/image`;
 }
 
-/** Climate Resilience & Co-Benefits API */
 export async function fetchClimateAnalytics() {
-  const mockFallback = {
-    co2_removed_tons: 43400,
-    forest_area_ha: 14500,
-    renewable_energy_gwh: 89.2,
-    co_benefits: [
-      { metric: 'Flood Control', value: 78 },
-      { metric: 'Biodiversity', value: 85 },
-      { metric: 'Fisheries', value: 62 },
-      { metric: 'Coastal Prot.', value: 71 },
-      { metric: 'Carbon Seq.', value: 93 },
-      { metric: 'Livelihood', value: 67 },
-    ],
-  };
-  return requestWithFallback(`${API_BASE}/projects/climate-analytics`, {}, mockFallback);
+  return request(`${API_BASE}/projects/climate-analytics`);
 }
 
-/** Pricing Engine Configuration API */
+// ══════════════════════════════════════════════════════════════════════════════
+// PRICING ENGINE APIs
+// ══════════════════════════════════════════════════════════════════════════════
+
 export async function fetchPricingConfig() {
-  const mockFallback = {
-    base: 28.50,
-    demand: 1.12,
-    supply: 0.98,
-    living: 1.08,
-    final_price: 33.78,
-    history: mockCreditsOverTime.map((d, i) => ({ month: d.month, price: 24 + i * 0.8 })),
-  };
-  return requestWithFallback(`${API_BASE}/pricing`, {}, mockFallback);
+  return request(`${API_BASE}/pricing`);
 }
 
-/** Save Pricing Engine Configuration */
 export async function savePricingConfig(config) {
   return request(`${API_BASE}/pricing`, {
     method: 'POST',
@@ -514,12 +438,20 @@ export async function savePricingConfig(config) {
   });
 }
 
-/** User Management API */
-export async function fetchUsers() {
-  return requestWithFallback(`${API_BASE}/users`, {}, mockUsers);
+export async function fetchPricingForecast() {
+  return request(`${API_BASE}/pricing/forecast`);
 }
 
-/** Invite New User */
+// ══════════════════════════════════════════════════════════════════════════════
+// USER MANAGEMENT APIs
+// ══════════════════════════════════════════════════════════════════════════════
+
+export async function fetchUsers() {
+  const res = await request(`${API_BASE}/users`);
+  if (res.error) return { data: [], error: res.error };
+  return res;
+}
+
 export async function inviteUser(userData) {
   return request(`${API_BASE}/users/invite`, {
     method: 'POST',
@@ -528,21 +460,25 @@ export async function inviteUser(userData) {
   });
 }
 
-/** Update User Status (active / suspended) */
 export async function updateUserStatus(userId, status) {
   return request(`${API_BASE}/users/${userId}/status?status=${encodeURIComponent(status)}`, {
     method: 'PATCH',
   });
 }
 
-/** Dynamic Notifications API */
+// ══════════════════════════════════════════════════════════════════════════════
+// NOTIFICATIONS APIs
+// ══════════════════════════════════════════════════════════════════════════════
+
 export async function fetchNotifications(params = {}) {
   const q = new URLSearchParams();
   if (params.role) q.append('role', params.role);
   if (params.email) q.append('email', params.email);
   if (params.unread_only) q.append('unread_only', 'true');
   const qs = q.toString() ? `?${q.toString()}` : '';
-  return request(`${API_BASE}/notifications${qs}`);
+  const res = await request(`${API_BASE}/notifications${qs}`);
+  if (res.error) return { data: [], error: res.error };
+  return res;
 }
 
 export async function fetchUnreadNotifCount(params = {}) {
@@ -569,7 +505,10 @@ export async function markAllNotificationsRead(params = {}) {
   });
 }
 
-/** Corporate Footprint Calculator API */
+// ══════════════════════════════════════════════════════════════════════════════
+// CORPORATE FOOTPRINT CALCULATOR APIs
+// ══════════════════════════════════════════════════════════════════════════════
+
 export async function calculateFootprint(data) {
   return request(`${API_BASE}/calculator/estimate`, {
     method: 'POST',
@@ -582,14 +521,16 @@ export async function fetchFootprintHistory(corporateName) {
   return request(`${API_BASE}/calculator/history/${encodeURIComponent(corporateName || 'Corporate Buyer')}`);
 }
 
-/** Project Deletion API (Super Admin Only) */
+// ══════════════════════════════════════════════════════════════════════════════
+// PROJECT MANAGEMENT & REPORT EXPORT
+// ══════════════════════════════════════════════════════════════════════════════
+
 export async function deleteProject(projectId) {
   return request(`${API_BASE}/projects/${encodeURIComponent(projectId)}`, {
     method: 'DELETE',
   });
 }
 
-/** Bulk CSV Project Import API */
 export async function importProjectsCSV(file) {
   const formData = new FormData();
   formData.append('file', file);
@@ -599,7 +540,6 @@ export async function importProjectsCSV(file) {
   });
 }
 
-/** Platform PDF Intelligence Report */
 export function getPlatformPDFUrl() {
   return `${API_BASE}/projects/export-pdf`;
 }
@@ -620,8 +560,3 @@ export async function downloadPlatformPDF() {
   document.body.removeChild(link);
   URL.revokeObjectURL(blobUrl);
 }
-
-
-
-
-

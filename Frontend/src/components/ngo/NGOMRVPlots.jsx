@@ -1,12 +1,11 @@
 import { useState, useEffect } from 'react';
-import { mockProjects } from '../../data/mockData.js';
 import { fetchProjects } from '../../services/api.js';
 import { Card, SectionHeader, Badge, MRVScore, Btn } from '../UI.jsx';
 import { CheckCircle, AlertTriangle, MapPin, Layers } from 'lucide-react';
 
 export function NGOMRVResults() {
-  const [project, setProject] = useState(mockProjects[0]);
-  const [projectCount, setProjectCount] = useState(mockProjects.length);
+  const [project, setProject] = useState(null);
+  const [projectCount, setProjectCount] = useState(0);
 
   useEffect(() => {
     fetchProjects(1).then(res => {
@@ -17,10 +16,10 @@ export function NGOMRVResults() {
     }).catch(() => {});
   }, []);
 
-  const myProject = project;
-  const mrvScore = myProject.mrv_score || myProject.mrvScore || 91;
-  const envScore = myProject.env_score || myProject.envScore || 88;
-  const fraudRisk = myProject.fraud_risk || myProject.fraudRisk || 12;
+  const myProject = project || { name: 'No Project Selected', status: 'pending', mrv_score: 0, env_score: 0, fraud_risk: 0 };
+  const mrvScore = myProject.mrv_score || myProject.mrvScore || 0;
+  const envScore = myProject.env_score || myProject.envScore || 0;
+  const fraudRisk = myProject.fraud_risk || myProject.fraudRisk || 0;
 
   return (
     <div style={{ padding: 28 }}>

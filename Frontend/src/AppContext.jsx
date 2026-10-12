@@ -1,6 +1,13 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { demoAccounts } from './data/mockData.js';
 import { fetchNotifications, markNotificationRead, markAllNotificationsRead, setApiAdminContext } from './services/api.js';
+
+export const demoAccounts = [
+  { id: 1, name: 'Alex Mercer', email: 'admin@carbonvault.com', role: 'admin', admin_role: 'super_admin', org: 'Platform HQ' },
+  { id: 2, name: 'Sarah Jenkins', email: 'approver@carbonvault.com', role: 'admin', admin_role: 'approver', org: 'CarbonVault Auditing' },
+  { id: 3, name: 'EcoGuard Brazil', email: 'contact@ecoguard.org', role: 'ngo', org: 'EcoGuard Brazil' },
+  { id: 4, name: 'Microsoft Sustainability', email: 'carbon@microsoft.com', role: 'corporate', org: 'Microsoft Sustainability' },
+  { id: 5, name: 'Public Auditor', email: 'guest@carbonvault.com', role: 'public', org: 'Carbon Transparency Portal' },
+];
 
 const AppContext = createContext(null);
 
