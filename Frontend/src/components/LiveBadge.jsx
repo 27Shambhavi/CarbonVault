@@ -8,7 +8,7 @@ import { T } from './UI.jsx';
  * "A 'LIVE' indicator may show only while the real stream is connected.
  * Every live metric shows its source and timestamp."
  */
-export function LiveBadge({ status = 'offline', lastEventAt = null, source = null }) {
+export function LiveBadge({ status = 'offline', lastEventAt = null, source = null, lastError = null }) {
   const [secondsAgo, setSecondsAgo] = useState(0);
 
   useEffect(() => {
@@ -48,6 +48,10 @@ export function LiveBadge({ status = 'offline', lastEventAt = null, source = nul
       : `${secondsAgo}s ago`
     : 'connecting';
 
+  const tooltipText = lastError
+    ? `Stream Warning: ${lastError}`
+    : (source ? `Data Source: ${source}` : 'CarbonVault Real-Time Event Stream (SSE & Fallback Polling)');
+
   return (
     <div
       style={{
@@ -64,7 +68,7 @@ export function LiveBadge({ status = 'offline', lastEventAt = null, source = nul
         letterSpacing: '0.2px',
         userSelect: 'none',
       }}
-      title={source ? `Data Source: ${source}` : 'CarbonVault Real-Time Event Stream'}
+      title={tooltipText}
     >
       <span
         style={{

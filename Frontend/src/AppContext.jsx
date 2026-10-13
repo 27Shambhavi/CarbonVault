@@ -237,6 +237,7 @@ export function AppProvider({ children }) {
         // Live Real-Time Spine exports
         liveStatus: liveStream.status,
         lastEventAt: liveStream.lastEventAt,
+        lastError: liveStream.lastError,
         liveEvents: liveStream.events,
         subscribeToEvent: liveStream.subscribe,
         addToast,

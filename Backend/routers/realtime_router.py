@@ -78,6 +78,9 @@ async def realtime_stream(
 
     async def event_generator():
         try:
+            # Flush initial connection comment immediately to bypass reverse proxy buffering
+            yield ": connected\n\n"
+
             # 1. Replay missed events if requested
             if replay_id is not None and replay_id >= 0:
                 replayed = get_replay_events(replay_id, sub_role, sub_email)

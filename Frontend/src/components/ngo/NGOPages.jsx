@@ -996,7 +996,7 @@ export function NGOMarketplace() {
   const [paying, setPaying]  = useState(false);
   const { showToast, ToastEl } = useToast();
 
-  useEffect(() => {
+  const loadRequests = () => {
     setLoading(true);
     setError(null);
     fetchMarketplaceRequests(NGO_ID)
@@ -1004,7 +1004,12 @@ export function NGOMarketplace() {
         if (res.error) { setError(res.error); return; }
         setRequests(Array.isArray(res.data) ? res.data : []);
       })
+      .catch(err => setError(err.message || 'Failed to fetch buy requests'))
       .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    loadRequests();
   }, []);
 
   const handleSell = async (req) => {
@@ -1130,11 +1135,17 @@ export function NGOMarketplace() {
       <SectionHeader title="Marketplace" subtitle="Corporate buy requests — accept and receive payment via Razorpay"/>
 
       {error && (
-        <Card style={{marginBottom:16,padding:16,border:'1px solid rgba(244,63,94,0.25)'}}>
+        <Card style={{marginBottom:16,padding:16,border:'1px solid rgba(244,63,94,0.25)',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
           <div style={{display:'flex',gap:10,alignItems:'center'}}>
             <AlertCircle size={16} color={T.roseL}/>
             <span style={{fontSize:13,color:T.roseL}}>{error}</span>
           </div>
+          <button
+            onClick={loadRequests}
+            style={{background:T.teal,color:'#021a17',border:'none',borderRadius:7,padding:'6px 14px',fontSize:12,fontWeight:700,cursor:'pointer'}}
+          >
+            Retry
+          </button>
         </Card>
       )}
 

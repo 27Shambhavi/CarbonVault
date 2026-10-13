@@ -17,6 +17,7 @@ export function useLiveStream(user = null) {
   const [lastEventAt, setLastEventAt] = useState(null);
   const [events, setEvents] = useState([]);
   const [lastEvent, setLastEvent] = useState(null);
+  const [lastError, setLastError] = useState(null);
 
   const eventSourceRef = useRef(null);
   const reconnectTimeoutRef = useRef(null);
@@ -86,17 +87,21 @@ export function useLiveStream(user = null) {
         const role = user?.role || 'public';
         const email = user?.email || '';
         const url = `${API_BASE}/realtime/events?since_id=${lastEventIdRef.current}&role=${encodeURIComponent(role)}&email=${encodeURIComponent(email)}`;
-        const res = await fetch(url);
+        const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
         if (res.ok) {
           const data = await res.json();
           setStatus('connected');
+          setLastError(null);
+          setLastEventAt(new Date());
           if (Array.isArray(data.events) && data.events.length > 0) {
             data.events.forEach((ev) => dispatchEvent(ev));
           }
         } else {
+          setLastError(`Polling error: ${res.status}`);
           setStatus('offline');
         }
       } catch (e) {
+        setLastError(e.message || 'Polling network error');
         setStatus('offline');
       }
     };
@@ -129,7 +134,9 @@ export function useLiveStream(user = null) {
 
     try {
       setStatus('reconnecting');
-      // Step 1: Obtain single-use 60-second ticket
+      // Step 1: Obtain single-use 60-second ticket with 5s timeout
+      const controller = new AbortController();
+      const ticketTimeout = setTimeout(() => controller.abort(), 5000);
       const ticketRes = await fetch(`${API_BASE}/realtime/ticket`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -138,7 +145,9 @@ export function useLiveStream(user = null) {
           email: user?.email || null,
           user_id: user?.id ? String(user.id) : null,
         }),
+        signal: controller.signal,
       });
+      clearTimeout(ticketTimeout);
 
       if (!ticketRes.ok) {
         throw new Error(`Ticket request failed with ${ticketRes.status}`);
@@ -153,6 +162,7 @@ export function useLiveStream(user = null) {
 
       es.onopen = () => {
         setStatus('connected');
+        setLastError(null);
         backoffRef.current = 1000;
         failCountRef.current = 0;
         stopPollingFallback();
@@ -160,7 +170,7 @@ export function useLiveStream(user = null) {
 
       // Heartbeat comment or custom event handling
       es.onmessage = (e) => {
-        if (!e.data || e.data.trim() === 'heartbeat') {
+        if (!e.data || e.data.trim() === 'heartbeat' || e.data.trim() === 'connected') {
           setLastEventAt(new Date());
           return;
         }
@@ -210,14 +220,13 @@ export function useLiveStream(user = null) {
 
       es.onerror = () => {
         setStatus('reconnecting');
+        setLastError('SSE disconnected; using 10s polling fallback.');
+        startPollingFallback();
+
         if (es.readyState === EventSource.CLOSED) {
           es.close();
           eventSourceRef.current = null;
           failCountRef.current += 1;
-
-          if (failCountRef.current >= 3) {
-            startPollingFallback();
-          }
 
           // Exponential backoff
           const delay = Math.min(backoffRef.current, 16000);
@@ -231,10 +240,8 @@ export function useLiveStream(user = null) {
       };
     } catch (err) {
       failCountRef.current += 1;
-      setStatus(failCountRef.current >= 3 ? 'offline' : 'reconnecting');
-      if (failCountRef.current >= 2) {
-        startPollingFallback();
-      }
+      setLastError(err.message || 'Stream connection failed');
+      startPollingFallback();
 
       const delay = Math.min(backoffRef.current, 16000);
       backoffRef.current = Math.min(backoffRef.current * 2, 16000);
@@ -267,6 +274,7 @@ export function useLiveStream(user = null) {
     lastEventAt,
     events,
     lastEvent,
+    lastError,
     subscribe,
   };
 }

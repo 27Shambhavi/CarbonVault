@@ -3,7 +3,11 @@
 // Uses Vite proxy (/api → http://127.0.0.1:8000) or VITE_API_BASE_URL.
 
 const RAW_BASE = import.meta.env.VITE_API_BASE_URL;
-export const API_BASE = RAW_BASE ? RAW_BASE.replace(/\/$/, '') : '/api';
+export const API_BASE = RAW_BASE
+  ? RAW_BASE.replace(/\/$/, '')
+  : (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+      ? '/api'
+      : 'https://carbonvault-api.onrender.com');
 
 /** Helper to get full image URL whether in dev or production */
 export function getImageUrl(path) {
@@ -58,10 +62,11 @@ export function isBackendOnline() { return _backendOnline; }
 
 // ── Generic fetch wrapper ──────────────────────────────────────────────────
 export async function request(url, options = {}, retries = 1, backoffMs = 2000) {
+  const timeoutLimit = options.timeout || 15000;
   try {
-    // Default 60s timeout to accommodate Render free-tier cold starts
+    // Enforce timeout (default 15s, customizable per request)
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 60000);
+    const timeoutId = setTimeout(() => controller.abort(), timeoutLimit);
 
     const headers = {
       ...(options.headers || {}),
@@ -86,7 +91,7 @@ export async function request(url, options = {}, retries = 1, backoffMs = 2000) 
 
     if (ctype.includes('text/html') || text.trim().startsWith('<!DOCTYPE') || text.trim().startsWith('<html')) {
       _backendOnline = false;
-      return { data: null, error: 'Endpoint returned HTML instead of API response. Check VITE_API_BASE_URL.' };
+      return { data: null, error: 'Endpoint returned HTML instead of API response. Check API configuration.' };
     }
 
     let data;
@@ -108,7 +113,10 @@ export async function request(url, options = {}, retries = 1, backoffMs = 2000) 
       return request(url, options, retries - 1, backoffMs * 2);
     }
     _backendOnline = false;
-    return { data: null, error: err.message || 'Network error' };
+    const msg = err.name === 'AbortError'
+      ? `Request timed out (${Math.round(timeoutLimit / 1000)}s). Server may be starting or offline.`
+      : (err.message || 'Network error');
+    return { data: null, error: msg };
   }
 }
 
@@ -117,15 +125,20 @@ export async function request(url, options = {}, retries = 1, backoffMs = 2000) 
 // ══════════════════════════════════════════════════════════════════════════════
 
 export async function fetchHealth() {
-  return request(`${API_BASE}/health`);
+  return request(`${API_BASE}/health`, { timeout: 10000 });
 }
 
-export async function loginUser(email, password) {
+export async function fetchReady() {
+  return request(`${API_BASE}/ready`, { timeout: 10000 });
+}
+
+export async function loginUser(email, password, timeoutMs = 15000) {
   return request(`${API_BASE}/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, password }),
-  });
+    timeout: timeoutMs,
+  }, 0);
 }
 
 // ══════════════════════════════════════════════════════════════════════════════

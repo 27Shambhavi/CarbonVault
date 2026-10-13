@@ -7,14 +7,21 @@ services:
     startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
     plan: free
     autoDeploy: true
+    healthCheckPath: /ready
     envVars:
       - key: DATABASE_URL
         sync: false
       - key: RAZORPAY_KEY_ID
-        value: rzp_test_TkjH0Xr16eIeed
+        sync: false
       - key: RAZORPAY_KEY_SECRET
-        value: mc1c7MG2tjpbJFMRWxTa4kFq
+        sync: false
+      - key: RAZORPAY_WEBHOOK_SECRET
+        sync: false
+      - key: JWT_SECRET
+        sync: false
       - key: CORS_ORIGINS
         value: https://final-carbon-vault.vercel.app,http://localhost:5173,http://127.0.0.1:5173
       - key: DEBUG
         value: "False"
+      - key: APP_MODE
+        value: demo

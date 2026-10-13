@@ -74,7 +74,7 @@ export default function LoginPage() {
     setLoginError(null);
     try {
       const targetEmail = email.trim();
-      const res = await loginUser(targetEmail, password);
+      const res = await loginUser(targetEmail, password, 15000);
       if (res.data && res.data.access_token) {
         setAuthToken(res.data.access_token);
         login(res.data.user.role, res.data.user.admin_role);
@@ -84,9 +84,9 @@ export default function LoginPage() {
         setLoginError(res.error);
         return;
       }
-      login(activeRole);
-    } catch {
-      login(activeRole);
+      setLoginError("Authentication failed: invalid server response. Please retry.");
+    } catch (err) {
+      setLoginError(err.message || "Connection timeout (15s). Please check network and retry.");
     } finally {
       setIsLoggingIn(false);
     }
@@ -231,12 +231,33 @@ export default function LoginPage() {
             background: 'color-mix(in srgb, var(--rose, #f43f5e) 15%, transparent)',
             border: `1px solid ${T.rose}`,
             borderRadius: 8,
-            padding: '8px 12px',
+            padding: '10px 14px',
             color: T.roseL,
             fontSize: 12,
-            marginBottom: 16
+            marginBottom: 16,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 10
           }}>
-            {loginError}
+            <span>{loginError}</span>
+            <button
+              onClick={handleLoginSubmit}
+              disabled={isLoggingIn}
+              style={{
+                background: T.rose,
+                color: '#fff',
+                border: 'none',
+                borderRadius: 6,
+                padding: '4px 10px',
+                fontSize: 11,
+                fontWeight: 700,
+                cursor: 'pointer',
+                whiteSpace: 'nowrap'
+              }}
+            >
+              Retry
+            </button>
           </div>
         )}
 

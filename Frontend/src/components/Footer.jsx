@@ -1,31 +1,72 @@
 import { useState, useEffect } from 'react';
-import { fetchHealth } from '../services/api.js';
+import { fetchReady } from '../services/api.js';
 import { T } from './UI.jsx';
 import { GitCommit, Activity, Database, ShieldCheck } from 'lucide-react';
 
 export default function AppFooter() {
   const [healthData, setHealthData] = useState({
-    commit: '72e63d8',
-    status: 'online',
-    db: 'ok'
+    commit: null,
+    status: 'checking',
+    db: 'checking',
+    scheduler: 'idle',
+    error: null,
   });
 
   useEffect(() => {
-    fetchHealth()
-      .then(res => {
-        if (res.data) {
-          setHealthData({
-            commit: res.data.commit || res.data.commit_hash || '72e63d8',
-            status: res.data.status || 'online',
-            db: res.data.db || 'ok'
-          });
-        }
-      })
-      .catch(() => {});
+    let isMounted = true;
+    const checkHealth = () => {
+      fetchReady()
+        .then(res => {
+          if (!isMounted) return;
+          if (res.data && res.data.status === 'ready') {
+            setHealthData({
+              commit: res.data.commit || res.data.commit_hash || null,
+              status: 'online',
+              db: res.data.database?.status || 'ok',
+              scheduler: res.data.scheduler?.status || 'active',
+              error: null,
+            });
+          } else if (res.data && res.data.status === 'unready') {
+            setHealthData({
+              commit: res.data.commit || null,
+              status: 'degraded',
+              db: 'error',
+              scheduler: 'idle',
+              error: res.data.reason || 'Database unready',
+            });
+          } else if (res.error) {
+            setHealthData(prev => ({
+              ...prev,
+              status: 'degraded',
+              db: 'error',
+              error: res.error,
+            }));
+          }
+        })
+        .catch(err => {
+          if (!isMounted) return;
+          setHealthData(prev => ({
+            ...prev,
+            status: 'degraded',
+            db: 'error',
+            error: err.message || 'Unreachable',
+          }));
+        });
+    };
+
+    checkHealth();
+    const interval = setInterval(checkHealth, 30000);
+    return () => { isMounted = false; clearInterval(interval); };
   }, []);
 
-  const shortCommit = healthData.commit ? healthData.commit.slice(0, 7) : '72e63d8';
-  const commitUrl = `https://github.com/27Shambhavi/final-carbon-vault/commit/${healthData.commit}`;
+  const shortCommit = healthData.commit ? healthData.commit.slice(0, 7) : 'HEAD';
+  const commitUrl = healthData.commit
+    ? `https://github.com/27Shambhavi/final-carbon-vault/commit/${healthData.commit}`
+    : 'https://github.com/27Shambhavi/final-carbon-vault';
+
+  const isDbOk = healthData.db === 'ok';
+  const isSystemOnline = healthData.status === 'online';
+  const isChecking = healthData.status === 'checking';
 
   return (
     <footer style={{
@@ -55,21 +96,25 @@ export default function AppFooter() {
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-          <Database size={11} color={healthData.db === 'ok' ? T.emeraldL : T.roseL} />
-          <span>DB: <strong style={{ color: healthData.db === 'ok' ? T.emeraldL : T.roseL }}>{healthData.db.toUpperCase()}</strong></span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5 }} title={healthData.error || 'Database connection healthy'}>
+          <Database size={11} color={isChecking ? T.t3 : isDbOk ? T.emeraldL : T.roseL} />
+          <span>DB: <strong style={{ color: isChecking ? T.t3 : isDbOk ? T.emeraldL : T.roseL }}>
+            {isChecking ? 'CHECKING…' : healthData.db.toUpperCase()}
+          </strong></span>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-          <Activity size={11} color={T.teal} />
-          <span>System: <strong style={{ color: T.tealL }}>{healthData.status}</strong></span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5 }} title={healthData.error || (isSystemOnline ? 'All core pipelines online' : 'System Degraded')}>
+          <Activity size={11} color={isChecking ? T.t3 : isSystemOnline ? T.teal : T.goldL} />
+          <span>System: <strong style={{ color: isChecking ? T.t3 : isSystemOnline ? T.tealL : T.goldL }}>
+            {isChecking ? 'Checking…' : isSystemOnline ? 'Online' : 'Degraded'}
+          </strong></span>
         </div>
 
         <a
           href={commitUrl}
           target="_blank"
           rel="noopener noreferrer"
-          title={`View deployed commit ${healthData.commit} on GitHub`}
+          title={healthData.commit ? `View deployed commit ${healthData.commit} on GitHub` : 'View repository on GitHub'}
           style={{
             display: 'inline-flex',
             alignItems: 'center',

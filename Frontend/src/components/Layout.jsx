@@ -152,7 +152,7 @@ export function Sidebar() {
 }
 
 export function Navbar() {
-  const {user,page,setPage,setNotifOpen,sidebarOpen,setSidebarOpen,logout,theme,toggleTheme,unreadNotifCount,switchAdminRole,liveStatus,lastEventAt} = useApp();
+  const {user,page,setPage,setNotifOpen,sidebarOpen,setSidebarOpen,logout,theme,toggleTheme,unreadNotifCount,switchAdminRole,liveStatus,lastEventAt,lastError} = useApp();
   const [menuOpen,setMenuOpen] = useState(false);
 
   if (!user) return null;
@@ -176,7 +176,7 @@ export function Navbar() {
         <span style={{fontSize:12,color:T.t4}}>/</span>
         <span style={{fontSize:13,fontWeight:600,color:T.t2}}>{pageTitle}</span>
         <div style={{ marginLeft: 12 }}>
-          <LiveBadge status={liveStatus} lastEventAt={lastEventAt} />
+          <LiveBadge status={liveStatus} lastEventAt={lastEventAt} lastError={lastError} />
         </div>
       </div>
 

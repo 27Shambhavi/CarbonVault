@@ -129,16 +129,26 @@ export function CorporateMarketplace() {
 
   const [forecast, setForecast] = useState(null);
   const [pricingConfig, setPricingConfig] = useState(null);
+  const [listingsError, setListingsError] = useState(null);
 
   const loadListings = () => {
     setLoading(true);
+    setListingsError(null);
     fetchMarketplaceListings(filters)
       .then(res => {
-        if (!res.error && Array.isArray(res.data)) {
+        if (res.error) {
+          setListingsError(res.error);
+          setListings([]);
+        } else if (Array.isArray(res.data)) {
           setListings(res.data);
+          setListingsError(null);
         } else {
           setListings([]);
         }
+      })
+      .catch(err => {
+        setListingsError(err.message || 'Failed to fetch marketplace listings');
+        setListings([]);
       })
       .finally(() => setLoading(false));
   };
@@ -470,9 +480,24 @@ export function CorporateMarketplace() {
             }} />
             <div style={{ fontSize: 13, color: T.t2 }}>Loading verified marketplace listings…</div>
           </div>
+        ) : listingsError ? (
+          <div style={{ textAlign: 'center', padding: 40 }}>
+            <div style={{ color: T.roseL, fontSize: 13, marginBottom: 14 }}>
+              Failed to load marketplace listings: {listingsError}
+            </div>
+            <button
+              onClick={loadListings}
+              style={{
+                background: T.teal, color: '#021a17', border: 'none',
+                padding: '8px 18px', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer'
+              }}
+            >
+              Retry
+            </button>
+          </div>
         ) : listings.length === 0 ? (
           <div style={{ textAlign: 'center', padding: 40, color: T.t3, fontSize: 13 }}>
-            No marketplace listings match the selected criteria.
+            No verified marketplace listings match the selected criteria. New projects appear once verified.
           </div>
         ) : (
           <Table headers={['Compare','Project ID','🌱','Project Name','Type','Location','MRV Score','Available (t)','Price/t','Action']}

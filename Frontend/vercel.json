@@ -1,5 +1,16 @@
 {
   "rewrites": [
-    { "source": "/(.*)", "destination": "/" }
+    {
+      "source": "/api/:match*",
+      "destination": "https://carbonvault-api.onrender.com/:match*"
+    },
+    {
+      "source": "/realtime/:match*",
+      "destination": "https://carbonvault-api.onrender.com/realtime/:match*"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/"
+    }
   ]
 }

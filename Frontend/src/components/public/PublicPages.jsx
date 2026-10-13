@@ -191,39 +191,82 @@ export function PublicLeaderboard() {
 export function PublicAudit() {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const actionColors = { approve: '#34d399', reject: '#f87171', mint: '#60a5fa', update: '#facc15', payment: '#fbbf24', create: '#a78bfa' };
 
+  const loadAuditLogs = () => {
+    setLoading(true);
+    setError(null);
+    fetchAuditLogs()
+      .then(res => {
+        if (res.error) {
+          setError(res.error);
+          setLogs([]);
+        } else if (res.data && Array.isArray(res.data)) {
+          setLogs(res.data);
+          setError(null);
+        } else {
+          setLogs([]);
+        }
+      })
+      .catch(err => {
+        setError(err.message || 'Failed to load audit logs');
+        setLogs([]);
+      })
+      .finally(() => setLoading(false));
+  };
+
   useEffect(() => {
-    fetchAuditLogs().then(res => {
-      if (res.data && Array.isArray(res.data)) {
-        setLogs(res.data);
-      }
-    }).finally(() => setLoading(false));
+    loadAuditLogs();
   }, []);
 
   return (
     <div style={{ padding: 28 }}>
       <SectionHeader title="Audit Trail" subtitle="Immutable log of all platform actions" />
 
-      <div style={{ position: 'relative', paddingLeft: 24 }}>
-        <div style={{ position: 'absolute', left: 11, top: 0, bottom: 0, width: 2, background: 'rgba(255,255,255,0.06)' }} />
-        {logs.map((log) => (
-          <div key={log.id} style={{ position: 'relative', marginBottom: 20 }}>
-            <div style={{ position: 'absolute', left: -20, top: 14, width: 12, height: 12, borderRadius: '50%', background: actionColors[log.action] || '#2dd4bf', border: '2px solid #07080f' }} />
-            <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 10, padding: 16, marginLeft: 8 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                  <Badge type={log.action === 'approve' ? 'approved' : log.action === 'reject' ? 'rejected' : log.action === 'mint' ? 'minted' : 'pending'} label={log.action.toUpperCase()} />
-                  <span style={{ fontSize: 13, fontWeight: 600, color: '#f1f5f9' }}>{log.name}</span>
-                </div>
-                <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600 }}>{timeAgo(log.timestamp || log.time)}</span>
-              </div>
-              <div style={{ fontSize: 12, color: '#475569', marginBottom: 4 }}>{log.detail}</div>
-              <div style={{ fontSize: 11, color: 'rgba(45,212,191,0.5)' }}>by {log.user}</div>
-            </div>
+      {loading ? (
+        <div style={{ textAlign: 'center', padding: '50px 0' }}>
+          <div style={{ width: 36, height: 36, border: '3px solid rgba(45,212,191,0.15)', borderTop: '3px solid #2dd4bf', borderRadius: '50%', margin: '0 auto 12px', animation: 'spinSlow 0.8s linear infinite' }} />
+          <div style={{ fontSize: 13, color: '#94a3b8' }}>Loading verified audit trail…</div>
+        </div>
+      ) : error ? (
+        <Card style={{ padding: 24, textAlign: 'center', border: '1px solid rgba(244,63,94,0.3)' }}>
+          <div style={{ color: '#f43f5e', fontSize: 13, marginBottom: 12 }}>Failed to load audit trail: {error}</div>
+          <button
+            onClick={loadAuditLogs}
+            style={{ background: '#2dd4bf', color: '#041d1a', border: 'none', borderRadius: 8, padding: '8px 16px', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}
+          >
+            Retry
+          </button>
+        </Card>
+      ) : logs.length === 0 ? (
+        <Card style={{ padding: 32, textAlign: 'center' }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: '#f1f5f9', marginBottom: 6 }}>Audit Ledger Initialized</div>
+          <div style={{ fontSize: 12, color: '#94a3b8', maxWidth: 480, margin: '0 auto' }}>
+            No platform mutations recorded yet. System approvals, verifications, and credit minting events will be immutably recorded here.
           </div>
-        ))}
-      </div>
+        </Card>
+      ) : (
+        <div style={{ position: 'relative', paddingLeft: 24 }}>
+          <div style={{ position: 'absolute', left: 11, top: 0, bottom: 0, width: 2, background: 'rgba(255,255,255,0.06)' }} />
+          {logs.map((log) => (
+            <div key={log.id} style={{ position: 'relative', marginBottom: 20 }}>
+              <div style={{ position: 'absolute', left: -20, top: 14, width: 12, height: 12, borderRadius: '50%', background: actionColors[log.action] || '#2dd4bf', border: '2px solid #07080f' }} />
+              <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 10, padding: 16, marginLeft: 8 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <Badge type={log.action === 'approve' ? 'approved' : log.action === 'reject' ? 'rejected' : log.action === 'mint' ? 'minted' : 'pending'} label={log.action.toUpperCase()} />
+                    <span style={{ fontSize: 13, fontWeight: 600, color: '#f1f5f9' }}>{log.name}</span>
+                  </div>
+                  <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600 }}>{timeAgo(log.timestamp || log.time)}</span>
+                </div>
+                <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 4 }}>{log.detail}</div>
+                <div style={{ fontSize: 11, color: 'rgba(45,212,191,0.5)' }}>by {log.user}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -231,16 +274,35 @@ export function PublicAudit() {
 export function PublicCertificates() {
   const [certs, setCerts] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState('all'); // 'all' | 'retirement' | 'issuance'
   const [selectedCert, setSelectedCert] = useState(null);
 
+  const loadCertificates = () => {
+    setLoading(true);
+    setError(null);
+    fetchCertificates()
+      .then(res => {
+        if (res.error) {
+          setError(res.error);
+          setCerts([]);
+        } else if (Array.isArray(res.data)) {
+          setCerts(res.data);
+          setError(null);
+        } else {
+          setCerts([]);
+        }
+      })
+      .catch(err => {
+        setError(err.message || 'Failed to fetch certificates');
+        setCerts([]);
+      })
+      .finally(() => setLoading(false));
+  };
+
   useEffect(() => {
-    fetchCertificates().then(res => {
-      if (Array.isArray(res.data)) {
-        setCerts(res.data);
-      }
-    }).finally(() => setLoading(false));
+    loadCertificates();
   }, []);
 
   const handleDirectDownload = (certId, e) => {
@@ -274,6 +336,23 @@ export function PublicCertificates() {
           <div style={{ width: 36, height: 36, border: '3px solid rgba(45,212,191,0.15)', borderTop: '3px solid #2dd4bf', borderRadius: '50%', margin: '0 auto 12px', animation: 'spinSlow 0.8s linear infinite' }} />
           <div style={{ fontSize: 13, color: '#94a3b8' }}>Loading verified certificate registry…</div>
         </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div style={{ padding: 28 }}>
+        <SectionHeader title="Verification Certificates" subtitle="Publicly accessible, cryptographically verified certificate registry" />
+        <Card style={{ padding: 28, textAlign: 'center', border: '1px solid rgba(244,63,94,0.3)' }}>
+          <div style={{ color: '#f43f5e', fontSize: 13, marginBottom: 12 }}>Failed to load certificates: {error}</div>
+          <button
+            onClick={loadCertificates}
+            style={{ background: '#2dd4bf', color: '#041d1a', border: 'none', borderRadius: 8, padding: '8px 16px', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}
+          >
+            Retry
+          </button>
+        </Card>
       </div>
     );
   }

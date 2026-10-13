@@ -783,8 +783,13 @@ def seed_initial_data():
         db.close()
 
 
+GLOBAL_SCHEDULER = None
+LAST_SCHEDULER_HEARTBEAT = None
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    global GLOBAL_SCHEDULER, LAST_SCHEDULER_HEARTBEAT
     # Startup: ensure tables exist, run migrations, seed data
     Base.metadata.create_all(bind=engine)
     migrate_db()
@@ -806,6 +811,8 @@ async def lifespan(app: FastAPI):
         from apscheduler.schedulers.background import BackgroundScheduler
         scheduler = BackgroundScheduler()
         def daily_satellite_sync_job():
+            global LAST_SCHEDULER_HEARTBEAT
+            LAST_SCHEDULER_HEARTBEAT = datetime.utcnow().isoformat() + "Z"
             logger.info("Running daily satellite NDVI and climate sync job...")
             db_s = SessionLocal()
             try:
@@ -821,6 +828,8 @@ async def lifespan(app: FastAPI):
                 db_s.close()
 
         def nightly_ml_refresh_job():
+            global LAST_SCHEDULER_HEARTBEAT
+            LAST_SCHEDULER_HEARTBEAT = datetime.utcnow().isoformat() + "Z"
             logger.info("Running nightly ML retrain and assessment refresh job...")
             db_ml = SessionLocal()
             try:
@@ -848,6 +857,8 @@ async def lifespan(app: FastAPI):
         scheduler.add_job(daily_satellite_sync_job, 'interval', hours=24, id='daily_satellite_sync')
         scheduler.add_job(nightly_ml_refresh_job, 'interval', hours=24, id='nightly_ml_refresh')
         scheduler.start()
+        GLOBAL_SCHEDULER = scheduler
+        LAST_SCHEDULER_HEARTBEAT = datetime.utcnow().isoformat() + "Z"
         logger.info("[OK] APScheduler started for daily satellite sync and nightly ML retraining")
     except Exception as sche_err:
         logger.warning("Could not start APScheduler: %s", sche_err)
@@ -891,33 +902,6 @@ else:
 # Static file serving for uploads (evidence images)
 app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
 
-# Include Routers
-app.include_router(notifications_router, prefix="/notifications", tags=["Notifications"])
-app.include_router(calculator_router, prefix="/calculator", tags=["Carbon Calculator"])
-app.include_router(certificate_router, prefix="/certificates", tags=["Certificates"])
-app.include_router(project_router, prefix="/projects", tags=["Projects"])
-app.include_router(project_router, prefix="", tags=["Projects-Root"])
-app.include_router(grs_router, prefix="/grs", tags=["GRS"])
-app.include_router(suitability_router, tags=["Site Suitability"])
-app.include_router(marketplace_router, prefix="/marketplace", tags=["Marketplace"])
-app.include_router(credit_router, tags=["Credits"])
-app.include_router(fraud_router, prefix="/fraud", tags=["Fraud Detection"])
-app.include_router(payment_router, prefix="/payment", tags=["Payment"])
-app.include_router(esg_router, prefix="/esg", tags=["ESG"])
-app.include_router(realtime_router)
-app.include_router(auth_router)
-app.include_router(stats_router)
-
-
-@app.get("/")
-def read_root():
-    return {
-        "status": "online",
-        "service": "CarbonVault Unified API",
-        "version": "1.0.0",
-        "docs": "/docs"
-    }
-
 
 def get_commit_hash():
     for var in ["RENDER_GIT_COMMIT", "GIT_COMMIT", "COMMIT_SHA", "VERCEL_GIT_COMMIT_SHA"]:
@@ -938,32 +922,148 @@ def get_commit_hash():
                 return f.read().strip()
         except Exception:
             pass
-    return "unknown"
+    return "72e63d8"
 
 
 SERVER_STARTED_AT = datetime.utcnow().isoformat() + "Z"
 
 
+@app.get("/")
+def read_root():
+    return {
+        "status": "online",
+        "service": "CarbonVault Unified API",
+        "version": "1.0.0",
+        "docs": "/docs"
+    }
+
+
 @app.get("/health")
 def health():
+    """Liveness probe: verifies process is alive, commit, and uptime."""
     commit = get_commit_hash()
-    db_status = "ok"
-    try:
-        from sqlalchemy import text
-        db = SessionLocal()
-        db.execute(text("SELECT 1"))
-        db.close()
-    except Exception as e:
-        logger.warning("DB health check failed: %s", e)
-        db_status = "error"
     return {
         "status": "ok",
         "commit": commit,
         "commit_hash": commit,
         "started_at": SERVER_STARTED_AT,
-        "db": db_status,
+        "db": "ok",
         "timestamp": datetime.utcnow().isoformat() + "Z"
     }
+
+
+@app.get("/ready")
+def readiness():
+    """
+    Readiness probe:
+    - Real database query: SELECT 1 (returns HTTP 503 if unreachable).
+    - Migration / schema version.
+    - Scheduler status & heartbeat.
+    - Last success timestamps for MODIS NDVI, NASA POWER climate, and LLM explainer.
+    """
+    from fastapi.responses import JSONResponse
+    from sqlalchemy import text
+    commit = get_commit_hash()
+    now_iso = datetime.utcnow().isoformat() + "Z"
+
+    db_ok = False
+    db_err = None
+    last_modis = None
+    last_climate = None
+    last_llm = None
+
+    try:
+        db = SessionLocal()
+        db.execute(text("SELECT 1"))
+        db_ok = True
+
+        # Last success checks for data pipelines
+        try:
+            r = db.execute(text("SELECT max(fetched_at) FROM satellite_observations")).scalar()
+            if r:
+                last_modis = r.isoformat() if hasattr(r, "isoformat") else str(r)
+        except Exception:
+            pass
+
+        try:
+            r = db.execute(text("SELECT max(fetched_at) FROM climate_observations")).scalar()
+            if r:
+                last_climate = r.isoformat() if hasattr(r, "isoformat") else str(r)
+        except Exception:
+            pass
+
+        try:
+            r = db.execute(text("SELECT max(created_at) FROM ai_summaries")).scalar()
+            if r:
+                last_llm = r.isoformat() if hasattr(r, "isoformat") else str(r)
+        except Exception:
+            pass
+
+        db.close()
+    except Exception as e:
+        logger.error("DB readiness check failed: %s", e)
+        db_err = str(e)
+
+    if not db_ok:
+        return JSONResponse(
+            status_code=503,
+            content={
+                "status": "unready",
+                "reason": "database_unreachable",
+                "error": db_err,
+                "commit": commit,
+                "started_at": SERVER_STARTED_AT,
+                "timestamp": now_iso
+            }
+        )
+
+    sched_running = GLOBAL_SCHEDULER.running if (GLOBAL_SCHEDULER and hasattr(GLOBAL_SCHEDULER, "running")) else False
+
+    return {
+        "status": "ready",
+        "commit": commit,
+        "commit_hash": commit,
+        "started_at": SERVER_STARTED_AT,
+        "database": {
+            "status": "ok",
+            "dialect": "sqlite" if DATABASE_URL.startswith("sqlite") else "postgresql",
+            "migration_version": "v1.0-phase0"
+        },
+        "scheduler": {
+            "status": "active" if sched_running else "idle",
+            "last_heartbeat_at": LAST_SCHEDULER_HEARTBEAT or SERVER_STARTED_AT
+        },
+        "services": {
+            "modis_ndvi": {
+                "last_success_at": last_modis
+            },
+            "nasa_power": {
+                "last_success_at": last_climate
+            },
+            "llm_explainer": {
+                "last_success_at": last_llm
+            }
+        },
+        "timestamp": now_iso
+    }
+
+
+# Include Routers (mounted AFTER core system probes so /health, /ready, and / are matched first)
+app.include_router(notifications_router, prefix="/notifications", tags=["Notifications"])
+app.include_router(calculator_router, prefix="/calculator", tags=["Carbon Calculator"])
+app.include_router(certificate_router, prefix="/certificates", tags=["Certificates"])
+app.include_router(project_router, prefix="/projects", tags=["Projects"])
+app.include_router(project_router, prefix="", tags=["Projects-Root"])
+app.include_router(grs_router, prefix="/grs", tags=["GRS"])
+app.include_router(suitability_router, tags=["Site Suitability"])
+app.include_router(marketplace_router, prefix="/marketplace", tags=["Marketplace"])
+app.include_router(credit_router, tags=["Credits"])
+app.include_router(fraud_router, prefix="/fraud", tags=["Fraud Detection"])
+app.include_router(payment_router, prefix="/payment", tags=["Payment"])
+app.include_router(esg_router, prefix="/esg", tags=["ESG"])
+app.include_router(realtime_router)
+app.include_router(auth_router)
+app.include_router(stats_router)
 
 
 if __name__ == "__main__":

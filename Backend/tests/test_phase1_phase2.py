@@ -28,6 +28,20 @@ def test_health_endpoint():
     assert data["db"] == "ok"
 
 
+def test_ready_endpoint():
+    resp = client.get("/ready")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "ready"
+    assert "database" in data
+    assert data["database"]["status"] == "ok"
+    assert "scheduler" in data
+    assert "services" in data
+    assert "modis_ndvi" in data["services"]
+    assert "nasa_power" in data["services"]
+    assert "llm_explainer" in data["services"]
+
+
 def test_auth_hashing_and_jwt():
     raw = "securePassword123"
     hashed = hash_password(raw)

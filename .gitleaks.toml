@@ -1,0 +1,30 @@
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Global allowlist for documentation examples and test fixtures"
+paths = [
+  '''\.env\.example$''',
+  '''Backend/\.env\.example$''',
+  '''tests/''',
+  '''Backend/tests/'''
+]
+regexes = [
+  '''your_razorpay_key_id_here''',
+  '''your_razorpay_key_secret_here''',
+  '''your_jwt_secret_min_32_chars'''
+]
+
+[[rules]]
+id = "razorpay-key-id"
+description = "Detected Razorpay Key ID"
+regex = '''(?i)(rzp_(?:test|live)_[a-zA-Z0-9]{14,})'''
+secretGroup = 1
+keywords = ["rzp_test", "rzp_live"]
+
+[[rules]]
+id = "razorpay-key-secret"
+description = "Detected Razorpay Key Secret"
+regex = '''(?i)RAZORPAY_KEY_SECRET\s*[:=]\s*["']?([a-zA-Z0-9]{20,})["']?'''
+secretGroup = 1
+keywords = ["RAZORPAY_KEY_SECRET"]

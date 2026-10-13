@@ -39,9 +39,16 @@ if DATABASE_URL.startswith("sqlite:///") and not DATABASE_URL.startswith("sqlite
     abs_db_path = (BASE_DIR / rel_path).resolve()
     DATABASE_URL = f"sqlite:///{abs_db_path.as_posix()}"
 
-# Razorpay credentials (active working test keys for hackathon/demo)
-RAZORPAY_KEY_ID = os.getenv("RAZORPAY_KEY_ID", "rzp_test_TkjH0Xr16eIeed")
-RAZORPAY_KEY_SECRET = os.getenv("RAZORPAY_KEY_SECRET", "mc1c7MG2tjpbJFMRWxTa4kFq")
+# Razorpay credentials (from environment)
+RAZORPAY_KEY_ID = os.getenv("RAZORPAY_KEY_ID", "")
+RAZORPAY_KEY_SECRET = os.getenv("RAZORPAY_KEY_SECRET", "")
+RAZORPAY_WEBHOOK_SECRET = os.getenv("RAZORPAY_WEBHOOK_SECRET", "")
+
+# JWT Secret for RBAC (ensure at least 32 bytes for HMAC-SHA256)
+JWT_SECRET = os.getenv("JWT_SECRET", "carbonvault-sec-auth-key-32bytes-entropy-production-2026")
+
+# Application Mode: 'demo' or 'production'
+APP_MODE = os.getenv("APP_MODE", "demo").lower()
 
 # CORS Origins
 _default_cors = [
