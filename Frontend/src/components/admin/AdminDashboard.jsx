@@ -12,6 +12,7 @@ import {
 import { KPICard, Card, SectionHeader, Table, Badge, MRVScore, Btn, T } from '../UI.jsx';
 import { ProjectMap } from '../GoogleMap.jsx';
 import { ActivityFeed } from '../ActivityFeed.jsx';
+import DataBoundary from '../DataBoundary.jsx';
 import { Layers, FolderCheck, Clock, AlertTriangle, Download, RefreshCw, Activity } from 'lucide-react';
 
 const CT = ({active,payload,label}) => {
@@ -83,17 +84,9 @@ export default function AdminDashboard() {
     ? Object.entries(typeMap).map(([name, value]) => ({ name, value }))
     : [{ name: 'Mixed', value: total }];
 
-  if (loading) return (
-    <div style={{padding:28, display:'flex', justifyContent:'center', alignItems:'center', minHeight:'40vh'}}>
-      <div style={{textAlign:'center'}}>
-        <div style={{width:44,height:44,border:`3px solid rgba(45,212,191,0.15)`,borderTop:`3px solid ${T.teal}`,borderRadius:'50%',margin:'0 auto 16px',animation:'spinSlow 0.8s linear infinite'}}/>
-        <div style={{fontSize:14,color:T.t2}}>Loading dashboard…</div>
-      </div>
-    </div>
-  );
-
   return (
-    <div style={{padding:28,animation:'fadeUp 0.3s ease'}}>
+    <DataBoundary loading={loading} loadingMessage="Loading dashboard…">
+      <div style={{padding:28,animation:'fadeUp 0.3s ease'}}>
       <SectionHeader
         title="Platform Overview"
         subtitle="Real-time metrics across all projects and users"
@@ -269,5 +262,6 @@ export default function AdminDashboard() {
         ))}
       </div>
     </div>
+    </DataBoundary>
   );
 }

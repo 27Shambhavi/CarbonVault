@@ -143,9 +143,15 @@ def get_public_config(db: Session = Depends(get_db)):
         }
         for r in rows
     }
+    from core.config import PAYMENT_MODE, RAZORPAY_KEY_ID
+    from routers.payment_router import get_razorpay_status
     return {
         "status": "ok",
         "app_mode": APP_MODE,
+        "payment_mode": PAYMENT_MODE,
+        "razorpay_mode": "test" if (RAZORPAY_KEY_ID or "").startswith("rzp_test_") or PAYMENT_MODE == "test" else "live",
+        "razorpay_key_id": RAZORPAY_KEY_ID,
+        "razorpay_status": get_razorpay_status(),
         "configs": config_dict
     }
 

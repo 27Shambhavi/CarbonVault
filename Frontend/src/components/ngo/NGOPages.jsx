@@ -6,10 +6,11 @@ import {
   fetchMarketplaceRequests, checkSiteSuitability, acceptBuyRequest,
   createOrder, buyCredits, loadRazorpayScript,
   submitProgressUpdate, fetchProjectProgress, getImageUrl,
-  fetchPlantationTypes, fetchLiveFxRate
+  fetchPlantationTypes, fetchLiveFxRate, fetchPublicConfig, fetchReady
 } from '../../services/api.js';
 import { Card, SectionHeader, Table, Badge, MRVScore, KPICard, Modal, Btn, T } from '../UI.jsx';
 import { ProjectMap } from '../GoogleMap.jsx';
+import DataBoundary from '../DataBoundary.jsx';
 import {
   TreePine, Layers, ShoppingCart, Plus, MapPin, Upload, CheckCircle,
   Clock, TrendingUp, Search, Filter, Star, AlertCircle, X, Leaf,
@@ -107,14 +108,14 @@ function generatePolygonWKT(lat, lng, areaHectares) {
 
 // ── NGO Dashboard ──────────────────────────────────────────────────────────────
 export function NGODashboard() {
-  const { refreshKey } = useApp();
+  const { refreshKey, user } = useApp();
   const [data, setData] = useState(null);
   const [recentProjects, setRecentProjects] = useState([]);
   const [mapFeatures, setMapFeatures] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  useEffect(() => {
+  const loadDashboard = useCallback(() => {
     setLoading(true);
     setError(null);
     Promise.all([
@@ -132,32 +133,27 @@ export function NGODashboard() {
           setMapFeatures(mapRes.data.projects);
         }
       })
+      .catch(err => setError(err.message || 'Could not connect to backend.'))
       .finally(() => setLoading(false));
-  }, [refreshKey]);
+  }, []);
 
-  if (loading) return (
-    <div style={{padding:28, display:'flex', justifyContent:'center', alignItems:'center', minHeight:'40vh'}}>
-      <div style={{textAlign:'center'}}>
-        <div style={{width:44,height:44,border:`3px solid rgba(45,212,191,0.15)`,borderTop:`3px solid ${T.teal}`,borderRadius:'50%',margin:'0 auto 16px',animation:'spinSlow 0.8s linear infinite'}}/>
-        <div style={{fontSize:14,color:T.t2}}>Loading dashboard…</div>
-      </div>
-    </div>
-  );
-  if (error || !data) return (
-    <div style={{padding:28}}>
-      <Card style={{textAlign:'center',padding:40}}>
-        <AlertCircle size={32} color={T.roseL} style={{margin:'0 auto 12px'}} />
-        <div style={{fontSize:16,fontWeight:700,color:T.t1,marginBottom:8}}>Failed to load dashboard</div>
-        <div style={{fontSize:13,color:T.t3}}>{error || 'Could not connect to backend. Ensure the API server is running on port 8000.'}</div>
-      </Card>
-    </div>
-  );
+  useEffect(() => {
+    loadDashboard();
+  }, [refreshKey, loadDashboard]);
 
-  const { user } = useApp();
   const ngoName = user?.org || user?.name || 'Registered NGO';
 
   return (
-    <div style={{padding:28}}>
+    <DataBoundary
+      loading={loading}
+      error={error}
+      isEmpty={!loading && !error && !data}
+      onRetry={loadDashboard}
+      loadingMessage="Loading dashboard…"
+      emptyMessage="No dashboard metrics available."
+    >
+      {data && (
+        <div style={{padding:28}}>
       <SectionHeader title="NGO Dashboard" subtitle={`${ngoName} — project overview and performance`}/>
 
       <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:15,marginBottom:24}}>
@@ -200,7 +196,9 @@ export function NGODashboard() {
           })
         )}
       </Card>
-    </div>
+        </div>
+      )}
+    </DataBoundary>
   );
 }
 
@@ -1012,9 +1010,25 @@ export function NGOMarketplace() {
   const [payModal,setPayModal] = useState(null);
   const [paid,setPaid]       = useState({});
   const [paying, setPaying]  = useState(false);
+  const [fxRate, setFxRate]  = useState(0);
+  const [paymentMode, setPaymentMode] = useState('test');
+  const [razorpayHealth, setRazorpayHealth] = useState('ok');
   const { showToast, ToastEl } = useToast();
 
-  const loadRequests = () => {
+  useEffect(() => {
+    fetchLiveFxRate().then(res => {
+      if (res.data?.rate) setFxRate(res.data.rate);
+    }).catch(() => {});
+    fetchPublicConfig().then(res => {
+      if (res.data?.payment_mode) setPaymentMode(res.data.payment_mode);
+      if (res.data?.razorpay_status) setRazorpayHealth(res.data.razorpay_status);
+    }).catch(() => {});
+    fetchReady().then(res => {
+      if (res.data?.razorpay_status) setRazorpayHealth(res.data.razorpay_status);
+    }).catch(() => {});
+  }, []);
+
+  const loadRequests = useCallback(() => {
     setLoading(true);
     setError(null);
     fetchMarketplaceRequests(NGO_ID)
@@ -1024,11 +1038,11 @@ export function NGOMarketplace() {
       })
       .catch(err => setError(err.message || 'Failed to fetch buy requests'))
       .finally(() => setLoading(false));
-  };
+  }, []);
 
   useEffect(() => {
     loadRequests();
-  }, []);
+  }, [loadRequests]);
 
   const handleSell = async (req) => {
     // Accept the request on the backend first
@@ -1041,16 +1055,13 @@ export function NGOMarketplace() {
     setPayModal(req);
   };
 
-  const [fxRate, setFxRate] = useState(0);
-  useEffect(() => {
-    fetchLiveFxRate().then(res => {
-      if (res.data?.rate) setFxRate(res.data.rate);
-    }).catch(() => {});
-  }, []);
-
   const inrAmount = (usd) => fxRate > 0 ? `₹${Math.round(usd * fxRate).toLocaleString('en-IN')}` : 'Calculating…';
 
   const handleRazorPay = async (req) => {
+    if (razorpayHealth !== 'ok') {
+      showToast('Payments are temporarily unavailable. Gateway is currently degraded.', 'error');
+      return;
+    }
     setPaying(true);
     try {
       await loadRazorpayScript();
@@ -1146,33 +1157,15 @@ export function NGOMarketplace() {
     }
   };
 
-  if (loading) return (
-    <div style={{padding:28, display:'flex', justifyContent:'center', alignItems:'center', minHeight:'40vh'}}>
-      <div style={{textAlign:'center'}}>
-        <div style={{width:44,height:44,border:`3px solid rgba(45,212,191,0.15)`,borderTop:`3px solid ${T.teal}`,borderRadius:'50%',margin:'0 auto 16px',animation:'spinSlow 0.8s linear infinite'}}/>
-        <div style={{fontSize:14,color:T.t2}}>Loading marketplace…</div>
-      </div>
-    </div>
-  );
-
   return (
-    <div style={{padding:28}}>
-      <SectionHeader title="Marketplace" subtitle="Corporate buy requests — accept and receive payment via Razorpay"/>
-
-      {error && (
-        <Card style={{marginBottom:16,padding:16,border:'1px solid rgba(244,63,94,0.25)',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-          <div style={{display:'flex',gap:10,alignItems:'center'}}>
-            <AlertCircle size={16} color={T.roseL}/>
-            <span style={{fontSize:13,color:T.roseL}}>{error}</span>
-          </div>
-          <button
-            onClick={loadRequests}
-            style={{background:T.teal,color:'#021a17',border:'none',borderRadius:7,padding:'6px 14px',fontSize:12,fontWeight:700,cursor:'pointer'}}
-          >
-            Retry
-          </button>
-        </Card>
-      )}
+    <DataBoundary
+      loading={loading}
+      error={error}
+      onRetry={loadRequests}
+      loadingMessage="Loading marketplace…"
+    >
+      <div style={{padding:28}}>
+        <SectionHeader title="Marketplace" subtitle="Corporate buy requests — accept and receive payment via Razorpay"/>
 
       {/* Stats */}
       <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:14,marginBottom:22}}>
@@ -1231,11 +1224,14 @@ export function NGOMarketplace() {
       </Card>
 
       {/* Razorpay Modal */}
-      <Modal open={!!payModal} onClose={()=>setPayModal(null)} title="Razorpay Checkout" width={460}>
+      <Modal open={!!payModal} onClose={()=>setPayModal(null)} title={paymentMode === 'test' ? 'Razorpay Test Checkout' : 'Razorpay Checkout'} width={460}>
         {payModal && (
           <div>
             <div style={{background:'rgba(45,212,191,0.06)',border:'1px solid rgba(45,212,191,0.18)',borderRadius:12,padding:20,marginBottom:20}}>
-              <div style={{fontSize:11,color:T.teal,textTransform:'uppercase',letterSpacing:'0.8px',marginBottom:8}}>Order & Settlement Summary</div>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+                <div style={{fontSize:11,color:T.teal,textTransform:'uppercase',letterSpacing:'0.8px'}}>Order & Settlement Summary</div>
+                <Badge type={paymentMode === 'test' ? 'gold' : 'teal'} label={paymentMode === 'test' ? 'Razorpay Test Mode' : 'Live Razorpay Gateway'} />
+              </div>
               <div style={{display:'flex',flexDirection:'column',gap:7}}>
                 {[['Buyer',payModal.buyer],['Project',payModal.project_name||payModal.project_id],['Credits',(payModal.tons||0).toLocaleString()+'t'],['Amount (USD)',`$${(payModal.total||0).toLocaleString()}`],['Amount (INR)',inrAmount(payModal.total||0)]].map(([k,v])=>(
                   <div key={k} style={{display:'flex',justifyContent:'space-between',fontSize:13,padding:'5px 0',borderBottom:`1px solid rgba(255,255,255,0.04)`}}>
@@ -1244,20 +1240,36 @@ export function NGOMarketplace() {
                 ))}
               </div>
             </div>
-            <div style={{background:'rgba(45,212,191,0.06)',border:'1px solid rgba(45,212,191,0.2)',borderRadius:10,padding:14,marginBottom:20,fontSize:12,color:T.t2,lineHeight:1.6}}>
-              <strong style={{color:T.teal}}>Live Razorpay Gateway:</strong> Clicking below generates an official order and opens Razorpay's secure hosted payment modal. Use test card <code style={{color:T.goldL,fontWeight:700}}>4111 1111 1111 1111</code> to complete payment.
-            </div>
-            <Btn
-              style={{width:'100%',justifyContent:'center',background:'linear-gradient(135deg,#00BAF2,#0099cc)',color:'#fff',boxShadow:'0 4px 16px rgba(0,186,242,0.3)'}}
-              onClick={()=>handleRazorPay(payModal)}
-              disabled={paying}
-            >
-              {paying ? 'Connecting to Razorpay…' : `💳 Pay via Razorpay — ${inrAmount(payModal.total||0)}`}
-            </Btn>
+
+            {paymentMode === 'test' ? (
+              <div style={{background:'rgba(56,189,248,0.08)',border:'1px solid rgba(56,189,248,0.25)',borderRadius:10,padding:14,marginBottom:20,fontSize:12,color:T.t2,lineHeight:1.6}}>
+                <strong style={{color:T.skyL}}>Razorpay Test Mode:</strong> Clicking below generates a test order and opens Razorpay's test checkout modal. Use test card <code style={{color:T.goldL,fontWeight:700}}>4111 1111 1111 1111</code> to complete payment.
+              </div>
+            ) : (
+              <div style={{background:'rgba(45,212,191,0.06)',border:'1px solid rgba(45,212,191,0.2)',borderRadius:10,padding:14,marginBottom:20,fontSize:12,color:T.t2,lineHeight:1.6}}>
+                <strong style={{color:T.teal}}>Live Razorpay Gateway:</strong> Clicking below generates an official order and opens Razorpay's secure hosted payment modal.
+              </div>
+            )}
+
+            {razorpayHealth !== 'ok' ? (
+              <div style={{background:'rgba(244,63,94,0.1)',border:'1px solid rgba(244,63,94,0.3)',borderRadius:8,padding:'12px',marginBottom:10,textAlign:'center'}}>
+                <div style={{color:T.roseL,fontWeight:700,fontSize:13,marginBottom:4}}>⚠️ Payments are temporarily unavailable</div>
+                <div style={{color:T.t3,fontSize:11}}>Payment gateway health is degraded ({razorpayHealth}). Direct purchases are paused to prevent failed charges.</div>
+              </div>
+            ) : (
+              <Btn
+                style={{width:'100%',justifyContent:'center',background:'linear-gradient(135deg,#00BAF2,#0099cc)',color:'#fff',boxShadow:'0 4px 16px rgba(0,186,242,0.3)'}}
+                onClick={()=>handleRazorPay(payModal)}
+                disabled={paying}
+              >
+                {paying ? 'Connecting to Razorpay…' : `💳 Pay via Razorpay — ${inrAmount(payModal.total||0)}`}
+              </Btn>
+            )}
           </div>
         )}
       </Modal>
       {ToastEl}
     </div>
+    </DataBoundary>
   );
 }

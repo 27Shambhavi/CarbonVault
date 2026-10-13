@@ -152,7 +152,7 @@ export function Sidebar() {
 }
 
 export function Navbar() {
-  const {user,page,setPage,setNotifOpen,sidebarOpen,setSidebarOpen,logout,theme,toggleTheme,unreadNotifCount,switchAdminRole,liveStatus,lastEventAt,lastError} = useApp();
+  const {user,page,setPage,setNotifOpen,sidebarOpen,setSidebarOpen,logout,theme,toggleTheme,unreadNotifCount,liveStatus,lastEventAt,lastError} = useApp();
   const [menuOpen,setMenuOpen] = useState(false);
 
   if (!user) return null;
@@ -180,47 +180,25 @@ export function Navbar() {
         </div>
       </div>
 
-      {/* Admin Role Switcher (Super Admin vs Project Approver) */}
+      {/* Read-Only Admin Role Badge (R2-6) */}
       {user.role === 'admin' && (
-        <div style={{ display: 'flex', alignItems: 'center', background: 'var(--card-bg, rgba(255,255,255,0.04))', border: `1px solid ${T.border}`, borderRadius: 20, padding: '2px 4px', gap: 4 }}>
-          <button
-            onClick={() => switchAdminRole && switchAdminRole('super_admin')}
-            title="Switch to Super Admin (Full permissions: users, pricing, deletion)"
-            style={{
-              background: (user.admin_role || 'super_admin') === 'super_admin' ? 'rgba(217,119,6,0.2)' : 'transparent',
-              border: (user.admin_role || 'super_admin') === 'super_admin' ? `1px solid ${T.goldL}` : '1px solid transparent',
-              color: (user.admin_role || 'super_admin') === 'super_admin' ? T.goldL : T.t3,
-              borderRadius: 16,
-              padding: '3px 10px',
-              fontSize: 11,
-              fontWeight: 700,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 5,
-              transition: 'all 0.15s',
-            }}>
-            <span>🛡️</span> Super Admin
-          </button>
-          <button
-            onClick={() => switchAdminRole && switchAdminRole('approver')}
-            title="Switch to Project Approver (Review projects, read-only users & pricing)"
-            style={{
-              background: user.admin_role === 'approver' ? 'rgba(56,189,248,0.2)' : 'transparent',
-              border: user.admin_role === 'approver' ? `1px solid ${T.skyL}` : '1px solid transparent',
-              color: user.admin_role === 'approver' ? T.skyL : T.t3,
-              borderRadius: 16,
-              padding: '3px 10px',
-              fontSize: 11,
-              fontWeight: 700,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 5,
-              transition: 'all 0.15s',
-            }}>
-            <span>🔍</span> Approver
-          </button>
+        <div
+          data-testid="admin-role-badge"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            background: user.admin_role === 'approver' ? 'rgba(56,189,248,0.1)' : 'rgba(217,119,6,0.1)',
+            border: `1px solid ${user.admin_role === 'approver' ? 'rgba(56,189,248,0.3)' : 'rgba(217,119,6,0.3)'}`,
+            borderRadius: 20,
+            padding: '3px 10px',
+            gap: 6,
+            fontSize: 11,
+            fontWeight: 700,
+            color: user.admin_role === 'approver' ? T.skyL : T.goldL,
+          }}
+        >
+          <span>{user.admin_role === 'approver' ? '🔍' : '🛡️'}</span>
+          <span>{user.admin_role === 'approver' ? 'Project Approver' : 'Super Admin'}</span>
         </div>
       )}
 

@@ -13,7 +13,7 @@ import hashlib
 import logging
 import uuid
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from fastapi import APIRouter, HTTPException, Request, Header
 from pydantic import BaseModel
@@ -23,10 +23,11 @@ from sqlalchemy.orm import Session
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-from core.config import RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET
+from core.config import RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET, PAYMENT_MODE
 from credit_calculation.credits_module.db import SessionLocal
 from credit_calculation.credits_module.db_models import (
-    Project, FundingDetails, Transaction, Wallet, ProjectCredits, CorporateRequest, Certificate, FxRate
+    Project, FundingDetails, Transaction, Wallet, ProjectCredits, CorporateRequest, Certificate, FxRate,
+    PaymentQuote, PricingConfig
 )
 
 
@@ -59,7 +60,54 @@ except ImportError:
     logger.warning("razorpay package not installed — payment will use fallback mode")
 
 
+# ── Razorpay Health Tracking (R2-4) ──────────────────────────────────────────
+_razorpay_status_cache = {"status": "ok", "checked_at": 0}
+
+def get_razorpay_status() -> str:
+    """
+    Checks Razorpay health with a cheap authenticated call (order count=1).
+    Cached for 15 minutes (900s). Returns: 'ok' | 'auth_failed' | 'unreachable'.
+    """
+    global _razorpay_status_cache
+    now = datetime.utcnow().timestamp()
+    if (now - _razorpay_status_cache["checked_at"] < 900) and _razorpay_status_cache["checked_at"] > 0:
+        return _razorpay_status_cache["status"]
+
+    if not razorpay_client:
+        status = "ok" if not RAZORPAY_KEY_ID else "unreachable"
+        _razorpay_status_cache = {"status": status, "checked_at": now}
+        return status
+
+    try:
+        # Cheap authenticated probe: fetch single order
+        razorpay_client.order.all({"count": 1})
+        status = "ok"
+    except Exception as e:
+        err_str = str(e).lower()
+        if "auth" in err_str or "unauthorized" in err_str or "401" in err_str or "signature" in err_str:
+            status = "auth_failed"
+        else:
+            status = "unreachable"
+        logger.warning("Razorpay health check probe returned %s: %s", status, e)
+
+    _razorpay_status_cache = {"status": status, "checked_at": now}
+    return status
+
+
+# Initial check at module load
+try:
+    get_razorpay_status()
+except Exception:
+    pass
+
+
 # ── Schemas ─────────────────────────────────────────────────────────────
+
+class QuoteRequest(BaseModel):
+    project_id: str
+    quantity: float
+    corporate_name: Optional[str] = "Corporate Buyer"
+
 
 class CreateOrderRequest(BaseModel):
     amount: float        # Amount in INR (NOT paise)
@@ -67,6 +115,7 @@ class CreateOrderRequest(BaseModel):
     project_id: Optional[str] = None
     corporate_name: Optional[str] = None
     quantity: Optional[float] = None
+    quote_id: Optional[str] = None
 
 
 class BuyCreditsRequest(BaseModel):
@@ -79,30 +128,137 @@ class BuyCreditsRequest(BaseModel):
     amount: float        # INR paid
 
 
+# ── Locked Quote Engine (R2-7) ───────────────────────────────────────────
+
+@router.post("/quote")
+@router.get("/quote")
+def create_payment_quote(
+    project_id: str,
+    quantity: float,
+    corporate_name: Optional[str] = "Corporate Buyer"
+):
+    """
+    Generate and persist a locked price quote for credit checkout.
+    Includes unit price, Pricing Engine breakdown, FX rate with timestamp, and 15m expiration.
+    """
+    if quantity <= 0:
+        raise HTTPException(status_code=400, detail="Quantity must be greater than 0")
+
+    db: Session = SessionLocal()
+    try:
+        # 1. Lookup project
+        proj = db.query(Project).filter(
+            (Project.project_id == project_id) |
+            (Project.id == project_id if str(project_id).isdigit() else False)
+        ).first()
+
+        # 2. Get Pricing Engine configuration
+        cfg = db.query(PricingConfig).order_by(PricingConfig.id.desc()).first()
+        base_price = cfg.base if cfg else 28.50
+        demand_mult = cfg.demand if cfg else 1.12
+        supply_mult = cfg.supply if cfg else 0.98
+        living_mult = cfg.living if cfg else 1.08
+
+        unit_price = round(base_price * demand_mult * supply_mult * living_mult, 2)
+        price_source = f"Pricing Engine (Base ${base_price:.2f} × Demand {demand_mult} × Supply {supply_mult} × Living {living_mult})"
+
+        # 3. Lookup reference FX rate with timestamp
+        fx_row = db.query(FxRate).order_by(FxRate.fetched_at.desc()).first()
+        fx_rate = float(fx_row.rate) if fx_row and fx_row.rate > 0 else get_current_inr_rate(db)
+        fx_as_of = fx_row.fetched_at if fx_row and fx_row.fetched_at else datetime.utcnow()
+
+        total_usd = round(unit_price * quantity, 2)
+        total_inr = round(total_usd * fx_rate, 2)
+
+        quote_id = f"quot_{uuid.uuid4().hex[:12]}"
+        now = datetime.utcnow()
+        expires_at = now + timedelta(minutes=15)
+
+        quote_rec = PaymentQuote(
+            quote_id=quote_id,
+            project_id=proj.project_id if proj else project_id,
+            corporate_name=corporate_name,
+            quantity=quantity,
+            unit_price_usd=unit_price,
+            price_source=price_source,
+            fx_rate=fx_rate,
+            fx_as_of=fx_as_of,
+            total_usd=total_usd,
+            total_inr=total_inr,
+            created_at=now,
+            expires_at=expires_at,
+            is_used=False
+        )
+        db.add(quote_rec)
+        db.commit()
+
+        return {
+            "status": "ok",
+            "quote_id": quote_id,
+            "project_id": proj.project_id if proj else project_id,
+            "project_name": proj.name if proj else project_id,
+            "quantity": quantity,
+            "unit_price_usd": unit_price,
+            "price_source": price_source,
+            "fx_rate": fx_rate,
+            "fx_as_of": fx_as_of.isoformat() + "Z",
+            "total_usd": total_usd,
+            "total_inr": total_inr,
+            "expires_at": expires_at.isoformat() + "Z",
+            "ttl_seconds": 900
+        }
+    finally:
+        db.close()
+
+
 # ── POST /create-order ──────────────────────────────────────────────────
 
 @router.post("/create-order")
 def create_order(req: CreateOrderRequest):
     """
     Create a Razorpay order.
-
-    Frontend sends amount in INR (e.g., 83500 for ₹83,500).
-    Backend converts to paise: amount_paise = int(amount * 100).
-    NO double conversion.
+    Checks Razorpay health, validates locked quote if provided, and converts INR to paise.
     """
-    if req.amount <= 0:
+    # R2-4: Check gateway health
+    rp_status = get_razorpay_status()
+    if rp_status == "auth_failed":
+        err_id = f"PAY-{uuid.uuid4().hex[:6].upper()}"
+        logger.error("[%s] Order creation blocked: Razorpay reports auth_failed", err_id)
+        raise HTTPException(
+            status_code=503,
+            detail=f"Payments are temporarily unavailable (Payment gateway authentication error [{err_id}]). Please contact support."
+        )
+
+    order_amount_inr = req.amount
+
+    # R2-7: Verify locked quote if provided
+    if req.quote_id:
+        db: Session = SessionLocal()
+        try:
+            stored_quote = db.query(PaymentQuote).filter(PaymentQuote.quote_id == req.quote_id).first()
+            if not stored_quote:
+                raise HTTPException(status_code=400, detail="Invalid quote ID. Please refresh your quote.")
+            if datetime.utcnow() > stored_quote.expires_at:
+                raise HTTPException(status_code=400, detail="Price quote has expired. Please refresh the quote.")
+            if stored_quote.is_used:
+                raise HTTPException(status_code=400, detail="Price quote has already been used.")
+            order_amount_inr = stored_quote.total_inr
+        finally:
+            db.close()
+
+    if order_amount_inr <= 0:
         raise HTTPException(status_code=400, detail="Amount must be greater than 0")
 
-    amount_paise = int(round(req.amount * 100))
+    amount_paise = int(round(order_amount_inr * 100))
 
     # Razorpay test mode has a hard per-transaction limit of ₹5,00,000 (50,000,000 paise)
-    is_test_mode = (RAZORPAY_KEY_ID or "").startswith("rzp_test_")
+    is_test_mode = (RAZORPAY_KEY_ID or "").startswith("rzp_test_") or PAYMENT_MODE == "test"
     if is_test_mode and amount_paise > 50000000:
         raise HTTPException(
             status_code=400,
             detail=(
                 f"Razorpay Test Mode limit reached: The maximum single-order amount allowed in test mode is ₹5,00,000 (INR 5 Lakhs). "
-                f"Your order total is ₹{req.amount:,.2f}. Please reduce the quantity (e.g., 25–50 tonnes) to complete a test payment."
+                f"Your order total is ₹{order_amount_inr:,.2f}. Please reduce the quantity (e.g., 25–50 tonnes) to complete a test payment."
             )
         )
 
@@ -116,40 +272,46 @@ def create_order(req: CreateOrderRequest):
                     "project_id": req.project_id or "",
                     "corporate_name": req.corporate_name or "",
                     "quantity": str(req.quantity or 0),
+                    "quote_id": req.quote_id or "",
                 },
             }
             order = razorpay_client.order.create(data=order_data)
-            logger.info("Razorpay order created: %s (₹%s)", order["id"], req.amount)
+            logger.info("Razorpay order created: %s (₹%s)", order["id"], order_amount_inr)
             return {
                 "id": order["id"],
                 "amount": order["amount"],       # paise
-                "amount_inr": req.amount,         # INR for display
+                "amount_inr": order_amount_inr,  # INR for display
                 "currency": order["currency"],
                 "key_id": RAZORPAY_KEY_ID,        # safe to send — this is the public key
+                "quote_id": req.quote_id,
             }
         except Exception as e:
-            logger.exception("Razorpay order creation failed: %s | type=%s | args=%s", e, type(e), getattr(e, 'args', None))
+            err_id = f"PAY-{uuid.uuid4().hex[:6].upper()}"
+            error_status = getattr(e, "status_code", 500)
+            error_body = getattr(e, "error", None) or getattr(e, "args", str(e))
+            logger.error("[%s] Razorpay order creation failed: status=%s, body=%s", err_id, error_status, error_body)
+
             error_msg = str(e)
             if hasattr(e, "error") and isinstance(e.error, dict):
                 error_msg = e.error.get("description", error_msg)
             elif "Amount exceeds maximum amount allowed" in error_msg:
                 error_msg = (
-                    f"Razorpay limit reached: The amount ₹{req.amount:,.2f} exceeds the maximum permitted by your Razorpay account. "
+                    f"Razorpay limit reached: The amount ₹{order_amount_inr:,.2f} exceeds the maximum permitted by your Razorpay account. "
                     f"In test mode, maximum order amount is ₹5,00,000."
                 )
             status_code = 400 if ("limit" in error_msg.lower() or "amount" in error_msg.lower() or "exceeds" in error_msg.lower()) else 500
-            raise HTTPException(status_code=status_code, detail=f"Payment gateway error: {error_msg}")
+            raise HTTPException(status_code=status_code, detail=f"Payment gateway error [{err_id}]: {error_msg}")
     else:
         # Fallback for demo/testing when Razorpay SDK not available
-        import uuid
         fake_order_id = f"order_demo_{uuid.uuid4().hex[:12]}"
-        logger.info("Demo order created: %s (₹%s)", fake_order_id, req.amount)
+        logger.info("Demo order created: %s (₹%s)", fake_order_id, order_amount_inr)
         return {
             "id": fake_order_id,
             "amount": amount_paise,
-            "amount_inr": req.amount,
+            "amount_inr": order_amount_inr,
             "currency": req.currency,
             "key_id": RAZORPAY_KEY_ID or "rzp_test_demo",
+            "quote_id": req.quote_id,
             "demo_mode": True
         }
 

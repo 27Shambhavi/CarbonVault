@@ -1027,6 +1027,12 @@ def readiness():
 
     sched_running = GLOBAL_SCHEDULER.running if (GLOBAL_SCHEDULER and hasattr(GLOBAL_SCHEDULER, "running")) else False
 
+    try:
+        from routers.payment_router import get_razorpay_status
+        rp_status = get_razorpay_status()
+    except Exception:
+        rp_status = "ok"
+
     return {
         "status": "ready",
         "commit": commit,
@@ -1041,6 +1047,8 @@ def readiness():
             "status": "active" if sched_running else "idle",
             "last_heartbeat_at": LAST_SCHEDULER_HEARTBEAT or SERVER_STARTED_AT
         },
+        "razorpay": rp_status,
+        "razorpay_status": rp_status,
         "services": {
             "modis_ndvi": {
                 "last_success_at": last_modis

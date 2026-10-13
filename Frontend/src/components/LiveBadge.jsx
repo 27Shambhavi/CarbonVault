@@ -26,27 +26,41 @@ export function LiveBadge({ status = 'offline', lastEventAt = null, source = nul
     return () => clearInterval(timer);
   }, [lastEventAt]);
 
-  const isLive = status === 'connected';
+  const hasFreshHeartbeat = Boolean(lastEventAt && secondsAgo <= 30);
+  const isTrulyLive = status === 'connected' && hasFreshHeartbeat;
+  const isConnecting = (status === 'connected' && !hasFreshHeartbeat) || status === 'connecting';
   const isReconnecting = status === 'reconnecting';
+  const isOffline = status === 'offline' || (!isTrulyLive && !isConnecting && !isReconnecting);
 
-  const dotColor = isLive ? T.emeraldL : isReconnecting ? T.goldL : T.t3;
-  const bg = isLive
+  let stateLabel = 'OFFLINE';
+  let stateSub = 'stream disconnected';
+  let dotColor = T.t3;
+
+  if (isTrulyLive) {
+    stateLabel = 'LIVE';
+    stateSub = `last event ${secondsAgo < 3 ? 'just now' : `${secondsAgo}s ago`}`;
+    dotColor = T.emeraldL;
+  } else if (isConnecting) {
+    stateLabel = 'CONNECTING';
+    stateSub = lastEventAt ? `waiting for event (${secondsAgo}s)` : 'stream initialising…';
+    dotColor = T.goldL;
+  } else if (isReconnecting) {
+    stateLabel = 'RECONNECTING';
+    stateSub = 'reconnecting stream…';
+    dotColor = T.goldL;
+  }
+
+  const bg = isTrulyLive
     ? 'color-mix(in srgb, var(--emerald, #10b981) 14%, transparent)'
-    : isReconnecting
+    : (isConnecting || isReconnecting)
     ? 'color-mix(in srgb, var(--gold, #f59e0b) 14%, transparent)'
     : 'color-mix(in srgb, var(--t3, #475569) 14%, transparent)';
 
-  const border = isLive
+  const border = isTrulyLive
     ? 'color-mix(in srgb, var(--emerald, #10b981) 28%, transparent)'
-    : isReconnecting
+    : (isConnecting || isReconnecting)
     ? 'color-mix(in srgb, var(--gold, #f59e0b) 28%, transparent)'
     : 'color-mix(in srgb, var(--t3, #475569) 25%, transparent)';
-
-  const timeLabel = lastEventAt
-    ? secondsAgo < 5
-      ? 'just now'
-      : `${secondsAgo}s ago`
-    : 'connecting';
 
   const tooltipText = lastError
     ? `Stream Warning: ${lastError}`
@@ -80,7 +94,7 @@ export function LiveBadge({ status = 'offline', lastEventAt = null, source = nul
           height: 7,
         }}
       >
-        {isLive && (
+        {isTrulyLive && (
           <span
             style={{
               position: 'absolute',
@@ -99,7 +113,7 @@ export function LiveBadge({ status = 'offline', lastEventAt = null, source = nul
             height: 7,
             borderRadius: '50%',
             background: dotColor,
-            boxShadow: isLive ? `0 0 6px ${dotColor}` : 'none',
+            boxShadow: isTrulyLive ? `0 0 6px ${dotColor}` : 'none',
           }}
         />
       </span>
@@ -113,13 +127,13 @@ export function LiveBadge({ status = 'offline', lastEventAt = null, source = nul
           fontSize: 10,
         }}
       >
-        {isLive ? 'LIVE' : isReconnecting ? 'SYNCING' : 'OFFLINE'}
+        {stateLabel}
       </span>
 
       <span style={{ color: T.t3, fontSize: 10 }}>•</span>
 
       <span style={{ color: T.t2, fontSize: 10.5, fontWeight: 500 }}>
-        {isLive ? `updated ${timeLabel}` : isReconnecting ? 'reconnecting…' : 'polling mode'}
+        {stateSub}
       </span>
 
       {source && (

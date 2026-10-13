@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useApp } from '../AppContext.jsx';
-import { fetchPublicStats, loginUser, registerUser, setAuthToken, fetchHealth } from '../services/api.js';
+import { fetchPublicStats, loginUser, registerUser, setAuthToken, fetchReady } from '../services/api.js';
 import AppFooter from '../components/Footer.jsx';
 import { T, withAlpha } from '../components/UI.jsx';
 import {
   Leaf, ShieldCheck, Eye, EyeOff, Zap, TrendingUp, Award, TreePine,
   Building2, Globe, Sun, Moon, Loader2, CheckCircle2, UserPlus, LogIn,
-  ArrowRight, Activity
+  ArrowRight, Activity, UserCheck
 } from 'lucide-react';
 
 // Animated floating particle
@@ -53,29 +53,45 @@ export default function LoginPage() {
   const [regError, setRegError] = useState(null);
   const [regSuccess, setRegSuccess] = useState(null);
 
-  // Health & Stats State
+  // Health & Stats State (R2-5 Unified Source of Truth)
   const [loaded, setLoaded] = useState(false);
   const [publicStats, setPublicStats] = useState(null);
   const [statsLoading, setStatsLoading] = useState(true);
   const [apiLatency, setApiLatency] = useState(null);
-  const [apiOnline, setApiOnline] = useState(true);
+  const [systemStatus, setSystemStatus] = useState('Checking');
+  const [lastCheckedAt, setLastCheckedAt] = useState(null);
+  const [secondsAgo, setSecondsAgo] = useState(0);
+
+  const checkReadyStatus = () => {
+    const startPing = performance.now();
+    fetchReady()
+      .then((res) => {
+        const elapsed = Math.round(performance.now() - startPing);
+        setApiLatency(elapsed);
+        setLastCheckedAt(Date.now());
+        if (res.data && res.data.status === 'ready') {
+          setSystemStatus('Online');
+        } else if (res.data && res.data.status === 'unready') {
+          setSystemStatus('Degraded');
+        } else {
+          setSystemStatus('Offline');
+        }
+      })
+      .catch(() => {
+        setApiLatency(null);
+        setLastCheckedAt(Date.now());
+        setSystemStatus('Offline');
+      });
+  };
 
   useEffect(() => {
     setTimeout(() => setLoaded(true), 80);
 
-    // Measure live latency to backend
-    const startPing = performance.now();
-    fetchHealth()
-      .then((res) => {
-        const elapsed = Math.round(performance.now() - startPing);
-        setApiLatency(elapsed);
-        setApiOnline(!res.error);
-      })
-      .catch(() => {
-        setApiOnline(false);
-      });
+    // Initial and periodic readiness checks
+    checkReadyStatus();
+    const interval = setInterval(checkReadyStatus, 30000);
 
-    // Fetch live public platform stats with 3s timeout fallback
+    // Fetch live public platform stats with 3s timeout
     const statsTimer = setTimeout(() => {
       setStatsLoading(false);
     }, 3000);
@@ -88,12 +104,26 @@ export default function LoginPage() {
       .catch(() => {})
       .finally(() => setStatsLoading(false));
 
-    return () => clearTimeout(statsTimer);
+    return () => {
+      clearInterval(interval);
+      clearTimeout(statsTimer);
+    };
   }, []);
+
+  // Update "checked N s ago" every second
+  useEffect(() => {
+    const timer = setInterval(() => {
+      if (lastCheckedAt) {
+        setSecondsAgo(Math.max(0, Math.floor((Date.now() - lastCheckedAt) / 1000)));
+      }
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [lastCheckedAt]);
 
   const roles = [
     { role: 'admin', label: 'Admin', desc: 'Platform HQ', icon: ShieldCheck, color: T.goldL, email: 'admin@carbonvault.com', pass: 'admin123' },
-    { role: 'ngo', label: 'NGO', desc: 'Project Developer', icon: TreePine, color: T.skyL, email: 'contact@ecoguard.org', pass: 'ngo123' },
+    { role: 'approver', label: 'Approver', desc: 'Project Approver', icon: UserCheck, color: T.skyL, email: 'approver@carbonvault.com', pass: 'approver123' },
+    { role: 'ngo', label: 'NGO', desc: 'Project Developer', icon: TreePine, color: T.emeraldL, email: 'contact@ecoguard.org', pass: 'ngo123' },
     { role: 'corporate', label: 'Corporate', desc: 'Carbon Buyer', icon: Building2, color: T.violetLL, email: 'carbon@microsoft.com', pass: 'corp123' },
   ];
 
@@ -103,19 +133,20 @@ export default function LoginPage() {
     duration: 5 + Math.random() * 8,
   }));
 
-  // Hero Stats Formatters
-  const verifiedCreditsText = publicStats?.total_tonnes_sequestered != null
+  // Hero Stats Formatters (R2-5: Show "—" and "Live figures unavailable" if offline or call fails)
+  const isAvailable = systemStatus !== 'Offline' && publicStats != null;
+  const verifiedCreditsText = isAvailable
     ? `${Number(publicStats.total_tonnes_sequestered).toLocaleString()} t`
-    : (statsLoading ? '...' : '0 t');
-  const activeProjectsText = publicStats?.verified_projects_count != null
+    : (statsLoading ? '...' : '—');
+  const activeProjectsText = isAvailable
     ? `${publicStats.verified_projects_count}`
-    : (statsLoading ? '...' : '0');
-  const fundingText = publicStats?.total_capital_deployed_usd != null
+    : (statsLoading ? '...' : '—');
+  const fundingText = isAvailable
     ? `$${Number(publicStats.total_capital_deployed_usd).toLocaleString()}`
-    : (statsLoading ? '...' : '$0');
-  const activeNgosText = publicStats?.active_ngos_count != null
+    : (statsLoading ? '...' : '—');
+  const activeNgosText = isAvailable
     ? `${publicStats.active_ngos_count}`
-    : (statsLoading ? '...' : '0');
+    : (statsLoading ? '...' : '—');
 
   const stats = [
     { n: verifiedCreditsText, l: 'Tonnes Sequestered', icon: Award, color: T.teal },
@@ -280,7 +311,9 @@ export default function LoginPage() {
 
           <div style={{ marginTop: 28, display: 'flex', alignItems: 'center', gap: 14 }}>
             <div style={{ height: 1, flex: 1, background: `linear-gradient(90deg, rgba(45,212,191,0.4), transparent)` }} />
-            <span style={{ fontSize: 11, color: T.t4, fontWeight: 600, letterSpacing: '0.8px', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>Cryptographic Audit & Satellite MRV Ledger</span>
+            <span style={{ fontSize: 11, color: isAvailable ? T.t4 : T.goldL, fontWeight: 600, letterSpacing: '0.8px', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>
+              {isAvailable ? 'Cryptographic Audit & Satellite MRV Ledger' : 'Live figures unavailable'}
+            </span>
           </div>
         </div>
 
@@ -291,16 +324,16 @@ export default function LoginPage() {
 
           {/* Top Header Row: Status Indicator & Theme Toggle */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-            {/* Live API Status Indicator */}
+            {/* Live API Status Indicator (R2-5 Unified with /ready) */}
             <div style={{
               display: 'inline-flex', alignItems: 'center', gap: 6,
               padding: '4px 10px', borderRadius: 20,
-              background: apiOnline ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)',
-              border: `1px solid ${apiOnline ? 'rgba(16,185,129,0.25)' : 'rgba(239,68,68,0.25)'}`,
-              fontSize: 11, fontWeight: 600, color: apiOnline ? T.emeraldL : T.roseL
+              background: systemStatus === 'Online' ? 'rgba(16,185,129,0.1)' : systemStatus === 'Degraded' ? 'rgba(245,158,11,0.1)' : 'rgba(239,68,68,0.1)',
+              border: `1px solid ${systemStatus === 'Online' ? 'rgba(16,185,129,0.25)' : systemStatus === 'Degraded' ? 'rgba(245,158,11,0.25)' : 'rgba(239,68,68,0.25)'}`,
+              fontSize: 11, fontWeight: 600, color: systemStatus === 'Online' ? T.emeraldL : systemStatus === 'Degraded' ? T.goldL : T.roseL
             }}>
-              <span style={{ width: 6, height: 6, borderRadius: '50%', background: apiOnline ? '#10b981' : '#ef4444', display: 'inline-block' }} />
-              API: {apiOnline ? 'connected' : 'offline'} {apiLatency != null ? `· ${apiLatency}ms` : ''} · Mode: demo
+              <span style={{ width: 6, height: 6, borderRadius: '50%', background: systemStatus === 'Online' ? '#10b981' : systemStatus === 'Degraded' ? '#f59e0b' : '#ef4444', display: 'inline-block' }} />
+              API: {systemStatus} {apiLatency != null ? `· ${apiLatency}ms` : ''} · checked {secondsAgo}s ago · Mode: demo
             </div>
 
             <button
@@ -357,7 +390,7 @@ export default function LoginPage() {
               </div>
 
               {/* Demo Quick-Fill Shortcut Tiles */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 18 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginBottom: 18 }}>
                 {roles.map(({ role, label, desc, icon: Icon, color, email: roleEmail, pass }) => {
                   const active = activeRole === role;
                   return (

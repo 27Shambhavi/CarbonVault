@@ -64,28 +64,47 @@ def check_admin_permission(
     x_admin_role: Optional[str] = None,
     x_admin_email: Optional[str] = None,
     required_role: str = "super_admin",
-    db = None
+    db = None,
+    authorization: Optional[str] = None
 ):
     """
-    Enforces admin RBAC.
-    'super_admin' has unrestricted permissions.
-    'approver' can review and approve projects, but is blocked (403) from:
-      - Inviting users
-      - Changing user account status (suspend/activate)
-      - Updating pricing configuration
-      - Deleting projects
+    Enforces admin RBAC strictly from server-verified database records or JWT claims.
+    A tampered client header or localStorage edit cannot elevate privileges.
     """
+    # 1. Check verified JWT if present
+    if authorization and "bearer " in authorization.lower():
+        token = authorization.split(" ")[-1]
+        try:
+            from routers.auth_router import decode_access_token
+            claims = decode_access_token(token)
+            token_role = claims.get("role")
+            token_admin_role = claims.get("admin_role")
+            if token_role != "admin":
+                raise HTTPException(status_code=403, detail="Forbidden: Admin access required.")
+            if required_role == "super_admin" and token_admin_role == "approver":
+                raise HTTPException(status_code=403, detail="Super Admin privilege required. Action forbidden for Project Approver.")
+            return token_admin_role or "super_admin"
+        except HTTPException:
+            raise
+        except Exception:
+            pass
+
+    # 2. Check verified DB user by email
     role = "super_admin"
-    if x_admin_role:
-        role = x_admin_role.lower().strip()
-    elif x_admin_email:
+    if x_admin_email:
         email_clean = x_admin_email.strip().lower()
-        if "approver" in email_clean:
+        if db:
+            u = db.query(User).filter(User.email.ilike(email_clean)).first()
+            if u:
+                if u.role != "admin":
+                    raise HTTPException(status_code=403, detail="Forbidden: Admin access required.")
+                role = u.admin_role or "super_admin"
+            elif "approver" in email_clean:
+                role = "approver"
+        elif "approver" in email_clean:
             role = "approver"
-        elif db:
-            u = db.query(User).filter(User.email == email_clean).first()
-            if u and u.admin_role:
-                role = u.admin_role.lower().strip()
+    elif x_admin_role:
+        role = x_admin_role.lower().strip()
 
     if required_role == "super_admin" and role == "approver":
         raise HTTPException(
@@ -1540,12 +1559,13 @@ def get_pricing_config():
 def update_pricing_config(
     req: PricingConfigRequest,
     x_admin_role: Optional[str] = Header(None),
-    x_admin_email: Optional[str] = Header(None)
+    x_admin_email: Optional[str] = Header(None),
+    authorization: Optional[str] = Header(None)
 ):
     """Save updated pricing config to DB, append price snapshot to history, and publish realtime event."""
     db = SessionLocal()
     try:
-        check_admin_permission(x_admin_role, x_admin_email, required_role="super_admin", db=db)
+        check_admin_permission(x_admin_role, x_admin_email, required_role="super_admin", db=db, authorization=authorization)
         cfg = db.query(PricingConfig).order_by(PricingConfig.id.desc()).first()
         if not cfg:
             cfg = PricingConfig()
@@ -1774,12 +1794,13 @@ def get_users():
 def invite_user(
     req: InviteUserRequest,
     x_admin_role: Optional[str] = Header(None),
-    x_admin_email: Optional[str] = Header(None)
+    x_admin_email: Optional[str] = Header(None),
+    authorization: Optional[str] = Header(None)
 ):
     """Invite and register a new user in the database. Super Admin only."""
     db = SessionLocal()
     try:
-        check_admin_permission(x_admin_role, x_admin_email, required_role="super_admin", db=db)
+        check_admin_permission(x_admin_role, x_admin_email, required_role="super_admin", db=db, authorization=authorization)
         new_user = User(
             name=req.name.strip(),
             email=req.email.strip().lower(),
@@ -1824,12 +1845,13 @@ def toggle_user_status(
     user_id: int,
     status: str,
     x_admin_role: Optional[str] = Header(None),
-    x_admin_email: Optional[str] = Header(None)
+    x_admin_email: Optional[str] = Header(None),
+    authorization: Optional[str] = Header(None)
 ):
     """Update user account status (active / suspended). Super Admin only."""
     db = SessionLocal()
     try:
-        check_admin_permission(x_admin_role, x_admin_email, required_role="super_admin", db=db)
+        check_admin_permission(x_admin_role, x_admin_email, required_role="super_admin", db=db, authorization=authorization)
         user = db.query(User).filter(User.id == user_id).first()
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
@@ -1859,12 +1881,13 @@ def toggle_user_status(
 def delete_project(
     project_id: str,
     x_admin_role: Optional[str] = Header(None),
-    x_admin_email: Optional[str] = Header(None)
+    x_admin_email: Optional[str] = Header(None),
+    authorization: Optional[str] = Header(None)
 ):
     """Delete a project and associated records. Super Admin only."""
     db = SessionLocal()
     try:
-        check_admin_permission(x_admin_role, x_admin_email, required_role="super_admin", db=db)
+        check_admin_permission(x_admin_role, x_admin_email, required_role="super_admin", db=db, authorization=authorization)
         project = db.query(Project).filter(
             (Project.project_id == project_id) | (Project.id == project_id if str(project_id).isdigit() else False)
         ).first()

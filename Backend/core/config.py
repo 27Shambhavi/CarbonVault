@@ -39,13 +39,27 @@ if DATABASE_URL.startswith("sqlite:///") and not DATABASE_URL.startswith("sqlite
     abs_db_path = (BASE_DIR / rel_path).resolve()
     DATABASE_URL = f"sqlite:///{abs_db_path.as_posix()}"
 
-# Razorpay credentials (from environment)
-RAZORPAY_KEY_ID = os.getenv("RAZORPAY_KEY_ID", "")
-RAZORPAY_KEY_SECRET = os.getenv("RAZORPAY_KEY_SECRET", "")
-RAZORPAY_WEBHOOK_SECRET = os.getenv("RAZORPAY_WEBHOOK_SECRET", "")
+# Razorpay credentials (from environment, whitespace stripped)
+PAYMENT_MODE = os.getenv("PAYMENT_MODE", "test").strip().lower()
+RAZORPAY_KEY_ID = os.getenv("RAZORPAY_KEY_ID", "").strip()
+RAZORPAY_KEY_SECRET = os.getenv("RAZORPAY_KEY_SECRET", "").strip()
+RAZORPAY_WEBHOOK_SECRET = os.getenv("RAZORPAY_WEBHOOK_SECRET", "").strip()
+
+# Validate Razorpay key prefix consistency with PAYMENT_MODE
+if RAZORPAY_KEY_ID:
+    if PAYMENT_MODE == "test" and RAZORPAY_KEY_ID.startswith("rzp_live_"):
+        raise RuntimeError(
+            "Config mismatch: PAYMENT_MODE is 'test' but RAZORPAY_KEY_ID starts with 'rzp_live_'. "
+            "Refusing to start with mismatched payment credentials."
+        )
+    if PAYMENT_MODE == "live" and RAZORPAY_KEY_ID.startswith("rzp_test_"):
+        raise RuntimeError(
+            "Config mismatch: PAYMENT_MODE is 'live' but RAZORPAY_KEY_ID starts with 'rzp_test_'. "
+            "Refusing to start with mismatched payment credentials."
+        )
 
 # JWT Secret for RBAC (ensure at least 32 bytes for HMAC-SHA256)
-JWT_SECRET = os.getenv("JWT_SECRET", "carbonvault-sec-auth-key-32bytes-entropy-production-2026")
+JWT_SECRET = os.getenv("JWT_SECRET", "carbonvault-sec-auth-key-32bytes-entropy-production-2026").strip()
 
 # Application Mode: 'demo' or 'production'
 APP_MODE = os.getenv("APP_MODE", "demo").lower()

@@ -366,7 +366,11 @@ export async function fetchLeaderboard() {
 // PAYMENT / RAZORPAY APIs
 // ══════════════════════════════════════════════════════════════════════════════
 
-export async function createOrder(amountINR, currency = 'INR', projectId = null, corporateName = null) {
+export async function fetchPaymentQuote(projectId, quantity, corporateName = '') {
+  return request(`${API_BASE}/payment/quote?project_id=${encodeURIComponent(projectId)}&quantity=${encodeURIComponent(quantity)}&corporate_name=${encodeURIComponent(corporateName || '')}`);
+}
+
+export async function createOrder(amountINR, currency = 'INR', projectId = null, corporateName = null, quoteId = null) {
   return request(`${API_BASE}/payment/create-order`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -375,6 +379,7 @@ export async function createOrder(amountINR, currency = 'INR', projectId = null,
       currency,
       project_id: projectId,
       corporate_name: corporateName,
+      quote_id: quoteId,
     }),
   });
 }

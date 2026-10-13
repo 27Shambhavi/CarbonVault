@@ -5,16 +5,18 @@ import {
   fetchAllProjects, fetchMapProjects, fetchMarketplaceListings,
   createBuyRequest, createOrder, buyCredits, fetchTransactions, fetchWallet,
   generateESGReport, loadRazorpayScript, fetchPricingForecast, fetchPricingConfig,
-  fetchCorporateGrsScore, fetchLiveFxRate
+  fetchCorporateGrsScore, fetchLiveFxRate, fetchPaymentQuote, fetchReady, fetchPublicConfig
 } from '../../services/api.js';
 import { Card, SectionHeader, Table, Badge, MRVScore, KPICard, Modal, Btn, T, ScoreGauge, withAlpha } from '../UI.jsx';
 import { ProjectMap } from '../GoogleMap.jsx';
 import CertificateModal from '../CertificateModal.jsx';
 import ProjectComparisonModal from '../ProjectComparisonModal.jsx';
+import DataBoundary from '../DataBoundary.jsx';
 import {
   Package, FileText, Wallet as WalletIcon, TrendingUp, MapPin, Download,
   Star, ShoppingCart, Leaf, DollarSign, CheckCircle, AlertCircle, Award,
-  Scale, Search, SlidersHorizontal, RotateCcw, X, ShieldCheck, ArrowRight
+  Scale, Search, SlidersHorizontal, RotateCcw, X, ShieldCheck, ArrowRight,
+  Clock, ShieldAlert, Check
 } from 'lucide-react';
 
 const inp = { background:'var(--input-bg, rgba(255,255,255,0.04))', border:`1px solid ${T.border}`, borderRadius:9, padding:'10px 14px', color:T.t1, fontSize:14, outline:'none', width:'100%', fontFamily:'Plus Jakarta Sans, sans-serif' };
@@ -57,60 +59,53 @@ export function CorporateDashboard() {
   const realTotalCredits = wallet?.total_credits ?? projects.reduce((s, p) => s + (p.credits || 0), 0);
   const realTotalFunding = wallet?.total_spent_usd ?? projects.reduce((s, p) => s + (p.total_funding || 0), 0);
 
-  if (loading) return (
-    <div style={{padding:28, display:'flex', justifyContent:'center', alignItems:'center', minHeight:'40vh'}}>
-      <div style={{textAlign:'center'}}>
-        <div style={{width:44,height:44,border:`3px solid rgba(45,212,191,0.15)`,borderTop:`3px solid ${T.teal}`,borderRadius:'50%',margin:'0 auto 16px',animation:'spinSlow 0.8s linear infinite'}}/>
-        <div style={{fontSize:14,color:T.t2}}>Loading dashboard…</div>
-      </div>
-    </div>
-  );
-
   return (
-    <div style={{padding:28}}>
-      <SectionHeader title="Corporate Dashboard" subtitle={`${corporateName} — carbon portfolio overview`}/>
-      <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:15,marginBottom:24}}>
-        <KPICard icon={Package}    label="Available Credits"     value={realTotalCredits.toLocaleString()} sub="Total tonnes CO₂e" color={T.violetLL || T.violetL}/>
-        <KPICard icon={TrendingUp} label="Active Projects"       value={projects.length}          sub="Projects supported" color={T.teal}/>
-        <KPICard icon={DollarSign} label="Total Value"           value={`$${Math.round(realTotalFunding).toLocaleString()}`} sub="Portfolio value" color={T.emeraldL}/>
-        <KPICard icon={Star}       label="GRS Score"             value={grsData.score}               sub="Gold Verifier status" color={T.goldL}/>
-      </div>
-      <Card style={{marginBottom:22}}>
-        <SectionHeader title="Supported Project Locations" subtitle="Approved plantation footprints (polygons from verification data)"/>
-        <ProjectMap features={mapFeatures} height={360} />
-      </Card>
-      <div style={{display:'grid',gridTemplateColumns:'1fr 2fr',gap:18}}>
-        <Card>
-          <SectionHeader title="GRS Score"/>
-          <div style={{display:'flex',justifyContent:'center',marginBottom:14}}><ScoreGauge score={grsData.score} max={1000} label="/ 1000"/></div>
-          <div style={{textAlign:'center',marginBottom:14}}><Badge type="Gold" label="Gold Verifier"/><div style={{fontSize:12,color:T.t3,marginTop:7}}>Rank #{grsData.rank} of {grsData.total}</div></div>
-          {[{l:'Transparency',v:grsData.transparency},{l:'Quality',v:grsData.quality},{l:'Commitment',v:grsData.commitment}].map(({l,v})=>(
-            <div key={l} style={{marginBottom:10}}>
-              <div style={{display:'flex',justifyContent:'space-between',marginBottom:4,fontSize:12}}><span style={{color:T.t3}}>{l}</span><span style={{color:T.teal,fontWeight:700}}>{v}%</span></div>
-              <div style={{height:4,background:'var(--border, rgba(255,255,255,0.07))',borderRadius:3,overflow:'hidden'}}><div style={{height:'100%',width:`${v}%`,background:`linear-gradient(90deg,${withAlpha(T.teal, '70', 60)},${T.teal})`,borderRadius:3}}/></div>
-            </div>
-          ))}
+    <DataBoundary loading={loading} loadingMessage="Loading dashboard…">
+      <div style={{padding:28}}>
+        <SectionHeader title="Corporate Dashboard" subtitle={`${corporateName} — carbon portfolio overview`}/>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:15,marginBottom:24}}>
+          <KPICard icon={Package}    label="Available Credits"     value={realTotalCredits.toLocaleString()} sub="Total tonnes CO₂e" color={T.violetLL || T.violetL}/>
+          <KPICard icon={TrendingUp} label="Active Projects"       value={projects.length}          sub="Projects supported" color={T.teal}/>
+          <KPICard icon={DollarSign} label="Total Value"           value={`$${Math.round(realTotalFunding).toLocaleString()}`} sub="Portfolio value" color={T.emeraldL}/>
+          <KPICard icon={Star}       label="GRS Score"             value={grsData.score}               sub="Gold Verifier status" color={T.goldL}/>
+        </div>
+        <Card style={{marginBottom:22}}>
+          <SectionHeader title="Supported Project Locations" subtitle="Approved plantation footprints (polygons from verification data)"/>
+          <ProjectMap features={mapFeatures} height={360} />
         </Card>
-        <Card>
-          <SectionHeader title="Available Projects"/>
-          {projects.length > 0 ? (
-            <Table headers={['Project','Type','Credits','Price/t','Total Value','Status']}
-              rows={projects.map(p=>[
-                <span style={{color:T.t1,fontWeight:600,fontSize:13}}>{p.name}</span>,
-                <Badge type={p.plantation_type || 'other'} label={(p.plantation_type || 'other').replace('_',' ')}/>,
-                <span style={{color:T.teal,fontWeight:700}}>{(p.credits||0).toLocaleString()}</span>,
-                <span style={{color:T.goldL,fontWeight:600}}>{p.price_per_ton ? `$${p.price_per_ton}` : '—'}</span>,
-                <span style={{color:T.emeraldL,fontWeight:700}}>{p.total_funding ? `$${(p.total_funding||0).toLocaleString()}` : '—'}</span>,
-                <Badge type={p.status} label={p.status}/>,
-              ])}/>
-          ) : (
-            <div style={{ padding: '36px 16px', textAlign: 'center', color: T.t3, fontSize: 13 }}>
-              No active projects found in database.
-            </div>
-          )}
-        </Card>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 2fr',gap:18}}>
+          <Card>
+            <SectionHeader title="GRS Score"/>
+            <div style={{display:'flex',justifyContent:'center',marginBottom:14}}><ScoreGauge score={grsData.score} max={1000} label="/ 1000"/></div>
+            <div style={{textAlign:'center',marginBottom:14}}><Badge type="Gold" label="Gold Verifier"/><div style={{fontSize:12,color:T.t3,marginTop:7}}>Rank #{grsData.rank} of {grsData.total}</div></div>
+            {[{l:'Transparency',v:grsData.transparency},{l:'Quality',v:grsData.quality},{l:'Commitment',v:grsData.commitment}].map(({l,v})=>(
+              <div key={l} style={{marginBottom:10}}>
+                <div style={{display:'flex',justifyContent:'space-between',marginBottom:4,fontSize:12}}><span style={{color:T.t3}}>{l}</span><span style={{color:T.teal,fontWeight:700}}>{v}%</span></div>
+                <div style={{height:4,background:'var(--border, rgba(255,255,255,0.07))',borderRadius:3,overflow:'hidden'}}><div style={{height:'100%',width:`${v}%`,background:`linear-gradient(90deg,${withAlpha(T.teal, '70', 60)},${T.teal})`,borderRadius:3}}/></div>
+              </div>
+            ))}
+          </Card>
+          <Card>
+            <SectionHeader title="Available Projects"/>
+            {projects.length > 0 ? (
+              <Table headers={['Project','Type','Credits','Price/t','Total Value','Status']}
+                rows={projects.map(p=>[
+                  <span style={{color:T.t1,fontWeight:600,fontSize:13}}>{p.name}</span>,
+                  <Badge type={p.plantation_type || 'other'} label={(p.plantation_type || 'other').replace('_',' ')}/>,
+                  <span style={{color:T.teal,fontWeight:700}}>{(p.credits||0).toLocaleString()}</span>,
+                  <span style={{color:T.goldL,fontWeight:600}}>{p.price_per_ton ? `$${p.price_per_ton}` : '—'}</span>,
+                  <span style={{color:T.emeraldL,fontWeight:700}}>{p.total_funding ? `$${(p.total_funding||0).toLocaleString()}` : '—'}</span>,
+                  <Badge type={p.status} label={p.status}/>,
+                ])}/>
+            ) : (
+              <div style={{ padding: '36px 16px', textAlign: 'center', color: T.t3, fontSize: 13 }}>
+                No active projects found in database.
+              </div>
+            )}
+          </Card>
+        </div>
       </div>
-    </div>
+    </DataBoundary>
   );
 }
 
@@ -124,6 +119,10 @@ export function CorporateMarketplace() {
   const [purchased, setPurchased] = useState({});
   const [buying, setBuying]    = useState(false);
   const [fxRate, setFxRate]    = useState(0);
+  const [lockedQuote, setLockedQuote] = useState(null);
+  const [quoteLoading, setQuoteLoading] = useState(false);
+  const [paymentMode, setPaymentMode] = useState('test');
+  const [razorpayHealth, setRazorpayHealth] = useState('ok');
 
   // Feature 7: Multi-parameter search & filters
   const [filters, setFilters] = useState({
@@ -205,16 +204,45 @@ export function CorporateMarketplace() {
     fetchLiveFxRate().then(res => {
       if (res.data?.rate) setFxRate(res.data.rate);
     }).catch(() => {});
+    fetchPublicConfig().then(res => {
+      if (res.data?.payment_mode) setPaymentMode(res.data.payment_mode);
+      if (res.data?.razorpay_status) setRazorpayHealth(res.data.razorpay_status);
+    }).catch(() => {});
+    fetchReady().then(res => {
+      if (res.data?.razorpay_status) setRazorpayHealth(res.data.razorpay_status);
+    }).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (buyModal?.id && qty > 0) {
+      setQuoteLoading(true);
+      fetchPaymentQuote(buyModal.id, qty, corporateName)
+        .then(res => {
+          if (!res.error && res.data) {
+            setLockedQuote(res.data);
+          }
+        })
+        .catch(() => {})
+        .finally(() => setQuoteLoading(false));
+    } else {
+      setLockedQuote(null);
+    }
+  }, [buyModal?.id, qty, corporateName]);
 
   const inrAmount = (usd) => fxRate > 0 ? `₹${Math.round(usd * fxRate).toLocaleString('en-IN')}` : 'Calculating…';
 
   const handleRazorPay = async (item, quantity) => {
+    if (razorpayHealth !== 'ok') {
+      alert('Payments are temporarily unavailable. Gateway status is degraded.');
+      return;
+    }
     setBuying(true);
     try {
       await loadRazorpayScript();
-      const amountUSD = item.price * quantity;
-      const amountINR = Math.round(amountUSD * fxRate);
+      const effectiveUnitPrice = lockedQuote ? lockedQuote.unit_price_usd : item.price;
+      const amountUSD = lockedQuote ? lockedQuote.total_usd : (effectiveUnitPrice * quantity);
+      const effectiveFx = lockedQuote?.fx_rate || fxRate;
+      const amountINR = lockedQuote ? lockedQuote.total_inr : Math.round(amountUSD * effectiveFx);
 
       if (amountINR > 500000) {
         alert(`Notice: Razorpay Test Mode allows a maximum of ₹5,00,000 per order. Current total is ₹${amountINR.toLocaleString('en-IN')}. Please lower the quantity to test successfully.`);
@@ -223,12 +251,12 @@ export function CorporateMarketplace() {
       }
 
       try {
-        await createBuyRequest(corporateName, item.id, item.price);
+        await createBuyRequest(corporateName, item.id, effectiveUnitPrice);
       } catch (err) {
         console.warn('Could not record buy request before payment', err);
       }
 
-      const orderRes = await createOrder(amountINR, 'INR', item.id, corporateName);
+      const orderRes = await createOrder(amountINR, 'INR', item.id, corporateName, lockedQuote?.quote_id);
       if (orderRes.error) {
         alert('Failed to create order: ' + orderRes.error);
         setBuying(false);
@@ -672,33 +700,67 @@ export function CorporateMarketplace() {
         />
       )}
 
-      <Modal open={!!buyModal} onClose={()=>setBuyModal(null)} title="Purchase Carbon Credits" width={450}>
+      <Modal open={!!buyModal} onClose={()=>setBuyModal(null)} title={paymentMode === 'test' ? 'Purchase Carbon Credits (Razorpay Test Mode)' : 'Purchase Carbon Credits'} width={480}>
         {buyModal&&(
           <div>
             <div style={{background:'rgba(45,212,191,0.06)',border:'1px solid rgba(45,212,191,0.18)',borderRadius:12,padding:16,marginBottom:18}}>
-              <div style={{fontSize:14,fontWeight:700,color:T.t1,marginBottom:4}}>{buyModal.name}</div>
-              <div style={{fontSize:12,color:T.t3}}>ID: {buyModal.id} · Verified: <span style={{color:T.emeraldL,fontWeight:700}}>{buyModal.verified || 85}%</span> · Available: <span style={{color:T.teal,fontWeight:700}}>{(buyModal.credits||0).toLocaleString()}t</span></div>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
+                <div>
+                  <div style={{fontSize:14,fontWeight:700,color:T.t1,marginBottom:4}}>{buyModal.name}</div>
+                  <div style={{fontSize:12,color:T.t3}}>ID: {buyModal.id} · Verified: <span style={{color:T.emeraldL,fontWeight:700}}>{buyModal.verified || 85}%</span> · Available: <span style={{color:T.teal,fontWeight:700}}>{(buyModal.credits||0).toLocaleString()}t</span></div>
+                </div>
+                <Badge type={paymentMode === 'test' ? 'gold' : 'teal'} label={paymentMode === 'test' ? 'Razorpay Test Mode' : 'Live Razorpay Gateway'} />
+              </div>
             </div>
             <div style={{marginBottom:14}}>
               <label style={{fontSize:10,color:T.t3,fontWeight:700,letterSpacing:'0.7px',textTransform:'uppercase',marginBottom:7,display:'block'}}>Quantity (tonnes CO₂e)</label>
               <input type="number" value={qty} onChange={e=>setQty(Math.min(buyModal.credits||9999,Math.max(1,parseInt(e.target.value)||0)))} style={inp}/>
             </div>
             <div style={{background:'rgba(255,255,255,0.03)',borderRadius:10,padding:14,marginBottom:18}}>
-              {[['Qty',`${qty.toLocaleString()} t`],['Price/t',`$${buyModal.price} (${inrAmount(buyModal.price)})`],['Total USD',`$${(qty*buyModal.price).toLocaleString()}`],['Total INR',inrAmount(qty*buyModal.price)]].map(([k,v],i)=>(
-                <div key={k} style={{display:'flex',justifyContent:'space-between',padding:'7px 0',borderBottom:i<3?`1px solid rgba(255,255,255,0.04)`:'none',fontSize:i===3?15:13}}>
-                  <span style={{color:T.t3}}>{k}</span><span style={{color:i===3?T.emeraldL:T.t1,fontWeight:i===3?800:600,fontFamily:i===3?'Fraunces,serif':'inherit'}}>{v}</span>
+              {[
+                ['Quantity', `${qty.toLocaleString()} t`],
+                ['Unit Price', lockedQuote ? `$${lockedQuote.unit_price_usd.toFixed(2)} / t` : `$${buyModal.price} / t`],
+                ['Price Source', lockedQuote?.price_source || 'Dynamic Pricing Engine'],
+                ['FX Rate', lockedQuote ? `1 USD = ₹${lockedQuote.fx_rate.toFixed(2)} (as of ${new Date(lockedQuote.fx_as_of).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})})` : (fxRate > 0 ? `1 USD = ₹${fxRate.toFixed(2)}` : 'Calculating…')],
+                ['Total USD', lockedQuote ? `$${lockedQuote.total_usd.toLocaleString()}` : `$${(qty * buyModal.price).toLocaleString()}`],
+                ['Total INR', lockedQuote ? `₹${lockedQuote.total_inr.toLocaleString('en-IN')}` : inrAmount(qty * buyModal.price)],
+              ].map(([k,v],i)=>(
+                <div key={k} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'7px 0',borderBottom:i<5?`1px solid rgba(255,255,255,0.04)`:'none',fontSize:i===5?15:13}}>
+                  <span style={{color:T.t3}}>{k}</span>
+                  <span style={{color:i===5?T.emeraldL:T.t1,fontWeight:i===5?800:600,fontFamily:i===5?'Fraunces,serif':'inherit'}}>{v}</span>
                 </div>
               ))}
+              {quoteLoading && (
+                <div style={{fontSize:11,color:T.teal,marginTop:6,textAlign:'center'}}>
+                  ⟳ Calculating dynamic pricing & locking rate…
+                </div>
+              )}
             </div>
-            {Math.round(qty * buyModal.price * fxRate) > 500000 && (
+
+            {/* Test Card Hint (Only in Test Mode) */}
+            {paymentMode === 'test' && (
+              <div style={{background:'rgba(56,189,248,0.08)',border:'1px solid rgba(56,189,248,0.25)',borderRadius:8,padding:'8px 12px',marginBottom:14,fontSize:11,color:T.skyL}}>
+                🧪 <strong>Razorpay Test Mode:</strong> Use test card <code>4111 1111 1111 1111</code> (or any card), any valid future expiry date, CVV <code>123</code>, OTP <code>123456</code>.
+              </div>
+            )}
+
+            {(lockedQuote ? lockedQuote.total_inr : Math.round(qty * buyModal.price * fxRate)) > 500000 && (
               <div style={{background:'rgba(245,158,11,0.1)',border:'1px solid rgba(245,158,11,0.3)',borderRadius:8,padding:'8px 12px',marginBottom:14,fontSize:11,color:T.goldL,lineHeight:1.5}}>
                 ⚠️ Order exceeds Razorpay test mode limit (₹5,00,000). Please decrease quantity for testing.
               </div>
             )}
-            <Btn style={{width:'100%',justifyContent:'center',background:'linear-gradient(135deg,#072654,#1a56db)',color:'#fff',boxShadow:'0 4px 16px rgba(26,86,219,0.35)',border:'none'}}
-              onClick={()=>handleRazorPay(buyModal,qty)} disabled={buying || Math.round(qty * buyModal.price * fxRate) > 500000}>
-              {buying ? 'Processing…' : `💳 Pay ${inrAmount(qty*buyModal.price)} via Razorpay`}
-            </Btn>
+
+            {razorpayHealth !== 'ok' ? (
+              <div style={{background:'rgba(244,63,94,0.1)',border:'1px solid rgba(244,63,94,0.3)',borderRadius:8,padding:'12px',marginBottom:10,textAlign:'center'}}>
+                <div style={{color:T.roseL,fontWeight:700,fontSize:13,marginBottom:4}}>⚠️ Payments are temporarily unavailable</div>
+                <div style={{color:T.t3,fontSize:11}}>Payment gateway health is degraded ({razorpayHealth}). Purchases are disabled to prevent failed transactions.</div>
+              </div>
+            ) : (
+              <Btn style={{width:'100%',justifyContent:'center',background:'linear-gradient(135deg,#072654,#1a56db)',color:'#fff',boxShadow:'0 4px 16px rgba(26,86,219,0.35)',border:'none'}}
+                onClick={()=>handleRazorPay(buyModal,qty)} disabled={buying || quoteLoading || (lockedQuote ? lockedQuote.total_inr : Math.round(qty * buyModal.price * fxRate)) > 500000}>
+                {buying ? 'Processing…' : quoteLoading ? 'Locking Quote…' : `💳 Pay ${lockedQuote ? `₹${lockedQuote.total_inr.toLocaleString('en-IN')}` : inrAmount(qty*buyModal.price)} via Razorpay`}
+              </Btn>
+            )}
           </div>
         )}
       </Modal>
@@ -813,7 +875,7 @@ export function CorporateESG() {
   const [report, setReport] = useState(null);
   const [loading, setLoading] = useState(false);
   const [fetchingProjects, setFetchingProjects] = useState(true);
-  const { user } = useApp();
+  const { user, setPage } = useApp();
   const [error, setError] = useState(null);
   const corporateName = user?.name || 'Corporate Buyer';
 
@@ -858,398 +920,405 @@ export function CorporateESG() {
     window.print();
   };
 
-  if (fetchingProjects) {
-    return (
-      <div style={{padding:28,display:'flex',justifyContent:'center',alignItems:'center',minHeight:'60vh'}}>
-        <div style={{textAlign:'center'}}>
-          <div style={{width:44,height:44,border:`3px solid rgba(45,212,191,0.15)`,borderTop:`3px solid ${T.teal}`,borderRadius:'50%',margin:'0 auto 16px',animation:'spinSlow 0.8s linear infinite'}}/>
-          <div style={{fontSize:14,color:T.t2}}>Loading projects…</div>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div style={{padding:28}}>
-      <style>{`
-        @media print {
-          body { background: #fff !important; }
-          .no-print { display: none !important; }
-          .report-section { page-break-inside: avoid; }
-          .chart-container { page-break-inside: avoid; }
-        }
-      `}</style>
+    <DataBoundary loading={fetchingProjects} loadingMessage="Loading projects…">
+      <div style={{padding:28}}>
+        <style>{`
+          @media print {
+            body { background: #fff !important; }
+            .no-print { display: none !important; }
+            .report-section { page-break-inside: avoid; }
+            .chart-container { page-break-inside: avoid; }
+          }
+        `}</style>
 
-      {/* Header & Controls */}
-      <div style={{marginBottom:28}}>
-        <SectionHeader title="ESG Reports" subtitle="Generate comprehensive Environmental, Social & Governance impact reports"/>
-        
-        {/* Project Selector */}
-        <div className="no-print" style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:14,marginBottom:22}}>
-          <Card style={{padding:16}}>
-            <label style={{fontSize:11,color:T.t3,fontWeight:700,letterSpacing:'0.7px',textTransform:'uppercase',marginBottom:10,display:'block'}}>Report Scope</label>
-            <div style={{display:'flex',gap:10}}>
-              <button
-                onClick={() => { setUsePortfolio(true); setSelectedProject(null); }}
-                style={{flex:1,padding:'10px 12px',borderRadius:9,border:`2px solid ${usePortfolio?T.teal:T.border}`,background:usePortfolio?`rgba(45,212,191,0.1)`:'rgba(255,255,255,0.03)',color:usePortfolio?T.teal:T.t2,fontWeight:700,fontSize:12,cursor:'pointer',transition:'all 0.15s'}}>
-                Full Portfolio
-              </button>
-              <button
-                onClick={() => setUsePortfolio(false)}
-                style={{flex:1,padding:'10px 12px',borderRadius:9,border:`2px solid ${!usePortfolio?T.teal:T.border}`,background:!usePortfolio?`rgba(45,212,191,0.1)`:'rgba(255,255,255,0.03)',color:!usePortfolio?T.teal:T.t2,fontWeight:700,fontSize:12,cursor:'pointer',transition:'all 0.15s'}}>
-                Single Project
-              </button>
-            </div>
-          </Card>
-
-          {!usePortfolio && (
+        {/* Header & Controls */}
+        <div style={{marginBottom:28}}>
+          <SectionHeader title="ESG Reports" subtitle="Generate comprehensive Environmental, Social & Governance impact reports"/>
+          
+          {/* Project Selector */}
+          <div className="no-print" style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:14,marginBottom:22}}>
             <Card style={{padding:16}}>
-              <label style={{fontSize:11,color:T.t3,fontWeight:700,letterSpacing:'0.7px',textTransform:'uppercase',marginBottom:10,display:'block'}}>Select Project</label>
-              <select
-                value={selectedProject || ''}
-                onChange={e => setSelectedProject(e.target.value)}
-                style={{...inp,height:38}}>
-                <option value="">Choose a project...</option>
-                {projects.map(p => (
-                  <option key={p.project_id || p.id} value={p.project_id || p.id}>
-                    {p.name} ({(p.credits || 0).toLocaleString()} t)
-                  </option>
-                ))}
-              </select>
+              <label style={{fontSize:11,color:T.t3,fontWeight:700,letterSpacing:'0.7px',textTransform:'uppercase',marginBottom:10,display:'block'}}>Report Scope</label>
+              <div style={{display:'flex',gap:10}}>
+                <button
+                  onClick={() => { setUsePortfolio(true); setSelectedProject(null); }}
+                  style={{flex:1,padding:'10px 12px',borderRadius:9,border:`2px solid ${usePortfolio?T.teal:T.border}`,background:usePortfolio?`rgba(45,212,191,0.1)`:'rgba(255,255,255,0.03)',color:usePortfolio?T.teal:T.t2,fontWeight:700,fontSize:12,cursor:'pointer',transition:'all 0.15s'}}>
+                  Full Portfolio
+                </button>
+                <button
+                  onClick={() => setUsePortfolio(false)}
+                  style={{flex:1,padding:'10px 12px',borderRadius:9,border:`2px solid ${!usePortfolio?T.teal:T.border}`,background:!usePortfolio?`rgba(45,212,191,0.1)`:'rgba(255,255,255,0.03)',color:!usePortfolio?T.teal:T.t2,fontWeight:700,fontSize:12,cursor:'pointer',transition:'all 0.15s'}}>
+                  Single Project
+                </button>
+              </div>
+            </Card>
+
+            {!usePortfolio && (
+              <Card style={{padding:16}}>
+                <label style={{fontSize:11,color:T.t3,fontWeight:700,letterSpacing:'0.7px',textTransform:'uppercase',marginBottom:10,display:'block'}}>Select Project</label>
+                <select
+                  value={selectedProject || ''}
+                  onChange={e => setSelectedProject(e.target.value)}
+                  style={{...inp,height:38}}>
+                  <option value="">Choose a project...</option>
+                  {projects.map(p => (
+                    <option key={p.project_id || p.id} value={p.project_id || p.id}>
+                      {p.name} ({(p.credits || 0).toLocaleString()} t)
+                    </option>
+                  ))}
+                </select>
+              </Card>
+            )}
+
+            <Card style={{padding:16,display:'flex',flexDirection:'column',justifyContent:'flex-end'}}>
+              <Btn
+                style={{width:'100%',justifyContent:'center'}}
+                onClick={handleGenerateReport}
+                disabled={loading || (!usePortfolio && !selectedProject)}>
+                {loading ? '⟳ Generating…' : '📊 Generate Report'}
+              </Btn>
+            </Card>
+          </div>
+
+          {error && (
+            <Card style={{background:`rgba(244,63,94,0.08)`,border:`1px solid rgba(244,63,94,0.2)`,padding:14,marginBottom:22,display:'flex',gap:12,alignItems:'flex-start'}}>
+              <AlertCircle size={18} style={{color:T.rose,flexShrink:0,marginTop:2}}/>
+              <div>
+                <div style={{fontSize:13,fontWeight:700,color:T.rose,marginBottom:3}}>Note</div>
+                <div style={{fontSize:12,color:T.t3}}>{error}</div>
+              </div>
             </Card>
           )}
-
-          <Card style={{padding:16,display:'flex',flexDirection:'column',justifyContent:'flex-end'}}>
-            <Btn
-              style={{width:'100%',justifyContent:'center'}}
-              onClick={handleGenerateReport}
-              disabled={loading || (!usePortfolio && !selectedProject)}>
-              {loading ? '⟳ Generating…' : '📊 Generate Report'}
-            </Btn>
-          </Card>
         </div>
 
-        {error && (
-          <Card style={{background:`rgba(244,63,94,0.08)`,border:`1px solid rgba(244,63,94,0.2)`,padding:14,marginBottom:22,display:'flex',gap:12,alignItems:'flex-start'}}>
-            <AlertCircle size={18} style={{color:T.rose,flexShrink:0,marginTop:2}}/>
-            <div>
-              <div style={{fontSize:13,fontWeight:700,color:T.rose,marginBottom:3}}>Note</div>
-              <div style={{fontSize:12,color:T.t3}}>{error}</div>
+        {/* ESG Report Display (Empty State if no holdings) */}
+        {report && (report.has_data === false || !report.environmental) && (
+          <Card style={{padding:48,textAlign:'center',marginBottom:24}}>
+            <div style={{fontSize:48,marginBottom:16}}>🌱</div>
+            <div style={{fontFamily:'Fraunces, serif',fontSize:22,fontWeight:900,color:T.t1,marginBottom:8}}>No Active Credit Retirements</div>
+            <div style={{fontSize:13,color:T.t3,maxWidth:520,margin:'0 auto 20px',lineHeight:1.6}}>
+              No active carbon credit retirements were found for <strong>{corporateName}</strong> under this scope. Buy credits or choose a project to view verified ESG impact reports with satellite and climate telemetry.
+            </div>
+            <div style={{display:'flex',justifyContent:'center',gap:12}}>
+              <Btn onClick={() => setPage ? setPage('marketplace') : null}>
+                🛒 Buy Credits in Marketplace
+              </Btn>
+            </div>
+          </Card>
+        )}
+
+        {/* Full ESG Report Display when data is available */}
+        {report && report.has_data !== false && report.environmental && (
+          <div>
+            {/* Meta Section */}
+            <Card style={{marginBottom:20}} className="report-section">
+              <SectionHeader
+                title="Report Summary"
+                action={
+                  <div className="no-print" style={{display:'flex',gap:10}}>
+                    <Btn variant="secondary" small onClick={handleExportPDF}>
+                      <Download size={13}/> PDF Export
+                    </Btn>
+                  </div>
+                }
+              />
+              <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:12}}>
+                <div style={{background:`rgba(45,212,191,0.05)`,border:`1px solid rgba(45,212,191,0.1)`,borderRadius:10,padding:12}}>
+                  <div style={{fontSize:10,color:T.t3,fontWeight:700,letterSpacing:'0.5px',textTransform:'uppercase',marginBottom:6}}>Company</div>
+                  <div style={{fontSize:14,fontWeight:700,color:T.t1}}>{report.meta?.company || corporateName}</div>
+                </div>
+                <div style={{background:`rgba(45,212,191,0.05)`,border:`1px solid rgba(45,212,191,0.1)`,borderRadius:10,padding:12}}>
+                  <div style={{fontSize:10,color:T.t3,fontWeight:700,letterSpacing:'0.5px',textTransform:'uppercase',marginBottom:6}}>Reporting Year</div>
+                  <div style={{fontSize:14,fontWeight:700,color:T.t1}}>{report.meta?.reporting_year || new Date().getFullYear()}</div>
+                </div>
+                <div style={{background:`rgba(45,212,191,0.05)`,border:`1px solid rgba(45,212,191,0.1)`,borderRadius:10,padding:12}}>
+                  <div style={{fontSize:10,color:T.t3,fontWeight:700,letterSpacing:'0.5px',textTransform:'uppercase',marginBottom:6}}>Scope</div>
+                  <div style={{fontSize:13,fontWeight:700,color:T.teal}}>{report.meta?.scope || 'Portfolio'}</div>
+                </div>
+                <div style={{background:`rgba(45,212,191,0.05)`,border:`1px solid rgba(45,212,191,0.1)`,borderRadius:10,padding:12}}>
+                  <div style={{fontSize:10,color:T.t3,fontWeight:700,letterSpacing:'0.5px',textTransform:'uppercase',marginBottom:6}}>Generated</div>
+                  <div style={{fontSize:12,fontWeight:700,color:T.t1}}>{report.meta?.generated_timestamp ? new Date(report.meta.generated_timestamp).toLocaleDateString() : 'Today'}</div>
+                </div>
+              </div>
+            </Card>
+
+            {/* ESG Scores Summary */}
+            <Card style={{marginBottom:20}} className="report-section">
+              <SectionHeader title="ESG Score Breakdown"/>
+              <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:16,marginBottom:20}}>
+                {[
+                  {label:'Environmental',value:report.esg_scores?.environmental ?? 0,color:T.emeraldL},
+                  {label:'Social',value:report.esg_scores?.social ?? 0,color:T.skyL},
+                  {label:'Governance',value:report.esg_scores?.governance ?? 0,color:T.goldL},
+                ].map(({label,value,color})=>(
+                  <div key={label} style={{textAlign:'center'}}>
+                    <div style={{fontSize:11,color:T.t3,fontWeight:700,letterSpacing:'0.5px',textTransform:'uppercase',marginBottom:12}}>{label}</div>
+                    <svg width={140} height={140} viewBox="0 0 140 140" style={{margin:'0 auto',display:'block'}}>
+                      <defs>
+                        <linearGradient id={`g${label}`} x1="0%" y1="0%" x2="100%" y2="0%">
+                          <stop offset="0%" stopColor={color} stopOpacity="0.4"/>
+                          <stop offset="100%" stopColor={color}/>
+                        </linearGradient>
+                      </defs>
+                      <circle cx={70} cy={70} r={55} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth={6}/>
+                      <circle cx={70} cy={70} r={55} fill="none" stroke={`url(#g${label})`} strokeWidth={6}
+                        strokeDasharray={`${(value/100)*345} 345`} strokeLinecap="round"
+                        transform="rotate(-90 70 70)"
+                        style={{filter:`drop-shadow(0 0 8px ${color})`}}/>
+                      <text x={70} y={65} textAnchor="middle" fill={T.t1} fontSize={28} fontWeight={800} fontFamily="Fraunces, serif">{value}</text>
+                      <text x={70} y={85} textAnchor="middle" fill={T.t3} fontSize={10} fontFamily="Plus Jakarta Sans, sans-serif">/ 100</text>
+                    </svg>
+                  </div>
+                ))}
+              </div>
+              <ResponsiveContainer width="100%" height={200}>
+                <PieChart>
+                  <Pie data={[
+                    {name:'Environmental',value:report.esg_scores?.environmental ?? 0,fill:T.emeraldL},
+                    {name:'Social',value:report.esg_scores?.social ?? 0,fill:T.skyL},
+                    {name:'Governance',value:report.esg_scores?.governance ?? 0,fill:T.goldL},
+                  ]} cx="50%" cy="50%" innerRadius={50} outerRadius={80} dataKey="value">
+                    {[{name:'Environmental',value:report.esg_scores?.environmental ?? 0,fill:T.emeraldL},
+                      {name:'Social',value:report.esg_scores?.social ?? 0,fill:T.skyL},
+                      {name:'Governance',value:report.esg_scores?.governance ?? 0,fill:T.goldL}].map((entry,i)=>(
+                      <Cell key={i} fill={entry.fill}/>
+                    ))}
+                  </Pie>
+                  <Tooltip content={<ChartTooltip/>}/>
+                </PieChart>
+              </ResponsiveContainer>
+            </Card>
+
+            {/* Environmental Impact */}
+            <Card style={{marginBottom:20}} className="report-section">
+              <SectionHeader title="Environmental Impact"/>
+              
+              <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:16,marginBottom:24}}>
+                <div style={{background:`rgba(16,185,129,0.08)`,border:`1px solid rgba(16,185,129,0.15)`,borderRadius:12,padding:16}}>
+                  <div style={{fontSize:11,color:T.t3,fontWeight:700,letterSpacing:'0.5px',textTransform:'uppercase',marginBottom:8}}>Carbon Offset</div>
+                  <div style={{fontSize:32,fontWeight:900,color:T.emeraldL,fontFamily:'Fraunces, serif',letterSpacing:'-1px'}}>{report.environmental?.carbon_offset_total?.toLocaleString() ?? '0'}</div>
+                  <div style={{fontSize:12,color:T.t3,marginTop:4}}>tonnes CO₂e</div>
+                  <div style={{fontSize:11,color:T.t4,marginTop:6}}>≈ ${report.environmental?.carbon_offset_value_usd?.toLocaleString() ?? '0'}</div>
+                </div>
+                <div style={{background:`rgba(20,184,166,0.08)`,border:`1px solid rgba(20,184,166,0.15)`,borderRadius:12,padding:16}}>
+                  <div style={{fontSize:11,color:T.t3,fontWeight:700,letterSpacing:'0.5px',textTransform:'uppercase',marginBottom:8}}>Biodiversity Score</div>
+                  <div style={{fontSize:32,fontWeight:900,color:T.tealL,fontFamily:'Fraunces, serif',letterSpacing:'-1px'}}>{report.environmental?.biodiversity_score != null ? (report.environmental.biodiversity_score * 100).toFixed(0) : '0'}/100</div>
+                  <div style={{fontSize:12,color:T.t3,marginTop:4}}>Ecosystem health</div>
+                </div>
+                <div style={{background:`rgba(59,130,246,0.08)`,border:`1px solid rgba(59,130,246,0.15)`,borderRadius:12,padding:16}}>
+                  <div style={{fontSize:11,color:T.t3,fontWeight:700,letterSpacing:'0.5px',textTransform:'uppercase',marginBottom:8}}>Water Conservation</div>
+                  <div style={{fontSize:32,fontWeight:900,color:T.skyL,fontFamily:'Fraunces, serif',letterSpacing:'-1px'}}>{report.environmental?.water_conservation_ml != null ? (report.environmental.water_conservation_ml / 1_000_000).toFixed(1) : '0'}M</div>
+                  <div style={{fontSize:12,color:T.t3,marginTop:4}}>litres saved</div>
+                </div>
+              </div>
+
+              {/* NDVI Real Satellite Series */}
+              <div style={{marginBottom:20}} className="chart-container">
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
+                  <div style={{fontSize:12,fontWeight:700,color:T.t2}}>
+                    NDVI Satellite Growth Series (MODIS Terra 250m)
+                  </div>
+                  <div style={{fontSize:10.5,color:T.emeraldL,fontWeight:600}}>
+                    Source: MODIS MOD13Q1 via ORNL DAAC
+                  </div>
+                </div>
+                {report.environmental?.ndvi_trend && report.environmental.ndvi_trend.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={200}>
+                    <LineChart data={report.environmental.ndvi_trend}>
+                      <defs><linearGradient id="ndviGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={T.emeraldL} stopOpacity={0.3}/><stop offset="100%" stopColor={T.emeraldL} stopOpacity={0}/></linearGradient></defs>
+                      <XAxis dataKey="month" tick={{fill:T.t3,fontSize:10}} axisLine={false} tickLine={false}/>
+                      <YAxis domain={['auto', 'auto']} tick={{fill:T.t3,fontSize:10}} axisLine={false} tickLine={false}/>
+                      <Tooltip content={<ChartTooltip/>}/>
+                      <Line type="monotone" dataKey="value" stroke={T.emeraldL} strokeWidth={2} dot={{r:3,fill:T.emeraldL}} isAnimationActive={false}/>
+                    </LineChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div style={{textAlign:'center',padding:'36px 0',color:T.t3,fontSize:13,background:'rgba(255,255,255,0.02)',borderRadius:8}}>
+                    no satellite data yet
+                  </div>
+                )}
+              </div>
+
+              {/* Real Climate / Temperature Series */}
+              <div className="chart-container">
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
+                  <div style={{fontSize:12,fontWeight:700,color:T.t2}}>
+                    2m Air Temperature Series (°C)
+                  </div>
+                  <div style={{fontSize:10.5,color:T.skyL,fontWeight:600}}>
+                    Source: NASA POWER Agroclimatology
+                  </div>
+                </div>
+                {report.environmental?.lst_trend && report.environmental.lst_trend.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={200}>
+                    <LineChart data={report.environmental.lst_trend}>
+                      <defs><linearGradient id="lstGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={T.skyL} stopOpacity={0.3}/><stop offset="100%" stopColor={T.skyL} stopOpacity={0}/></linearGradient></defs>
+                      <XAxis dataKey="month" tick={{fill:T.t3,fontSize:10}} axisLine={false} tickLine={false}/>
+                      <YAxis domain={['auto', 'auto']} tick={{fill:T.t3,fontSize:10}} axisLine={false} tickLine={false}/>
+                      <Tooltip content={<ChartTooltip/>}/>
+                      <Line type="monotone" dataKey="value" stroke={T.skyL} strokeWidth={2} dot={{r:3,fill:T.skyL}} isAnimationActive={false}/>
+                    </LineChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div style={{textAlign:'center',padding:'36px 0',color:T.t3,fontSize:13,background:'rgba(255,255,255,0.02)',borderRadius:8}}>
+                    no climate data yet
+                  </div>
+                )}
+              </div>
+
+              {/* Official Attribution Lines */}
+              <div style={{
+                marginTop: 18,
+                padding: '11px 14px',
+                background: 'rgba(255,255,255,0.03)',
+                borderRadius: 8,
+                border: `1px solid ${T.border}`,
+                fontSize: 11,
+                color: T.t3,
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 4
+              }}>
+                <div>🛰️ <strong>MODIS data via ORNL DAAC:</strong> Terra MOD13Q1 250m 16-day vegetation composite observations.</div>
+                <div>🌡️ <strong>NASA POWER acknowledgement:</strong> Agroclimatology daily meteorological series courtesy of NASA Langley Research Center.</div>
+                <div>🗺️ <strong>Map Layer:</strong> NASA EOSDIS GIBS (Global Imagery Browse Services).</div>
+              </div>
+            </Card>
+
+            {/* Social Impact */}
+            <Card style={{marginBottom:20}} className="report-section">
+              <SectionHeader title="Social Impact"/>
+              <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:16}}>
+                <div style={{background:`rgba(14,165,233,0.08)`,border:`1px solid rgba(14,165,233,0.15)`,borderRadius:12,padding:16}}>
+                  <div style={{fontSize:11,color:T.t3,fontWeight:700,letterSpacing:'0.5px',textTransform:'uppercase',marginBottom:8}}>Communities Supported</div>
+                  <div style={{fontSize:32,fontWeight:900,color:T.skyL,fontFamily:'Fraunces, serif',letterSpacing:'-1px'}}>{report.social?.communities_supported ?? 0}</div>
+                  <div style={{fontSize:12,color:T.t3,marginTop:4}}>Local communities</div>
+                </div>
+                <div style={{background:`rgba(34,197,94,0.08)`,border:`1px solid rgba(34,197,94,0.15)`,borderRadius:12,padding:16}}>
+                  <div style={{fontSize:11,color:T.t3,fontWeight:700,letterSpacing:'0.5px',textTransform:'uppercase',marginBottom:8}}>Jobs Created</div>
+                  <div style={{fontSize:32,fontWeight:900,color:T.emeraldL,fontFamily:'Fraunces, serif',letterSpacing:'-1px'}}>{report.social?.jobs_created?.toLocaleString() ?? '0'}</div>
+                  <div style={{fontSize:12,color:T.t3,marginTop:4}}>{report.social?.jobs_permanent ?? 0} permanent, {report.social?.jobs_seasonal ?? 0} seasonal</div>
+                </div>
+                <div style={{background:`rgba(245,158,11,0.08)`,border:`1px solid rgba(245,158,11,0.15)`,borderRadius:12,padding:16}}>
+                  <div style={{fontSize:11,color:T.t3,fontWeight:700,letterSpacing:'0.5px',textTransform:'uppercase',marginBottom:8}}>Training & CSR</div>
+                  <div style={{fontSize:28,fontWeight:900,color:T.goldL,fontFamily:'Fraunces, serif',letterSpacing:'-1px'}}>{report.social?.csr_initiatives || '—'}</div>
+                  <div style={{fontSize:12,color:T.t3,marginTop:4}}>{report.social?.training_hours?.toLocaleString() ?? '0'} training hours</div>
+                </div>
+              </div>
+            </Card>
+
+            {/* Governance */}
+            <Card style={{marginBottom:20}} className="report-section">
+              <SectionHeader title="Governance & Compliance"/>
+              <div style={{display:'grid',gridTemplateColumns:'2fr 1fr',gap:20}}>
+                <div>
+                  <div style={{marginBottom:20}}>
+                    <div style={{fontSize:12,fontWeight:700,color:T.t2,marginBottom:10}}>Compliance Score</div>
+                    <div style={{display:'flex',alignItems:'flex-end',gap:12}}>
+                      <div style={{fontSize:42,fontWeight:900,color:T.teal,fontFamily:'Fraunces, serif'}}>{report.governance?.compliance_score != null ? (report.governance.compliance_score * 100).toFixed(0) : '0'}</div>
+                      <div style={{fontSize:12,color:T.t3,marginBottom:8}}>/100</div>
+                    </div>
+                    <div style={{height:6,background:'var(--border, rgba(255,255,255,0.07))',borderRadius:3,marginTop:10,overflow:'hidden'}}>
+                      <div style={{height:'100%',width:`${(report.governance?.compliance_score || 0) * 100}%`,background:`linear-gradient(90deg,${T.teal},${T.tealDD})`,borderRadius:3,boxShadow:`0 0 8px ${withAlpha(T.teal, '60', 40)}`}}/>
+                    </div>
+                  </div>
+                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+                    <div style={{background:`rgba(14,165,233,0.05)`,border:`1px solid rgba(14,165,233,0.1)`,borderRadius:10,padding:12}}>
+                      <div style={{fontSize:10,color:T.t3,fontWeight:700,letterSpacing:'0.5px',textTransform:'uppercase',marginBottom:6}}>Audit Status</div>
+                      <div style={{display:'flex',alignItems:'center',gap:6}}>
+                        <CheckCircle size={14} color={T.emeraldL}/>
+                        <span style={{fontSize:13,fontWeight:700,color:T.emeraldL}}>{report.governance?.audit_status || '—'}</span>
+                      </div>
+                    </div>
+                    <div style={{background:`rgba(168,85,247,0.05)`,border:`1px solid rgba(168,85,247,0.1)`,borderRadius:10,padding:12}}>
+                      <div style={{fontSize:10,color:T.t3,fontWeight:700,letterSpacing:'0.5px',textTransform:'uppercase',marginBottom:6}}>Risk Level</div>
+                      <div style={{fontSize:13,fontWeight:700,color:report.governance?.risk_level==='Low'?T.emeraldL:report.governance?.risk_level==='Medium'?T.goldL:T.rose}}>{report.governance?.risk_level || 'Low'}</div>
+                    </div>
+                  </div>
+                </div>
+                <div>
+                  <div style={{fontSize:12,fontWeight:700,color:T.t2,marginBottom:12}}>Reporting Alignment</div>
+                  <div style={{display:'flex',flexDirection:'column',gap:8}}>
+                    {(report.governance?.reporting_frameworks_aligned || []).map((framework, i) => (
+                      <div key={i} style={{background:`rgba(45,212,191,0.06)`,border:`1px solid rgba(45,212,191,0.15)`,borderRadius:8,padding:'8px 12px'}}>
+                        <div style={{fontSize:11,color:T.teal,fontWeight:700}}>📋 {framework.framework} Aligned</div>
+                        <div style={{fontSize:10,color:T.t3,marginTop:2}}>{framework.description}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </Card>
+
+            {/* Carbon by Project */}
+            {!usePortfolio === false && report.carbon_by_project && report.carbon_by_project.length > 1 && (
+              <Card style={{marginBottom:20}} className="report-section">
+                <SectionHeader title="Carbon Offsets by Project"/>
+                <ResponsiveContainer width="100%" height={250}>
+                  <BarChart data={report.carbon_by_project}>
+                    <defs><linearGradient id="carbonGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={T.teal}/><stop offset="100%" stopColor={T.tealDD} stopOpacity={0.7}/></linearGradient></defs>
+                    <XAxis dataKey="name" tick={{fill:T.t3,fontSize:10}} axisLine={false} tickLine={false}/>
+                    <YAxis tick={{fill:T.t3,fontSize:10}} axisLine={false} tickLine={false}/>
+                    <Tooltip content={<ChartTooltip/>}/>
+                    <Bar dataKey="value" radius={[6,6,0,0]} fill="url(#carbonGrad)"/>
+                  </BarChart>
+                </ResponsiveContainer>
+              </Card>
+            )}
+
+            {/* Methodology & Verification */}
+            <Card className="report-section">
+              <SectionHeader title="Methodology & Verification"/>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:20}}>
+                <div>
+                  <div style={{marginBottom:16}}>
+                    <div style={{fontSize:11,color:T.t3,fontWeight:700,letterSpacing:'0.5px',textTransform:'uppercase',marginBottom:6}}>Verification Method</div>
+                    <div style={{fontSize:13,color:T.t1}}>{report.methodology?.verification_method || '—'}</div>
+                  </div>
+                  <div style={{marginBottom:16}}>
+                    <div style={{fontSize:11,color:T.t3,fontWeight:700,letterSpacing:'0.5px',textTransform:'uppercase',marginBottom:6}}>Analysis Engine</div>
+                    <div style={{fontSize:13,color:T.t1}}>{report.methodology?.engine || '—'}</div>
+                  </div>
+                  <div>
+                    <div style={{fontSize:11,color:T.t3,fontWeight:700,letterSpacing:'0.5px',textTransform:'uppercase',marginBottom:6}}>Confidence Level</div>
+                    <div style={{display:'flex',alignItems:'center',gap:10}}>
+                      <div style={{height:4,flex:1,background:'rgba(255,255,255,0.07)',borderRadius:3,overflow:'hidden'}}>
+                        <div style={{height:'100%',width:`${(report.methodology?.confidence_level || 0.95) * 100}%`,background:`linear-gradient(90deg,${T.teal},${T.tealDD})`,borderRadius:3}}/>
+                      </div>
+                      <span style={{fontSize:12,fontWeight:700,color:T.teal,minWidth:40}}>{report.methodology?.confidence_level != null ? (report.methodology.confidence_level * 100).toFixed(0) : '95'}%</span>
+                    </div>
+                  </div>
+                </div>
+                <div>
+                  <div style={{fontSize:11,color:T.t3,fontWeight:700,letterSpacing:'0.5px',textTransform:'uppercase',marginBottom:12}}>Standards & Frameworks</div>
+                  <div style={{display:'flex',flexDirection:'column',gap:8}}>
+                    {(report.methodology?.standards || []).map((std,i)=>(
+                      <div key={i} style={{background:`rgba(167,139,250,0.08)`,border:`1px solid rgba(167,139,250,0.15)`,borderRadius:8,padding:'10px 12px',fontSize:12,color:T.violetL,fontWeight:600}}>
+                        • {std}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              <div style={{marginTop:20,padding:14,background:`rgba(45,212,191,0.05)`,borderRadius:10,fontSize:11,color:T.t3,lineHeight:1.6,border:`1px solid rgba(45,212,191,0.15)`}}>
+                <strong style={{color:T.teal}}>Report Integrity Disclosure:</strong> {report.meta?.disclaimer || 'Informational. Not an audited disclosure. Third-party standard certification requires independent external assurance.'}
+              </div>
+            </Card>
+          </div>
+        )}
+
+        {/* Initial Prompt State */}
+        {!report && !loading && (
+          <Card style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',minHeight:'50vh',padding:56}}>
+            <div style={{fontSize:56,marginBottom:16}}>📊</div>
+            <div style={{fontFamily:'Fraunces, serif',fontSize:24,fontWeight:900,color:T.t1,letterSpacing:'-0.5px',marginBottom:8}}>Ready to Generate</div>
+            <div style={{fontSize:13,color:T.t3,textAlign:'center',maxWidth:400,lineHeight:1.6}}>
+              Select your reporting scope (Full Portfolio or Single Project) and click "Generate Report" to create a comprehensive ESG impact report with charts, metrics, and verified data.
             </div>
           </Card>
         )}
       </div>
-
-      {/* ESG Report Display */}
-      {report && (
-        <div>
-          {/* Meta Section */}
-          <Card style={{marginBottom:20}} className="report-section">
-            <SectionHeader
-              title="Report Summary"
-              action={
-                <div className="no-print" style={{display:'flex',gap:10}}>
-                  <Btn variant="secondary" small onClick={handleExportPDF}>
-                    <Download size={13}/> PDF Export
-                  </Btn>
-                </div>
-              }
-            />
-            <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:12}}>
-              <div style={{background:`rgba(45,212,191,0.05)`,border:`1px solid rgba(45,212,191,0.1)`,borderRadius:10,padding:12}}>
-                <div style={{fontSize:10,color:T.t3,fontWeight:700,letterSpacing:'0.5px',textTransform:'uppercase',marginBottom:6}}>Company</div>
-                <div style={{fontSize:14,fontWeight:700,color:T.t1}}>{report.meta.company}</div>
-              </div>
-              <div style={{background:`rgba(45,212,191,0.05)`,border:`1px solid rgba(45,212,191,0.1)`,borderRadius:10,padding:12}}>
-                <div style={{fontSize:10,color:T.t3,fontWeight:700,letterSpacing:'0.5px',textTransform:'uppercase',marginBottom:6}}>Reporting Year</div>
-                <div style={{fontSize:14,fontWeight:700,color:T.t1}}>{report.meta.reporting_year}</div>
-              </div>
-              <div style={{background:`rgba(45,212,191,0.05)`,border:`1px solid rgba(45,212,191,0.1)`,borderRadius:10,padding:12}}>
-                <div style={{fontSize:10,color:T.t3,fontWeight:700,letterSpacing:'0.5px',textTransform:'uppercase',marginBottom:6}}>Scope</div>
-                <div style={{fontSize:13,fontWeight:700,color:T.teal}}>{report.meta.scope}</div>
-              </div>
-              <div style={{background:`rgba(45,212,191,0.05)`,border:`1px solid rgba(45,212,191,0.1)`,borderRadius:10,padding:12}}>
-                <div style={{fontSize:10,color:T.t3,fontWeight:700,letterSpacing:'0.5px',textTransform:'uppercase',marginBottom:6}}>Generated</div>
-                <div style={{fontSize:12,fontWeight:700,color:T.t1}}>{new Date(report.meta.generated_timestamp).toLocaleDateString()}</div>
-              </div>
-            </div>
-          </Card>
-
-          {/* ESG Scores Summary */}
-          <Card style={{marginBottom:20}} className="report-section">
-            <SectionHeader title="ESG Score Breakdown"/>
-            <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:16,marginBottom:20}}>
-              {[
-                {label:'Environmental',value:report.esg_scores.environmental,color:T.emeraldL},
-                {label:'Social',value:report.esg_scores.social,color:T.skyL},
-                {label:'Governance',value:report.esg_scores.governance,color:T.goldL},
-              ].map(({label,value,color})=>(
-                <div key={label} style={{textAlign:'center'}}>
-                  <div style={{fontSize:11,color:T.t3,fontWeight:700,letterSpacing:'0.5px',textTransform:'uppercase',marginBottom:12}}>{label}</div>
-                  <svg width={140} height={140} viewBox="0 0 140 140" style={{margin:'0 auto',display:'block'}}>
-                    <defs>
-                      <linearGradient id={`g${label}`} x1="0%" y1="0%" x2="100%" y2="0%">
-                        <stop offset="0%" stopColor={color} stopOpacity="0.4"/>
-                        <stop offset="100%" stopColor={color}/>
-                      </linearGradient>
-                    </defs>
-                    <circle cx={70} cy={70} r={55} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth={6}/>
-                    <circle cx={70} cy={70} r={55} fill="none" stroke={`url(#g${label})`} strokeWidth={6}
-                      strokeDasharray={`${(value/100)*345} 345`} strokeLinecap="round"
-                      transform="rotate(-90 70 70)"
-                      style={{filter:`drop-shadow(0 0 8px ${color})`}}/>
-                    <text x={70} y={65} textAnchor="middle" fill={T.t1} fontSize={28} fontWeight={800} fontFamily="Fraunces, serif">{value}</text>
-                    <text x={70} y={85} textAnchor="middle" fill={T.t3} fontSize={10} fontFamily="Plus Jakarta Sans, sans-serif">/ 100</text>
-                  </svg>
-                </div>
-              ))}
-            </div>
-            <ResponsiveContainer width="100%" height={200}>
-              <PieChart>
-                <Pie data={[
-                  {name:'Environmental',value:report.esg_scores.environmental,fill:T.emeraldL},
-                  {name:'Social',value:report.esg_scores.social,fill:T.skyL},
-                  {name:'Governance',value:report.esg_scores.governance,fill:T.goldL},
-                ]} cx="50%" cy="50%" innerRadius={50} outerRadius={80} dataKey="value">
-                  {[{name:'Environmental',value:report.esg_scores.environmental,fill:T.emeraldL},
-                    {name:'Social',value:report.esg_scores.social,fill:T.skyL},
-                    {name:'Governance',value:report.esg_scores.governance,fill:T.goldL}].map((entry,i)=>(
-                    <Cell key={i} fill={entry.fill}/>
-                  ))}
-                </Pie>
-                <Tooltip content={<ChartTooltip/>}/>
-              </PieChart>
-            </ResponsiveContainer>
-          </Card>
-
-          {/* Environmental Impact */}
-          <Card style={{marginBottom:20}} className="report-section">
-            <SectionHeader title="Environmental Impact"/>
-            
-            <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:16,marginBottom:24}}>
-              <div style={{background:`rgba(16,185,129,0.08)`,border:`1px solid rgba(16,185,129,0.15)`,borderRadius:12,padding:16}}>
-                <div style={{fontSize:11,color:T.t3,fontWeight:700,letterSpacing:'0.5px',textTransform:'uppercase',marginBottom:8}}>Carbon Offset</div>
-                <div style={{fontSize:32,fontWeight:900,color:T.emeraldL,fontFamily:'Fraunces, serif',letterSpacing:'-1px'}}>{report.environmental.carbon_offset_total.toLocaleString()}</div>
-                <div style={{fontSize:12,color:T.t3,marginTop:4}}>tonnes CO₂e</div>
-                <div style={{fontSize:11,color:T.t4,marginTop:6}}>≈ ${report.environmental.carbon_offset_value_usd.toLocaleString()}</div>
-              </div>
-              <div style={{background:`rgba(20,184,166,0.08)`,border:`1px solid rgba(20,184,166,0.15)`,borderRadius:12,padding:16}}>
-                <div style={{fontSize:11,color:T.t3,fontWeight:700,letterSpacing:'0.5px',textTransform:'uppercase',marginBottom:8}}>Biodiversity Score</div>
-                <div style={{fontSize:32,fontWeight:900,color:T.tealL,fontFamily:'Fraunces, serif',letterSpacing:'-1px'}}>{(report.environmental.biodiversity_score * 100).toFixed(0)}/100</div>
-                <div style={{fontSize:12,color:T.t3,marginTop:4}}>Ecosystem health</div>
-              </div>
-              <div style={{background:`rgba(59,130,246,0.08)`,border:`1px solid rgba(59,130,246,0.15)`,borderRadius:12,padding:16}}>
-                <div style={{fontSize:11,color:T.t3,fontWeight:700,letterSpacing:'0.5px',textTransform:'uppercase',marginBottom:8}}>Water Conservation</div>
-                <div style={{fontSize:32,fontWeight:900,color:T.skyL,fontFamily:'Fraunces, serif',letterSpacing:'-1px'}}>{(report.environmental.water_conservation_ml / 1_000_000).toFixed(1)}M</div>
-                <div style={{fontSize:12,color:T.t3,marginTop:4}}>litres saved</div>
-              </div>
-            </div>
-
-            {/* NDVI Real Satellite Series */}
-            <div style={{marginBottom:20}} className="chart-container">
-              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
-                <div style={{fontSize:12,fontWeight:700,color:T.t2}}>
-                  NDVI Satellite Growth Series (MODIS Terra 250m)
-                </div>
-                <div style={{fontSize:10.5,color:T.emeraldL,fontWeight:600}}>
-                  Source: MODIS MOD13Q1 via ORNL DAAC
-                </div>
-              </div>
-              {report.environmental.ndvi_trend && report.environmental.ndvi_trend.length > 0 ? (
-                <ResponsiveContainer width="100%" height={200}>
-                  <LineChart data={report.environmental.ndvi_trend}>
-                    <defs><linearGradient id="ndviGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={T.emeraldL} stopOpacity={0.3}/><stop offset="100%" stopColor={T.emeraldL} stopOpacity={0}/></linearGradient></defs>
-                    <XAxis dataKey="month" tick={{fill:T.t3,fontSize:10}} axisLine={false} tickLine={false}/>
-                    <YAxis domain={['auto', 'auto']} tick={{fill:T.t3,fontSize:10}} axisLine={false} tickLine={false}/>
-                    <Tooltip content={<ChartTooltip/>}/>
-                    <Line type="monotone" dataKey="value" stroke={T.emeraldL} strokeWidth={2} dot={{r:3,fill:T.emeraldL}} isAnimationActive={false}/>
-                  </LineChart>
-                </ResponsiveContainer>
-              ) : (
-                <div style={{textAlign:'center',padding:'36px 0',color:T.t3,fontSize:13,background:'rgba(255,255,255,0.02)',borderRadius:8}}>
-                  no satellite data yet
-                </div>
-              )}
-            </div>
-
-            {/* Real Climate / Temperature Series */}
-            <div className="chart-container">
-              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
-                <div style={{fontSize:12,fontWeight:700,color:T.t2}}>
-                  2m Air Temperature Series (°C)
-                </div>
-                <div style={{fontSize:10.5,color:T.skyL,fontWeight:600}}>
-                  Source: NASA POWER Agroclimatology
-                </div>
-              </div>
-              {report.environmental.lst_trend && report.environmental.lst_trend.length > 0 ? (
-                <ResponsiveContainer width="100%" height={200}>
-                  <LineChart data={report.environmental.lst_trend}>
-                    <defs><linearGradient id="lstGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={T.skyL} stopOpacity={0.3}/><stop offset="100%" stopColor={T.skyL} stopOpacity={0}/></linearGradient></defs>
-                    <XAxis dataKey="month" tick={{fill:T.t3,fontSize:10}} axisLine={false} tickLine={false}/>
-                    <YAxis domain={['auto', 'auto']} tick={{fill:T.t3,fontSize:10}} axisLine={false} tickLine={false}/>
-                    <Tooltip content={<ChartTooltip/>}/>
-                    <Line type="monotone" dataKey="value" stroke={T.skyL} strokeWidth={2} dot={{r:3,fill:T.skyL}} isAnimationActive={false}/>
-                  </LineChart>
-                </ResponsiveContainer>
-              ) : (
-                <div style={{textAlign:'center',padding:'36px 0',color:T.t3,fontSize:13,background:'rgba(255,255,255,0.02)',borderRadius:8}}>
-                  no climate data yet
-                </div>
-              )}
-            </div>
-
-            {/* Official Attribution Lines */}
-            <div style={{
-              marginTop: 18,
-              padding: '11px 14px',
-              background: 'rgba(255,255,255,0.03)',
-              borderRadius: 8,
-              border: `1px solid ${T.border}`,
-              fontSize: 11,
-              color: T.t3,
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 4
-            }}>
-              <div>🛰️ <strong>MODIS data via ORNL DAAC:</strong> Terra MOD13Q1 250m 16-day vegetation composite observations.</div>
-              <div>🌡️ <strong>NASA POWER acknowledgement:</strong> Agroclimatology daily meteorological series courtesy of NASA Langley Research Center.</div>
-              <div>🗺️ <strong>Map Layer:</strong> NASA EOSDIS GIBS (Global Imagery Browse Services).</div>
-            </div>
-          </Card>
-
-          {/* Social Impact */}
-          <Card style={{marginBottom:20}} className="report-section">
-            <SectionHeader title="Social Impact"/>
-            <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:16}}>
-              <div style={{background:`rgba(14,165,233,0.08)`,border:`1px solid rgba(14,165,233,0.15)`,borderRadius:12,padding:16}}>
-                <div style={{fontSize:11,color:T.t3,fontWeight:700,letterSpacing:'0.5px',textTransform:'uppercase',marginBottom:8}}>Communities Supported</div>
-                <div style={{fontSize:32,fontWeight:900,color:T.skyL,fontFamily:'Fraunces, serif',letterSpacing:'-1px'}}>{report.social.communities_supported}</div>
-                <div style={{fontSize:12,color:T.t3,marginTop:4}}>Local communities</div>
-              </div>
-              <div style={{background:`rgba(34,197,94,0.08)`,border:`1px solid rgba(34,197,94,0.15)`,borderRadius:12,padding:16}}>
-                <div style={{fontSize:11,color:T.t3,fontWeight:700,letterSpacing:'0.5px',textTransform:'uppercase',marginBottom:8}}>Jobs Created</div>
-                <div style={{fontSize:32,fontWeight:900,color:T.emeraldL,fontFamily:'Fraunces, serif',letterSpacing:'-1px'}}>{report.social.jobs_created.toLocaleString()}</div>
-                <div style={{fontSize:12,color:T.t3,marginTop:4}}>{report.social.jobs_permanent} permanent, {report.social.jobs_seasonal} seasonal</div>
-              </div>
-              <div style={{background:`rgba(245,158,11,0.08)`,border:`1px solid rgba(245,158,11,0.15)`,borderRadius:12,padding:16}}>
-                <div style={{fontSize:11,color:T.t3,fontWeight:700,letterSpacing:'0.5px',textTransform:'uppercase',marginBottom:8}}>Training & CSR</div>
-                <div style={{fontSize:28,fontWeight:900,color:T.goldL,fontFamily:'Fraunces, serif',letterSpacing:'-1px'}}>{report.social.csr_initiatives}</div>
-                <div style={{fontSize:12,color:T.t3,marginTop:4}}>{report.social.training_hours.toLocaleString()} training hours</div>
-              </div>
-            </div>
-          </Card>
-
-          {/* Governance */}
-          <Card style={{marginBottom:20}} className="report-section">
-            <SectionHeader title="Governance & Compliance"/>
-            <div style={{display:'grid',gridTemplateColumns:'2fr 1fr',gap:20}}>
-              <div>
-                <div style={{marginBottom:20}}>
-                  <div style={{fontSize:12,fontWeight:700,color:T.t2,marginBottom:10}}>Compliance Score</div>
-                  <div style={{display:'flex',alignItems:'flex-end',gap:12}}>
-                    <div style={{fontSize:42,fontWeight:900,color:T.teal,fontFamily:'Fraunces, serif'}}>{(report.governance.compliance_score * 100).toFixed(0)}</div>
-                    <div style={{fontSize:12,color:T.t3,marginBottom:8}}>/100</div>
-                  </div>
-                  <div style={{height:6,background:'var(--border, rgba(255,255,255,0.07))',borderRadius:3,marginTop:10,overflow:'hidden'}}>
-                    <div style={{height:'100%',width:`${report.governance.compliance_score * 100}%`,background:`linear-gradient(90deg,${T.teal},${T.tealDD})`,borderRadius:3,boxShadow:`0 0 8px ${withAlpha(T.teal, '60', 40)}`}}/>
-                  </div>
-                </div>
-                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
-                  <div style={{background:`rgba(14,165,233,0.05)`,border:`1px solid rgba(14,165,233,0.1)`,borderRadius:10,padding:12}}>
-                    <div style={{fontSize:10,color:T.t3,fontWeight:700,letterSpacing:'0.5px',textTransform:'uppercase',marginBottom:6}}>Audit Status</div>
-                    <div style={{display:'flex',alignItems:'center',gap:6}}>
-                      <CheckCircle size={14} color={T.emeraldL}/>
-                      <span style={{fontSize:13,fontWeight:700,color:T.emeraldL}}>{report.governance.audit_status}</span>
-                    </div>
-                  </div>
-                  <div style={{background:`rgba(168,85,247,0.05)`,border:`1px solid rgba(168,85,247,0.1)`,borderRadius:10,padding:12}}>
-                    <div style={{fontSize:10,color:T.t3,fontWeight:700,letterSpacing:'0.5px',textTransform:'uppercase',marginBottom:6}}>Risk Level</div>
-                    <div style={{fontSize:13,fontWeight:700,color:report.governance.risk_level==='Low'?T.emeraldL:report.governance.risk_level==='Medium'?T.goldL:T.rose}}>{report.governance.risk_level}</div>
-                  </div>
-                </div>
-              </div>
-              <div>
-                <div style={{fontSize:12,fontWeight:700,color:T.t2,marginBottom:12}}>Reporting Alignment</div>
-                <div style={{display:'flex',flexDirection:'column',gap:8}}>
-                  {(report.governance.reporting_frameworks_aligned || []).map((framework, i) => (
-                    <div key={i} style={{background:`rgba(45,212,191,0.06)`,border:`1px solid rgba(45,212,191,0.15)`,borderRadius:8,padding:'8px 12px'}}>
-                      <div style={{fontSize:11,color:T.teal,fontWeight:700}}>📋 {framework.framework} Aligned</div>
-                      <div style={{fontSize:10,color:T.t3,marginTop:2}}>{framework.description}</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </Card>
-
-          {/* Carbon by Project */}
-          {!usePortfolio === false && report.carbon_by_project && report.carbon_by_project.length > 1 && (
-            <Card style={{marginBottom:20}} className="report-section">
-              <SectionHeader title="Carbon Offsets by Project"/>
-              <ResponsiveContainer width="100%" height={250}>
-                <BarChart data={report.carbon_by_project}>
-                  <defs><linearGradient id="carbonGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={T.teal}/><stop offset="100%" stopColor={T.tealDD} stopOpacity={0.7}/></linearGradient></defs>
-                  <XAxis dataKey="name" tick={{fill:T.t3,fontSize:10}} axisLine={false} tickLine={false}/>
-                  <YAxis tick={{fill:T.t3,fontSize:10}} axisLine={false} tickLine={false}/>
-                  <Tooltip content={<ChartTooltip/>}/>
-                  <Bar dataKey="value" radius={[6,6,0,0]} fill="url(#carbonGrad)"/>
-                </BarChart>
-              </ResponsiveContainer>
-            </Card>
-          )}
-
-          {/* Methodology & Verification */}
-          <Card className="report-section">
-            <SectionHeader title="Methodology & Verification"/>
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:20}}>
-              <div>
-                <div style={{marginBottom:16}}>
-                  <div style={{fontSize:11,color:T.t3,fontWeight:700,letterSpacing:'0.5px',textTransform:'uppercase',marginBottom:6}}>Verification Method</div>
-                  <div style={{fontSize:13,color:T.t1}}>{report.methodology.verification_method}</div>
-                </div>
-                <div style={{marginBottom:16}}>
-                  <div style={{fontSize:11,color:T.t3,fontWeight:700,letterSpacing:'0.5px',textTransform:'uppercase',marginBottom:6}}>Analysis Engine</div>
-                  <div style={{fontSize:13,color:T.t1}}>{report.methodology.engine}</div>
-                </div>
-                <div>
-                  <div style={{fontSize:11,color:T.t3,fontWeight:700,letterSpacing:'0.5px',textTransform:'uppercase',marginBottom:6}}>Confidence Level</div>
-                  <div style={{display:'flex',alignItems:'center',gap:10}}>
-                    <div style={{height:4,flex:1,background:'rgba(255,255,255,0.07)',borderRadius:3,overflow:'hidden'}}>
-                      <div style={{height:'100%',width:`${report.methodology.confidence_level * 100}%`,background:`linear-gradient(90deg,${T.teal},${T.tealDD})`,borderRadius:3}}/>
-                    </div>
-                    <span style={{fontSize:12,fontWeight:700,color:T.teal,minWidth:40}}>{(report.methodology.confidence_level * 100).toFixed(0)}%</span>
-                  </div>
-                </div>
-              </div>
-              <div>
-                <div style={{fontSize:11,color:T.t3,fontWeight:700,letterSpacing:'0.5px',textTransform:'uppercase',marginBottom:12}}>Standards & Frameworks</div>
-                <div style={{display:'flex',flexDirection:'column',gap:8}}>
-                  {report.methodology.standards.map((std,i)=>(
-                    <div key={i} style={{background:`rgba(167,139,250,0.08)`,border:`1px solid rgba(167,139,250,0.15)`,borderRadius:8,padding:'10px 12px',fontSize:12,color:T.violetL,fontWeight:600}}>
-                      • {std}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-            <div style={{marginTop:20,padding:14,background:`rgba(45,212,191,0.05)`,borderRadius:10,fontSize:11,color:T.t3,lineHeight:1.6,border:`1px solid rgba(45,212,191,0.15)`}}>
-              <strong style={{color:T.teal}}>Report Integrity Disclosure:</strong> {report.meta?.disclaimer || 'Informational. Not an audited disclosure. Third-party standard certification requires independent external assurance.'}
-            </div>
-          </Card>
-        </div>
-      )}
-
-      {/* Empty State */}
-      {!report && !loading && (
-        <Card style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',minHeight:'50vh',padding:56}}>
-          <div style={{fontSize:56,marginBottom:16}}>📊</div>
-          <div style={{fontFamily:'Fraunces, serif',fontSize:24,fontWeight:900,color:T.t1,letterSpacing:'-0.5px',marginBottom:8}}>Ready to Generate</div>
-          <div style={{fontSize:13,color:T.t3,textAlign:'center',maxWidth:400,lineHeight:1.6}}>
-            Select your reporting scope (Full Portfolio or Single Project) and click "Generate Report" to create a comprehensive ESG impact report with charts, metrics, and verified data.
-          </div>
-        </Card>
-      )}
-    </div>
+    </DataBoundary>
   );
 }

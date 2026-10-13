@@ -172,19 +172,6 @@ export function AppProvider({ children }) {
     return () => clearInterval(interval);
   }, [refreshNotifications, refreshKey]);
 
-  const switchAdminRole = (newAdminRole) => {
-    if (user && user.role === 'admin') {
-      const isApprover = newAdminRole === 'approver';
-      const updatedUser = {
-        ...user,
-        admin_role: newAdminRole,
-        name: isApprover ? 'Sarah Jenkins' : 'Alex Mercer',
-        email: isApprover ? 'approver@carbonvault.com' : 'admin@carbonvault.com',
-      };
-      setUser(updatedUser);
-      setApiAdminContext(newAdminRole, updatedUser.email);
-    }
-  };
 
   // Session restoration on page mount (Task 2.5)
   useEffect(() => {
@@ -281,7 +268,6 @@ export function AppProvider({ children }) {
         refreshNotifications,
         markNotifAsRead,
         markAllNotifsAsRead,
-        switchAdminRole,
         // Live Real-Time Spine exports
         liveStatus: liveStream.status,
         lastEventAt: liveStream.lastEventAt,

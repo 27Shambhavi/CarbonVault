@@ -386,3 +386,22 @@ class FxRate(Base):
     fetched_at = Column(DateTime, default=datetime.utcnow, index=True)
     is_override = Column(Boolean, default=False)
     updated_by = Column(String, nullable=True)
+
+
+class PaymentQuote(Base):
+    __tablename__ = "payment_quotes"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    quote_id = Column(String, unique=True, index=True, nullable=False)
+    project_id = Column(String, nullable=False)
+    corporate_name = Column(String, nullable=True)
+    quantity = Column(Float, nullable=False)
+    unit_price_usd = Column(Float, nullable=False)
+    price_source = Column(String, nullable=False)
+    fx_rate = Column(Float, nullable=False)
+    fx_as_of = Column(DateTime, nullable=False)
+    total_usd = Column(Float, nullable=False)
+    total_inr = Column(Float, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    expires_at = Column(DateTime, nullable=False)
+    is_used = Column(Boolean, default=False)

@@ -144,6 +144,7 @@ export function ProjectMap({
 
   // Leaflet + React 18 Strict Mode: initialize only after mount so the map is not torn down mid-init.
   const [mapReady, setMapReady] = useState(false);
+  const [showGibsNdvi, setShowGibsNdvi] = useState(false);
   useEffect(() => {
     setMapReady(true);
   }, []);
@@ -178,8 +179,6 @@ export function ProjectMap({
       </div>
     );
   }
-
-  const [showGibsNdvi, setShowGibsNdvi] = useState(false);
 
   return (
     <div style={shellStyle}>

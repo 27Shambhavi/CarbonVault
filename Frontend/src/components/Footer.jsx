@@ -9,36 +9,48 @@ export default function AppFooter() {
     status: 'checking',
     db: 'checking',
     scheduler: 'idle',
+    latency: null,
+    checkedAt: null,
     error: null,
   });
+  const [secondsAgo, setSecondsAgo] = useState(0);
 
   useEffect(() => {
     let isMounted = true;
     const checkHealth = () => {
+      const startPing = performance.now();
       fetchReady()
         .then(res => {
           if (!isMounted) return;
+          const latency = Math.round(performance.now() - startPing);
+          const checkedAt = Date.now();
           if (res.data && res.data.status === 'ready') {
             setHealthData({
               commit: res.data.commit || res.data.commit_hash || null,
               status: 'online',
               db: res.data.database?.status || 'ok',
               scheduler: res.data.scheduler?.status || 'active',
+              latency,
+              checkedAt,
               error: null,
             });
           } else if (res.data && res.data.status === 'unready') {
             setHealthData({
               commit: res.data.commit || null,
               status: 'degraded',
-              db: 'error',
+              db: res.data.database?.status || 'error',
               scheduler: 'idle',
+              latency,
+              checkedAt,
               error: res.data.reason || 'Database unready',
             });
           } else if (res.error) {
             setHealthData(prev => ({
               ...prev,
-              status: 'degraded',
+              status: 'offline',
               db: 'error',
+              latency: null,
+              checkedAt,
               error: res.error,
             }));
           }
@@ -47,8 +59,10 @@ export default function AppFooter() {
           if (!isMounted) return;
           setHealthData(prev => ({
             ...prev,
-            status: 'degraded',
+            status: 'offline',
             db: 'error',
+            latency: null,
+            checkedAt: Date.now(),
             error: err.message || 'Unreachable',
           }));
         });
@@ -58,6 +72,15 @@ export default function AppFooter() {
     const interval = setInterval(checkHealth, 30000);
     return () => { isMounted = false; clearInterval(interval); };
   }, []);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      if (healthData.checkedAt) {
+        setSecondsAgo(Math.max(0, Math.floor((Date.now() - healthData.checkedAt) / 1000)));
+      }
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [healthData.checkedAt]);
 
   const shortCommit = healthData.commit ? healthData.commit.slice(0, 7) : 'HEAD';
   const commitUrl = healthData.commit
@@ -103,10 +126,11 @@ export default function AppFooter() {
           </strong></span>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 5 }} title={healthData.error || (isSystemOnline ? 'All core pipelines online' : 'System Degraded')}>
-          <Activity size={11} color={isChecking ? T.t3 : isSystemOnline ? T.teal : T.goldL} />
-          <span>System: <strong style={{ color: isChecking ? T.t3 : isSystemOnline ? T.tealL : T.goldL }}>
-            {isChecking ? 'Checking…' : isSystemOnline ? 'Online' : 'Degraded'}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5 }} title={healthData.error || (isSystemOnline ? 'All core pipelines online' : healthData.status === 'degraded' ? 'System Degraded' : 'API Offline')}>
+          <Activity size={11} color={isChecking ? T.t3 : isSystemOnline ? T.teal : healthData.status === 'degraded' ? T.goldL : T.roseL} />
+          <span>System: <strong style={{ color: isChecking ? T.t3 : isSystemOnline ? T.tealL : healthData.status === 'degraded' ? T.goldL : T.roseL }}>
+            {isChecking ? 'Checking…' : isSystemOnline ? 'Online' : healthData.status === 'degraded' ? 'Degraded' : 'Offline'}
+            {healthData.latency != null ? ` · ${healthData.latency}ms` : ''} · checked {secondsAgo}s ago
           </strong></span>
         </div>
 
