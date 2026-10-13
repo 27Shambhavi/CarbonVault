@@ -6,6 +6,7 @@ description = "Global allowlist for documentation examples and test fixtures"
 paths = [
   '''\.env\.example$''',
   '''Backend/\.env\.example$''',
+  '''docs/''',
   '''tests/''',
   '''Backend/tests/'''
 ]
