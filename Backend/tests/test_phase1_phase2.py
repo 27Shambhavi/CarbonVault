@@ -177,7 +177,7 @@ def test_phase2_ngo_registration_and_login():
         "password": "StrongPassword123!",
         "full_name": "Amazonian Forest Guardian",
         "role": "ngo",
-        "organization_name": "Guardian Ecology Foundation",
+        "organization_name": f"Guardian Ecology {uid}",
         "country": "Brazil",
         "registration_number": "BR-2026-99"
     }

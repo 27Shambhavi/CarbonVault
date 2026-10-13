@@ -16,7 +16,11 @@ import jwt
 import bcrypt
 from fastapi import APIRouter, HTTPException, Depends, Header, Request, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, Field
+try:
+    from pydantic import EmailStr
+except Exception:
+    EmailStr = str
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
@@ -298,10 +302,15 @@ def register(req: RegisterRequest, db: Session = Depends(get_db)):
     # 2. Register Organization / Corporate Wallet
     if role_clean == "ngo":
         org_name = (req.organization_name or req.full_name).strip()
-        existing_ngo = db.query(NGO).filter(func.lower(NGO.email) == email_clean).first()
+        existing_ngo = db.query(NGO).filter(
+            (func.lower(NGO.email) == email_clean) | (func.lower(NGO.name) == func.lower(org_name))
+        ).first()
         if not existing_ngo:
             ngo_rec = NGO(name=org_name, email=email_clean)
             db.add(ngo_rec)
+            db.commit()
+        elif not existing_ngo.email:
+            existing_ngo.email = email_clean
             db.commit()
     elif role_clean == "corporate":
         corp_name = (req.company_name or req.full_name).strip()
