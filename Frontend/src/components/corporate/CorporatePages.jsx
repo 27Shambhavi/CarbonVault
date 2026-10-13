@@ -4,7 +4,8 @@ import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Tool
 import {
   fetchAllProjects, fetchMapProjects, fetchMarketplaceListings,
   createBuyRequest, createOrder, buyCredits, fetchTransactions, fetchWallet,
-  generateESGReport, loadRazorpayScript, fetchPricingForecast, fetchPricingConfig
+  generateESGReport, loadRazorpayScript, fetchPricingForecast, fetchPricingConfig,
+  fetchCorporateGrsScore, fetchLiveFxRate
 } from '../../services/api.js';
 import { Card, SectionHeader, Table, Badge, MRVScore, KPICard, Modal, Btn, T, ScoreGauge, withAlpha } from '../UI.jsx';
 import { ProjectMap } from '../GoogleMap.jsx';
@@ -19,16 +20,23 @@ import {
 const inp = { background:'var(--input-bg, rgba(255,255,255,0.04))', border:`1px solid ${T.border}`, borderRadius:9, padding:'10px 14px', color:T.t1, fontSize:14, outline:'none', width:'100%', fontFamily:'Plus Jakarta Sans, sans-serif' };
 
 export function CorporateDashboard() {
-  const { refreshKey } = useApp();
+  const { user, refreshKey } = useApp();
+  const corporateName = user?.name || 'Corporate Buyer';
   const [projects, setProjects] = useState([]);
   const [mapFeatures, setMapFeatures] = useState([]);
   const [loading, setLoading] = useState(true);
   const [wallet, setWallet] = useState(null);
+  const [grsData, setGrsData] = useState({ score: 0, rank: 0, total: 0, transparency: 0, quality: 0, commitment: 0, badge: 'Participant' });
 
   useEffect(() => {
     setLoading(true);
-    Promise.all([fetchAllProjects(), fetchMapProjects(), fetchWallet('Microsoft Sustainability')])
-      .then(([allRes, mapRes, walRes]) => {
+    Promise.all([
+      fetchAllProjects(),
+      fetchMapProjects(),
+      fetchWallet(corporateName),
+      fetchCorporateGrsScore(corporateName)
+    ])
+      .then(([allRes, mapRes, walRes, grsRes]) => {
         if (!allRes.error && Array.isArray(allRes.data)) {
           setProjects(allRes.data.filter(p => p.status === 'approved'));
         }
@@ -38,14 +46,16 @@ export function CorporateDashboard() {
         if (walRes && !walRes.error && walRes.data) {
           setWallet(walRes.data);
         }
+        if (grsRes && !grsRes.error && grsRes.data) {
+          setGrsData(grsRes.data);
+        }
       })
       .finally(() => setLoading(false));
-  }, [refreshKey]);
+  }, [refreshKey, corporateName]);
 
   // Calculate real totals from backend data
   const realTotalCredits = wallet?.total_credits ?? projects.reduce((s, p) => s + (p.credits || 0), 0);
   const realTotalFunding = wallet?.total_spent_usd ?? projects.reduce((s, p) => s + (p.total_funding || 0), 0);
-  const grsData = { score: 875, rank: 3, total: 24, transparency: 92, quality: 88, commitment: 85 };
 
   if (loading) return (
     <div style={{padding:28, display:'flex', justifyContent:'center', alignItems:'center', minHeight:'40vh'}}>
@@ -58,7 +68,7 @@ export function CorporateDashboard() {
 
   return (
     <div style={{padding:28}}>
-      <SectionHeader title="Corporate Dashboard" subtitle="Microsoft Sustainability — carbon portfolio overview"/>
+      <SectionHeader title="Corporate Dashboard" subtitle={`${corporateName} — carbon portfolio overview`}/>
       <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:15,marginBottom:24}}>
         <KPICard icon={Package}    label="Available Credits"     value={realTotalCredits.toLocaleString()} sub="Total tonnes CO₂e" color={T.violetLL || T.violetL}/>
         <KPICard icon={TrendingUp} label="Active Projects"       value={projects.length}          sub="Projects supported" color={T.teal}/>
@@ -106,13 +116,14 @@ export function CorporateDashboard() {
 
 export function CorporateMarketplace() {
   const { user, refreshKey, triggerRefresh } = useApp();
-  const corporateName = user?.name || 'Microsoft Sustainability';
+  const corporateName = user?.name || 'Corporate Buyer';
   const [listings, setListings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [buyModal, setBuyModal] = useState(null);
-  const [qty, setQty]           = useState(25);
+  const [qty, setQty]           = useState(1);
   const [purchased, setPurchased] = useState({});
   const [buying, setBuying]    = useState(false);
+  const [fxRate, setFxRate]    = useState(0);
 
   // Feature 7: Multi-parameter search & filters
   const [filters, setFilters] = useState({
@@ -190,14 +201,20 @@ export function CorporateMarketplace() {
     }
   };
 
-  const inrAmount = (usd) => `₹${(usd*83.5).toLocaleString('en-IN',{maximumFractionDigits:0})}`;
+  useEffect(() => {
+    fetchLiveFxRate().then(res => {
+      if (res.data?.rate) setFxRate(res.data.rate);
+    }).catch(() => {});
+  }, []);
+
+  const inrAmount = (usd) => fxRate > 0 ? `₹${Math.round(usd * fxRate).toLocaleString('en-IN')}` : 'Calculating…';
 
   const handleRazorPay = async (item, quantity) => {
     setBuying(true);
     try {
       await loadRazorpayScript();
       const amountUSD = item.price * quantity;
-      const amountINR = Math.round(amountUSD * 83.5);
+      const amountINR = Math.round(amountUSD * fxRate);
 
       if (amountINR > 500000) {
         alert(`Notice: Razorpay Test Mode allows a maximum of ₹5,00,000 per order. Current total is ₹${amountINR.toLocaleString('en-IN')}. Please lower the quantity to test successfully.`);
@@ -673,13 +690,13 @@ export function CorporateMarketplace() {
                 </div>
               ))}
             </div>
-            {Math.round(qty * buyModal.price * 83.5) > 500000 && (
+            {Math.round(qty * buyModal.price * fxRate) > 500000 && (
               <div style={{background:'rgba(245,158,11,0.1)',border:'1px solid rgba(245,158,11,0.3)',borderRadius:8,padding:'8px 12px',marginBottom:14,fontSize:11,color:T.goldL,lineHeight:1.5}}>
                 ⚠️ Order exceeds Razorpay test mode limit (₹5,00,000). Please decrease quantity for testing.
               </div>
             )}
             <Btn style={{width:'100%',justifyContent:'center',background:'linear-gradient(135deg,#072654,#1a56db)',color:'#fff',boxShadow:'0 4px 16px rgba(26,86,219,0.35)',border:'none'}}
-              onClick={()=>handleRazorPay(buyModal,qty)} disabled={buying || Math.round(qty * buyModal.price * 83.5) > 500000}>
+              onClick={()=>handleRazorPay(buyModal,qty)} disabled={buying || Math.round(qty * buyModal.price * fxRate) > 500000}>
               {buying ? 'Processing…' : `💳 Pay ${inrAmount(qty*buyModal.price)} via Razorpay`}
             </Btn>
           </div>
@@ -691,7 +708,7 @@ export function CorporateMarketplace() {
 
 export function CorporateWallet() {
   const { user, refreshKey } = useApp();
-  const corporateName = user?.name || 'Microsoft Sustainability';
+  const corporateName = user?.name || 'Corporate Buyer';
   const [transactions, setTransactions] = useState([]);
   const [walletData, setWalletData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -796,8 +813,9 @@ export function CorporateESG() {
   const [report, setReport] = useState(null);
   const [loading, setLoading] = useState(false);
   const [fetchingProjects, setFetchingProjects] = useState(true);
+  const { user } = useApp();
   const [error, setError] = useState(null);
-  const corporateName = 'Microsoft Sustainability';
+  const corporateName = user?.name || 'Corporate Buyer';
 
   // Fetch projects on component mount
   useEffect(() => {
@@ -1152,11 +1170,12 @@ export function CorporateESG() {
                 </div>
               </div>
               <div>
-                <div style={{fontSize:12,fontWeight:700,color:T.t2,marginBottom:12}}>Certifications</div>
+                <div style={{fontSize:12,fontWeight:700,color:T.t2,marginBottom:12}}>Reporting Alignment</div>
                 <div style={{display:'flex',flexDirection:'column',gap:8}}>
-                  {report.governance.certifications.map((cert,i)=>(
-                    <div key={i} style={{background:`rgba(45,212,191,0.08)`,border:`1px solid rgba(45,212,191,0.15)`,borderRadius:8,padding:'8px 12px',fontSize:11,color:T.teal,fontWeight:700}}>
-                      ✓ {cert}
+                  {(report.governance.reporting_frameworks_aligned || []).map((framework, i) => (
+                    <div key={i} style={{background:`rgba(45,212,191,0.06)`,border:`1px solid rgba(45,212,191,0.15)`,borderRadius:8,padding:'8px 12px'}}>
+                      <div style={{fontSize:11,color:T.teal,fontWeight:700}}>📋 {framework.framework} Aligned</div>
+                      <div style={{fontSize:10,color:T.t3,marginTop:2}}>{framework.description}</div>
                     </div>
                   ))}
                 </div>
@@ -1214,8 +1233,8 @@ export function CorporateESG() {
                 </div>
               </div>
             </div>
-            <div style={{marginTop:20,padding:14,background:`rgba(45,212,191,0.05)`,borderRadius:10,fontSize:11,color:T.t3,lineHeight:1.6}}>
-              <strong style={{color:T.teal}}>Report Integrity:</strong> This ESG report was generated using satellite-derived environmental metrics (NDVI & Land Surface Temperature proxies) and verified through our MRV-engine. Data is aligned with GRI 305, ISSB IFRS S2, and TCFD frameworks for investor and auditor acceptance.
+            <div style={{marginTop:20,padding:14,background:`rgba(45,212,191,0.05)`,borderRadius:10,fontSize:11,color:T.t3,lineHeight:1.6,border:`1px solid rgba(45,212,191,0.15)`}}>
+              <strong style={{color:T.teal}}>Report Integrity Disclosure:</strong> {report.meta?.disclaimer || 'Informational. Not an audited disclosure. Third-party standard certification requires independent external assurance.'}
             </div>
           </Card>
         </div>

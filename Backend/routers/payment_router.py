@@ -18,21 +18,30 @@ from datetime import datetime
 from fastapi import APIRouter, HTTPException, Request, Header
 from pydantic import BaseModel
 from typing import Optional
+from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-from credit_calculation.credits_module.db import SessionLocal
-from credit_calculation.credits_module.db_models import Project, FundingDetails, Transaction, Wallet, ProjectCredits, CorporateRequest, Certificate
+from core.config import RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET
+from credit_calculation.credits_module.db_models import (
+    Project, FundingDetails, Transaction, Wallet, ProjectCredits, CorporateRequest, Certificate, FxRate
+)
 
-# ── Razorpay SDK setup ──────────────────────────────────────────────────
-# ── Razorpay SDK setup ──────────────────────────────────────────────────
-try:
-    from core.config import RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET, INR_USD_RATE
-except ImportError:
-    RAZORPAY_KEY_ID = os.getenv("RAZORPAY_KEY_ID", "rzp_test_SXyS0q18CPS1p1")
-    RAZORPAY_KEY_SECRET = os.getenv("RAZORPAY_KEY_SECRET", "9m0Tq4EB8zFLXKJUgzgmCy9I")
-    INR_USD_RATE = float(os.getenv("INR_USD_RATE", "83.5"))
+
+def get_current_inr_rate(db: Session = None) -> float:
+    """Fetch live or latest cached reference FX rate from fx_rates table."""
+    if db:
+        fx = db.query(FxRate).order_by(FxRate.fetched_at.desc()).first()
+        if fx and fx.rate and fx.rate > 0:
+            return float(fx.rate)
+    env_rate = os.getenv("INR_USD_RATE")
+    if env_rate:
+        try:
+            return float(env_rate)
+        except ValueError:
+            pass
+    return 83.50
 
 try:
     import razorpay
@@ -229,7 +238,7 @@ def buy_credits(req: BuyCreditsRequest):
             quantity=req.quantity,
             price_per_ton=price_per_ton,
             amount_inr=req.amount,
-            amount_usd=round(req.amount / float(os.getenv("INR_USD_RATE", "83.5")), 2),
+            amount_usd=round(req.amount / get_current_inr_rate(db), 2),
             status="completed",
             certificate_id=cert_pub_id,
             created_at=now_dt.date(),
@@ -401,7 +410,7 @@ def get_wallet(company: str):
                 "total_spent_usd": 0,
                 "last_purchase_date": None,
             }
-        inr_rate = float(os.getenv("INR_USD_RATE", "83.5"))
+        inr_rate = get_current_inr_rate(db)
         return {
             "corporate_name": wallet.corporate_name,
             "total_credits": wallet.total_credits or 0,
@@ -486,9 +495,10 @@ async def razorpay_webhook(
             if not project:
                 project = db.query(Project).filter(Project.status == "approved").first()
 
+            inr_rate = get_current_inr_rate(db)
             price_per_ton = project.price if project and project.price else 25.0
             quantity_from_notes = float(notes.get("quantity") or 0.0)
-            quantity = quantity_from_notes if quantity_from_notes > 0 else round(amount_inr / (price_per_ton * 83.5), 2)
+            quantity = quantity_from_notes if quantity_from_notes > 0 else round(amount_inr / (price_per_ton * inr_rate), 2)
 
             now_dt = datetime.utcnow()
             from routers.certificate_router import generate_certificate_public_id, compute_certificate_hash
@@ -512,7 +522,7 @@ async def razorpay_webhook(
                 quantity=quantity,
                 price_per_ton=price_per_ton,
                 amount_inr=amount_inr,
-                amount_usd=round(amount_inr / 83.5, 2),
+                amount_usd=round(amount_inr / inr_rate, 2),
                 status="completed",
                 certificate_id=cert_pub_id,
                 created_at=now_dt.date(),

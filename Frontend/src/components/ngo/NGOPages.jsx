@@ -5,7 +5,8 @@ import {
   createProject, fetchProjects, fetchDashboard, fetchMapProjects,
   fetchMarketplaceRequests, checkSiteSuitability, acceptBuyRequest,
   createOrder, buyCredits, loadRazorpayScript,
-  submitProgressUpdate, fetchProjectProgress, getImageUrl
+  submitProgressUpdate, fetchProjectProgress, getImageUrl,
+  fetchPlantationTypes, fetchLiveFxRate
 } from '../../services/api.js';
 import { Card, SectionHeader, Table, Badge, MRVScore, KPICard, Modal, Btn, T } from '../UI.jsx';
 import { ProjectMap } from '../GoogleMap.jsx';
@@ -18,16 +19,16 @@ import {
 // ── Shared constants ────────────────────────────────────────────────────────────
 const NGO_ID = 1; // Hardcoded for demo — backend auto-creates NGO by name
 
-// 7 plantation types with CO₂ info
-const PLANTATION_TYPES = [
-  { value: 'bamboo',     label: '🎋 Bamboo',      co2: '10–20 credits/acre/year' },
-  { value: 'eucalyptus', label: '🌳 Eucalyptus',   co2: '8–15 credits/acre/year' },
-  { value: 'teak',       label: '🌳 Teak',         co2: '3–8 credits/acre/year' },
-  { value: 'neem',       label: '🌳 Neem',         co2: '2–6 credits/acre/year' },
-  { value: 'mangrove',   label: '🌊 Mangrove',     co2: '20–40 credits/acre/year' },
-  { value: 'pine',       label: '🌲 Pine',         co2: '5–10 credits/acre/year' },
-  { value: 'banyan',     label: '🌳 Banyan',       co2: '2–5 credits/acre/year' },
-  { value: 'mixed',      label: '⚡ Mixed Plantation', co2: '10–25+ credits/acre/year' },
+// Fallback plantation types until live API loads
+const DEFAULT_PLANTATION_TYPES = [
+  { value: 'mangrove',   label: '🌊 Mangrove Restoration', co2: '20–40 credits/acre/year', annual_rate_mid: 30, source: 'IPCC Wetlands Supplement 2013' },
+  { value: 'bamboo',     label: '🎋 Bamboo Agroforestry',   co2: '10–20 credits/acre/year', annual_rate_mid: 15, source: 'INBAR Technical Report 2020' },
+  { value: 'mixed',      label: '⚡ Mixed Native Forest',   co2: '10–25+ credits/acre/year', annual_rate_mid: 17.5, source: 'FAO Global Forest Assessment 2020' },
+  { value: 'eucalyptus', label: '🌳 Eucalyptus Plantation', co2: '8–15 credits/acre/year', annual_rate_mid: 11.5, source: 'ICFRE Yield Studies 2019' },
+  { value: 'teak',       label: '🌳 Teak Hardwood',         co2: '3–8 credits/acre/year', annual_rate_mid: 5.5, source: 'ITTO Tropical Forest Series' },
+  { value: 'neem',       label: '🌳 Neem Silviculture',     co2: '2–6 credits/acre/year', annual_rate_mid: 4.0, source: 'CAZRI 2021' },
+  { value: 'pine',       label: '🌲 Subtropical Pine',      co2: '5–10 credits/acre/year', annual_rate_mid: 7.5, source: 'FRI Dehradun Bulletin 2018' },
+  { value: 'banyan',     label: '🌳 Sacred Banyan / Ficus', co2: '2–5 credits/acre/year', annual_rate_mid: 3.5, source: 'Botanical Survey of India 2022' },
 ];
 
 const inp = { background:'var(--input-bg, rgba(255,255,255,0.04))', border:`1px solid ${T.border}`, borderRadius:9, padding:'10px 14px', color:T.t1, fontSize:14, outline:'none', width:'100%', fontFamily:'Plus Jakarta Sans, sans-serif' };
@@ -152,9 +153,12 @@ export function NGODashboard() {
     </div>
   );
 
+  const { user } = useApp();
+  const ngoName = user?.org || user?.name || 'Registered NGO';
+
   return (
     <div style={{padding:28}}>
-      <SectionHeader title="NGO Dashboard" subtitle="EcoGuard Brazil — project overview and performance"/>
+      <SectionHeader title="NGO Dashboard" subtitle={`${ngoName} — project overview and performance`}/>
 
       <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:15,marginBottom:24}}>
         <KPICard icon={TreePine}   label="Active Projects"    value={data.active_projects}              sub={`${data.total_projects} total submitted`} trend="up"   color={T.teal}/>
@@ -557,20 +561,35 @@ export function NGOProjects() {
   );
 }
 
-// ── New Project ────────────────────────────────────────────────────────────────
 export function NGONewProject() {
-  const { triggerRefresh } = useApp();
+  const { user, triggerRefresh } = useApp();
+  const defaultNgoName = user?.org || user?.name || 'Registered NGO';
   const { showToast, ToastEl } = useToast();
-  const [form,setForm] = useState({name:'',ngo:'EcoGuard Brazil',lat:'',lng:'',area:'',plantType:'mangrove',trees:'',startDate:'',notes:'',polygon:''});
+  const [form,setForm] = useState({name:'',ngo:defaultNgoName,lat:'',lng:'',area:'',plantType:'mangrove',trees:'',startDate:'',notes:'',polygon:''});
   const [images,setImages] = useState([]);
   const [submitted,setSubmitted] = useState(false);
   const [submitting,setSubmitting] = useState(false);
   const [actualProjectId, setActualProjectId] = useState(null);
   const [createdScores, setCreatedScores] = useState(null);
+  const [plantationTypes, setPlantationTypes] = useState(DEFAULT_PLANTATION_TYPES);
   const f = (k,v)=>setForm({...form,[k]:v});
 
+  useEffect(() => {
+    fetchPlantationTypes().then(res => {
+      if (Array.isArray(res.data?.types) && res.data.types.length > 0) {
+        setPlantationTypes(res.data.types.map(t => ({
+          value: t.type_key,
+          label: t.label,
+          co2: t.co2_text,
+          annual_rate_mid: t.annual_rate_mid,
+          source: t.source
+        })));
+      }
+    }).catch(() => {});
+  }, []);
+
   const resetForm = () => {
-    setForm({name:'',ngo:'EcoGuard Brazil',lat:'',lng:'',area:'',plantType:'mangrove',trees:'',startDate:'',notes:'',polygon:''});
+    setForm({name:'',ngo:defaultNgoName,lat:'',lng:'',area:'',plantType:'mangrove',trees:'',startDate:'',notes:'',polygon:''});
     setImages([]);
     setCreatedScores(null);
   };
@@ -603,7 +622,7 @@ export function NGONewProject() {
     setSubmitting(true);
     const formData = new FormData();
     formData.append('project_name', form.name.trim());
-    formData.append('ngo_name', form.ngo.trim() || 'EcoGuard Brazil');
+    formData.append('ngo_name', form.ngo.trim() || defaultNgoName);
     formData.append('latitude', parseFloat(form.lat));
     formData.append('longitude', parseFloat(form.lng));
     formData.append('plantation_type', form.plantType.toLowerCase());
@@ -666,12 +685,11 @@ export function NGONewProject() {
   const previewProject = form.lat&&form.lng ? [{id:'NEW',name:form.name||'New Project',lat:parseFloat(form.lat),lng:parseFloat(form.lng),status:'pending'}] : [];
 
   // CO₂ info for selected type
-  const selectedType = PLANTATION_TYPES.find(t => t.value === form.plantType) || PLANTATION_TYPES[4];
+  const selectedType = plantationTypes.find(t => t.value === form.plantType) || plantationTypes[0] || DEFAULT_PLANTATION_TYPES[0];
 
-  // Estimate credits preview
+  // Estimate credits preview computed dynamically from selected type's stored mid rate
   const estimatedCredits = form.area ? (() => {
-    const rates = { bamboo:15, eucalyptus:11.5, teak:5.5, neem:4, mangrove:30, pine:7.5, banyan:3.5, mixed:15 };
-    const rate = rates[form.plantType] || 10;
+    const rate = selectedType.annual_rate_mid || 15;
     const areaAcres = parseFloat(form.area) * 2.47105;
     return Math.round(rate * areaAcres);
   })() : 0;
@@ -715,12 +733,12 @@ export function NGONewProject() {
             <div style={{marginBottom:14}}>
               <label style={lbl}>Plantation Type</label>
               <select value={form.plantType} onChange={e=>f('plantType',e.target.value)} style={{...inp,cursor:'pointer'}}>
-                {PLANTATION_TYPES.map(t=><option key={t.value} value={t.value}>{t.label}</option>)}
+                {plantationTypes.map(t=><option key={t.value} value={t.value}>{t.label}</option>)}
               </select>
               <div style={{marginTop:6,background:'rgba(45,212,191,0.06)',border:'1px solid rgba(45,212,191,0.15)',borderRadius:8,padding:'8px 12px',fontSize:12}}>
-                <span style={{color:T.t3}}>CO₂ Rate: </span>
+                <span style={{color:T.t3}}>Annual Sequestration Rate: </span>
                 <span style={{color:T.emeraldL,fontWeight:700}}>{selectedType.co2}</span>
-                <span style={{color:T.t3}}> · 1 Credit = 1 ton CO₂</span>
+                {selectedType.source && <div style={{fontSize:10.5,color:T.t3,marginTop:3}}>Source: {selectedType.source}</div>}
               </div>
             </div>
             <div style={{marginBottom:14}}>
@@ -1023,12 +1041,21 @@ export function NGOMarketplace() {
     setPayModal(req);
   };
 
+  const [fxRate, setFxRate] = useState(0);
+  useEffect(() => {
+    fetchLiveFxRate().then(res => {
+      if (res.data?.rate) setFxRate(res.data.rate);
+    }).catch(() => {});
+  }, []);
+
+  const inrAmount = (usd) => fxRate > 0 ? `₹${Math.round(usd * fxRate).toLocaleString('en-IN')}` : 'Calculating…';
+
   const handleRazorPay = async (req) => {
     setPaying(true);
     try {
       await loadRazorpayScript();
       const amountUSD = req.total || 0;
-      const amountINR = Math.round(amountUSD * 83.5);
+      const amountINR = Math.round(amountUSD * fxRate);
 
       // Cap test order amount to ₹50,000 if above Razorpay test sandbox limits
       const paymentAmountINR = amountINR > 500000 ? 50000 : amountINR;
@@ -1118,8 +1145,6 @@ export function NGOMarketplace() {
       setPaying(false);
     }
   };
-
-  const inrAmount = (usd) => `₹${(usd*83.5).toLocaleString('en-IN',{maximumFractionDigits:0})}`;
 
   if (loading) return (
     <div style={{padding:28, display:'flex', justifyContent:'center', alignItems:'center', minHeight:'40vh'}}>

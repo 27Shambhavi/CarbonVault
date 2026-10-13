@@ -381,7 +381,7 @@ export async function fetchWallet(companyName) {
 // ══════════════════════════════════════════════════════════════════════════════
 
 export async function generateESGReport(corporateName, projectId = null) {
-  return request(`${API_BASE}/esg/generate-report`, {
+  return request(`${API_BASE}/esg/report`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -389,6 +389,30 @@ export async function generateESGReport(corporateName, projectId = null) {
       project_id: projectId,
     }),
   });
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ZERO-HARDCODING CONFIG & GRS APIs
+// ══════════════════════════════════════════════════════════════════════════════
+
+export async function fetchPublicConfig() {
+  return request(`${API_BASE}/config/public`);
+}
+
+export async function fetchPlantationTypes() {
+  return request(`${API_BASE}/config/plantation-types`);
+}
+
+export async function fetchLiveFxRate() {
+  return request(`${API_BASE}/config/fx-rate`);
+}
+
+export async function fetchCorporateGrsScore(companyName) {
+  return request(`${API_BASE}/grs/score?company_name=${encodeURIComponent(companyName || 'Corporate Buyer')}`);
+}
+
+export async function fetchGrsLeaderboard() {
+  return request(`${API_BASE}/grs/leaderboard`);
 }
 
 // ══════════════════════════════════════════════════════════════════════════════

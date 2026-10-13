@@ -24,14 +24,14 @@ export default function CorporateCalculator() {
   const { user, setPage } = useApp();
   const corporateName = user?.name || 'Corporate Buyer';
 
-  // Input state
+  // Input state — starts clean without synthetic numbers
   const [inputs, setInputs] = useState({
     corporate_name: corporateName,
-    employees: 250,
-    sqft: 20000,
-    short_haul_flights: 80,
-    long_haul_flights: 30,
-    cloud_spend_usd: 7500,
+    employees: '',
+    sqft: '',
+    short_haul_flights: '',
+    long_haul_flights: '',
+    cloud_spend_usd: '',
   });
 
   const [loading, setLoading] = useState(false);
@@ -40,10 +40,9 @@ export default function CorporateCalculator() {
   const [historyLoading, setHistoryLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('calculator'); // 'calculator' | 'history'
 
-  // Load history & initial calculation on mount
+  // Load history on mount without auto-calculating synthetic estimates
   useEffect(() => {
     loadHistory();
-    handleCalculate();
   }, [corporateName]);
 
   const loadHistory = async () => {

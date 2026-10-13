@@ -42,6 +42,7 @@ from routers.certificate_router import router as certificate_router
 from routers.realtime_router import router as realtime_router
 from routers.auth_router import router as auth_router, hash_password
 from routers.stats_router import router as stats_router
+from routers.config_router import router as config_router
 
 
 def migrate_db():
@@ -767,6 +768,13 @@ def seed_initial_data():
             db.add_all([fe1, fe2])
             db.commit()
 
+        # Seed SystemConfig and PlantationTypes if empty
+        try:
+            from routers.config_router import ensure_config_seeded
+            ensure_config_seeded(db)
+        except Exception as ce:
+            logger.warning("Error running config seed: %s", ce)
+
         # Run certificate backfill to populate unified certificates table
         try:
             from routers.certificate_router import backfill_certificates
@@ -1064,6 +1072,7 @@ app.include_router(esg_router, prefix="/esg", tags=["ESG"])
 app.include_router(realtime_router)
 app.include_router(auth_router)
 app.include_router(stats_router)
+app.include_router(config_router)
 
 
 if __name__ == "__main__":

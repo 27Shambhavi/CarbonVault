@@ -62,8 +62,18 @@ class FundingEngine:
         final_price_usd = base_market_price * multiplier
         total_value_usd = verified_credits * final_price_usd
 
-        # INR conversion (approx ₹83.5 per USD)
-        inr_rate = 83.5
+        # INR conversion from fx_rates or supplied rate
+        if inr_rate is None:
+            try:
+                from credit_calculation.credits_module.db import SessionLocal
+                from credit_calculation.credits_module.db_models import FxRate
+                _db = SessionLocal()
+                fx = _db.query(FxRate).order_by(FxRate.fetched_at.desc()).first()
+                inr_rate = float(fx.rate) if fx and fx.rate else 83.50
+                _db.close()
+            except Exception:
+                inr_rate = 83.50
+
         final_price_inr = final_price_usd * inr_rate
         total_value_inr = total_value_usd * inr_rate
 

@@ -5,8 +5,9 @@
   "scripts": {
     "dev": "vite",
     "check:mockdata": "node scripts/check-no-mockdata.js",
-    "lint": "node scripts/check-no-mockdata.js && eslint src",
-    "prebuild": "node scripts/check-no-mockdata.js && npm run lint",
+    "check:hardcoded": "node ../scripts/check-hardcoded.mjs",
+    "lint": "node scripts/check-no-mockdata.js && node ../scripts/check-hardcoded.mjs && eslint src",
+    "prebuild": "node scripts/check-no-mockdata.js && node ../scripts/check-hardcoded.mjs && npm run lint",
     "build": "vite build",
     "preview": "vite preview"
   },

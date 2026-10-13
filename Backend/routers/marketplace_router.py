@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from typing import List, Optional
 
 from credit_calculation.credits_module.db_models import (
-    Project, ProjectCredits, FundingDetails, CorporateRequest, NGO, ProjectProgressUpdate
+    Project, ProjectCredits, FundingDetails, CorporateRequest, NGO, ProjectProgressUpdate, FxRate
 )
 from credit_calculation.credits_module.db import SessionLocal
 
@@ -243,7 +243,8 @@ def compare_projects(req: CompareRequest):
             ).order_by(ProjectProgressUpdate.id.desc()).first()
 
             area = p.area_hectares or 1.0
-            co2_per_ha = round((credits or 0) / area, 2) if area > 0 else 0.0
+            fx_rec = db.query(FxRate).order_by(FxRate.fetched_at.desc()).first()
+            inr_rate = float(fx_rec.rate) if fx_rec and fx_rec.rate else 83.50
 
             results.append({
                 "project_id": p.project_id,
@@ -253,7 +254,8 @@ def compare_projects(req: CompareRequest):
                 "mrv_score": p.mrv_score or 85.0,
                 "env_score": p.env_score or 80.0,
                 "price_usd": price,
-                "price_inr": round(price * 83.5, 2),
+                "price_inr": round(price * inr_rate, 2),
+                "inr_rate": inr_rate,
                 "available_credits": credits,
                 "area_hectares": p.area_hectares or 0,
                 "trees_count": p.number_of_trees or 0,

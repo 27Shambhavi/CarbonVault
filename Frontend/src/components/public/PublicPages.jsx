@@ -1,14 +1,6 @@
 import { useState, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
-import { fetchLeaderboard, fetchPlatformStats, fetchAuditLogs, fetchCertificates, fetchClimateAnalytics, fetchUsers, timeAgo, getCertificateDownloadUrl } from '../../services/api.js';
-
-const mockPublicLeaderboard = [
-  { rank: 1, name: 'Microsoft Sustainability', type: 'buyer', credits: 49400, points: 9850, badge: 'approved' },
-  { rank: 2, name: 'EcoGuard Brazil', role: 'ngo', type: 'ngo', credits: 34600, points: 8940, badge: 'approved' },
-  { rank: 3, name: 'Google Carbon Team', type: 'buyer', credits: 28000, points: 8420, badge: 'approved' },
-  { rank: 4, name: 'CongoCare', role: 'ngo', type: 'ngo', credits: 22000, points: 7650, badge: 'approved' },
-  { rank: 5, name: 'Shell Renewables', type: 'buyer', credits: 18000, points: 6840, badge: 'approved' },
-];
+import { fetchLeaderboard, fetchPlatformStats, fetchPublicStats, fetchAuditLogs, fetchCertificates, fetchClimateAnalytics, fetchUsers, fetchGrsLeaderboard, timeAgo, getCertificateDownloadUrl } from '../../services/api.js';
 
 import { Card, SectionHeader, Table, Badge, KPICard, T } from '../UI.jsx';
 import CertificateModal from '../CertificateModal.jsx';
@@ -26,17 +18,21 @@ const CT = ({ active, payload, label }) => {
 
 export function PublicDashboard() {
   const [stats, setStats] = useState(null);
+  const [leaderboard, setLeaderboard] = useState([]);
 
   useEffect(() => {
     fetchPlatformStats().then(res => {
       if (res.data) setStats(res.data);
     }).catch(() => {});
+    fetchGrsLeaderboard().then(res => {
+      if (res.data?.leaderboard) setLeaderboard(res.data.leaderboard);
+    }).catch(() => {});
   }, []);
 
-  const creditsIssued = stats ? Math.round(stats.total_credits || 0).toLocaleString() : '67,495';
-  const activeProjects = stats ? stats.active_projects : 5;
-  const auditsConducted = stats ? stats.audits_conducted : 31;
-  const certificatesIssued = stats ? stats.certificates_issued : 5;
+  const creditsIssued = stats ? Math.round(stats.total_credits || stats.credits_issued || 0).toLocaleString() : '—';
+  const activeProjects = stats ? (stats.active_projects ?? 0) : '—';
+  const auditsConducted = stats ? (stats.audits_conducted ?? 0) : '—';
+  const certificatesIssued = stats ? (stats.certificates_issued ?? 0) : '—';
 
   return (
     <div style={{ padding: 28 }}>
@@ -57,36 +53,42 @@ export function PublicDashboard() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 24 }}>
         <KPICard icon={Globe} label="Credits Issued" value={creditsIssued} sub="Total verified tonnes" trend="up" color="#2dd4bf" />
         <KPICard icon={Leaf} label="Active Projects" value={`${activeProjects}`} sub="Verified in DB" trend="up" color="#60a5fa" />
-        <KPICard icon={FileSearch} label="Audits Conducted" value={`${auditsConducted}`} sub="100% transparent" trend="up" color="#facc15" />
-        <KPICard icon={Award} label="Certificates Issued" value={`${certificatesIssued}`} sub="Blockchain anchored" trend="up" color="#a78bfa" />
+        <KPICard icon={FileSearch} label="Audits Conducted" value={`${auditsConducted}`} sub="Append-only log" trend="up" color="#facc15" />
+        <KPICard icon={Award} label="Certificates Issued" value={`${certificatesIssued}`} sub="Cryptographically signed" trend="up" color="#a78bfa" />
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
         <Card>
-          <SectionHeader title="Top Organizations" />
-          {mockPublicLeaderboard.slice(0, 5).map((org, i) => (
-            <div key={i} style={{ display: 'flex', gap: 12, alignItems: 'center', padding: '10px 0', borderBottom: i < 4 ? '1px solid rgba(255,255,255,0.03)' : 'none' }}>
-              <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'rgba(255,255,255,0.03)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 800, color: '#2dd4bf', fontFamily: 'Fraunces, serif', flexShrink: 0 }}>{org.rank}</div>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 13, fontWeight: 600, color: '#f1f5f9' }}>{org.name}</div>
-                <div style={{ fontSize: 11, color: '#1e293b' }}>{org.credits.toLocaleString()} credits</div>
+          <SectionHeader title="Top Organizations" subtitle="Rankings derived from verified ledger activity" />
+          {leaderboard && leaderboard.length > 0 ? (
+            leaderboard.slice(0, 5).map((org, i) => (
+              <div key={i} style={{ display: 'flex', gap: 12, alignItems: 'center', padding: '10px 0', borderBottom: i < 4 ? '1px solid rgba(255,255,255,0.03)' : 'none' }}>
+                <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'rgba(255,255,255,0.03)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 800, color: '#2dd4bf', fontFamily: 'Fraunces, serif', flexShrink: 0 }}>{org.rank}</div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: '#f1f5f9' }}>{org.name}</div>
+                  <div style={{ fontSize: 11, color: '#94a3b8' }}>{Number(org.credits || 0).toLocaleString()} credits</div>
+                </div>
+                <Badge type={org.badge} label={org.badge} />
               </div>
-              <Badge type={org.badge} label={org.badge} />
+            ))
+          ) : (
+            <div style={{ padding: '36px 16px', textAlign: 'center', color: '#64748b', fontSize: 13 }}>
+              No registered organizations with transaction history yet.
             </div>
-          ))}
+          )}
         </Card>
 
         <Card>
-          <SectionHeader title="Platform Stats" />
+          <SectionHeader title="Platform Stats" subtitle="Live aggregates from registry database" />
           {[
-            { label: 'Fraud Detection Rate', value: stats ? stats.fraud_detection_rate : '0.0%', color: '#f87171' },
-            { label: 'Approval Rate', value: stats ? stats.approval_rate : '100%', color: '#2dd4bf' },
-            { label: 'Avg MRV Score', value: stats ? `${stats.avg_mrv_score}` : '85.6', color: '#60a5fa' },
-            { label: 'CO₂e Removed (t)', value: stats ? Math.round(stats.co2_removed_tons || 0).toLocaleString() : '67,495', color: '#2dd4bf' },
-            { label: 'Countries Active', value: stats ? `${stats.countries_active}` : '4', color: '#facc15' },
+            { label: 'Active Projects', value: stats?.active_projects ?? stats?.verified_projects_count ?? activeProjects, color: '#2dd4bf' },
+            { label: 'Credits Issued (tCO₂e)', value: stats?.credits_issued ? Number(stats.credits_issued).toLocaleString() : '0', color: '#2dd4bf' },
+            { label: 'Approval Rate', value: stats?.approval_rate_pct != null ? `${stats.approval_rate_pct}%` : '100%', color: '#60a5fa' },
+            { label: 'Audit Trail Records', value: stats?.audits_conducted ?? auditsConducted, color: '#facc15' },
+            { label: 'Fraud Risk Checks', value: stats?.fraud_flags ?? '0 flagged', color: '#f87171' },
           ].map(({ label, value, color }) => (
             <div key={label} style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid rgba(255,255,255,0.03)', fontSize: 13 }}>
-              <span style={{ color: '#475569' }}>{label}</span>
+              <span style={{ color: '#94a3b8' }}>{label}</span>
               <span style={{ color, fontWeight: 700 }}>{value}</span>
             </div>
           ))}
@@ -135,7 +137,7 @@ export function PublicLeaderboard() {
     }).catch(() => {});
   }, []);
 
-  const activeLeaderboard = leaderboard.length > 0 ? leaderboard : mockPublicLeaderboard;
+  const activeLeaderboard = leaderboard;
   const filtered = filter === 'all' ? activeLeaderboard : activeLeaderboard.filter(o => o.type === filter);
 
   return (
@@ -531,57 +533,51 @@ export function PublicClimate() {
     }).catch(() => {});
   }, []);
 
-  const climateData = climate?.co_benefits && climate.co_benefits.length > 0 ? climate.co_benefits : [
-    { metric: 'Flood Control', value: 78 },
-    { metric: 'Biodiversity', value: 85 },
-    { metric: 'Fisheries', value: 62 },
-    { metric: 'Coastal Prot.', value: 71 },
-    { metric: 'Carbon Seq.', value: 93 },
-    { metric: 'Livelihood', value: 67 },
-  ];
+  const climateData = climate?.co_benefits || [];
 
-  const co2Removed = stats?.total_credits
-    ? `${Math.round(stats.total_credits).toLocaleString()}t`
-    : climate?.co2_removed_tons ? `${Math.round(climate.co2_removed_tons).toLocaleString()}t` : '43,400t';
+  const co2Removed = stats?.credits_issued != null
+    ? `${Number(stats.credits_issued).toLocaleString()} t`
+    : climate?.co2_removed_tons != null ? `${Number(climate.co2_removed_tons).toLocaleString()} t` : '0 t';
 
-  const forestArea = climate?.forest_area_ha
-    ? `${Math.round(climate.forest_area_ha).toLocaleString()} ha`
-    : '14,500 ha';
-
-  const renewableEnergy = climate?.renewable_energy_gwh
-    ? `${climate.renewable_energy_gwh} GWh`
-    : '89 GWh';
+  const forestArea = climate?.forest_area_ha != null
+    ? `${Number(climate.forest_area_ha).toLocaleString()} ha`
+    : '0 ha';
 
   return (
     <div style={{ padding: 28 }}>
-      <SectionHeader title="Climate Resilience Analytics" subtitle="Environmental impact of verified projects" />
+      <SectionHeader title="Climate Resilience Analytics" subtitle="Environmental impact of verified reforestation and afforestation projects" />
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginBottom: 24 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 16, marginBottom: 24, maxWidth: 680 }}>
         {[
-          { icon: Leaf, label: 'CO₂e Removed', value: co2Removed, color: '#2dd4bf' },
-          { icon: Globe, label: 'Forest Area', value: forestArea, color: '#60a5fa' },
-          { icon: Zap, label: 'Renewable Energy', value: renewableEnergy, color: '#facc15' },
-        ].map(({ icon: Icon, label, value, color }) => (
-          <KPICard key={label} icon={Icon} label={label} value={value} color={color} />
+          { icon: Leaf, label: 'CO₂e Removed', value: co2Removed, sub: 'Minted credits from approved projects', color: '#2dd4bf' },
+          { icon: Globe, label: 'Forest Area', value: forestArea, sub: 'Sum of approved project boundaries', color: '#60a5fa' },
+        ].map(({ icon: Icon, label, value, sub, color }) => (
+          <KPICard key={label} icon={Icon} label={label} value={value} sub={sub} color={color} />
         ))}
       </div>
 
       <Card>
-        <SectionHeader title="Co-Benefits by Impact Category" />
-        <div style={{ width: '100%', height: 280, minHeight: 280 }}>
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart
-              data={climateData}
-              layout="vertical"
-              margin={{ top: 10, right: 30, left: 30, bottom: 10 }}
-            >
-              <XAxis type="number" domain={[0, 100]} tick={{ fill: '#94a3b8', fontSize: 11 }} axisLine={{ stroke: 'rgba(255,255,255,0.1)' }} tickLine={false} />
-              <YAxis dataKey="metric" type="category" tick={{ fill: '#f1f5f9', fontSize: 12, fontWeight: 500 }} axisLine={false} tickLine={false} width={110} />
-              <Tooltip content={<CT />} />
-              <Bar dataKey="value" fill="#2dd4bf" barSize={18} radius={[0, 4, 4, 0]} name="Impact Score" isAnimationActive={false} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
+        <SectionHeader title="Co-Benefits by Impact Category" subtitle="Ecological co-benefits verified through project MRV telemetry" />
+        {climateData.length > 0 ? (
+          <div style={{ width: '100%', height: 280, minHeight: 280 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart
+                data={climateData}
+                layout="vertical"
+                margin={{ top: 10, right: 30, left: 30, bottom: 10 }}
+              >
+                <XAxis type="number" domain={[0, 100]} tick={{ fill: '#94a3b8', fontSize: 11 }} axisLine={{ stroke: 'rgba(255,255,255,0.1)' }} tickLine={false} />
+                <YAxis dataKey="metric" type="category" tick={{ fill: '#f1f5f9', fontSize: 12, fontWeight: 500 }} axisLine={false} tickLine={false} width={130} />
+                <Tooltip content={<CT />} />
+                <Bar dataKey="value" fill="#2dd4bf" barSize={18} radius={[0, 4, 4, 0]} name="Impact Score" isAnimationActive={false} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        ) : (
+          <div style={{ padding: '36px 16px', textAlign: 'center', color: '#64748b', fontSize: 13 }}>
+            No verified project co-benefits recorded in the registry yet.
+          </div>
+        )}
       </Card>
     </div>
   );

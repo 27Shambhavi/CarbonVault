@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import desc
 
 from credit_calculation.credits_module.db import SessionLocal
-from credit_calculation.credits_module.db_models import FootprintEstimate, Project
+from credit_calculation.credits_module.db_models import FootprintEstimate, Project, SystemConfig
 
 logger = logging.getLogger("carbonvault")
 router = APIRouter()
@@ -46,19 +46,29 @@ def calculate_and_save_estimate(payload: FootprintRequest, db: Session = Depends
     persist the estimate to the database, and match with available verified credits.
     """
     try:
-        # Standard GHG Protocol Proxy Coefficients:
-        # Scope 1 (Direct Combustion & Fleets): ~0.35 tCO2e per employee annually
-        scope1 = round(payload.employees * 0.35, 2)
+        # Read coefficients from system_config table (with scientific source attribution)
+        def get_coeff(key: str, default: float) -> float:
+            row = db.query(SystemConfig).filter(SystemConfig.key == key).first()
+            if row and row.value:
+                try:
+                    return float(row.value)
+                except ValueError:
+                    pass
+            return default
 
-        # Scope 2 (Purchased Electricity & Facility HVAC): ~0.014 tCO2e per sq ft + 0.45 tCO2e per employee
-        scope2 = round((payload.sqft * 0.014) + (payload.employees * 0.45), 2)
+        c_scope1 = get_coeff("scope1_employee_coeff", 0.35)
+        c_scope2_sqft = get_coeff("scope2_sqft_coeff", 0.014)
+        c_scope2_emp = get_coeff("scope2_employee_coeff", 0.45)
+        c_scope3_short = get_coeff("scope3_shorthaul_coeff", 0.15)
+        c_scope3_long = get_coeff("scope3_longhaul_coeff", 0.60)
+        c_scope3_cloud = get_coeff("scope3_cloud_coeff", 0.50)
 
-        # Scope 3 (Business Travel & Cloud/Supply Chain):
-        # 0.15 tCO2e / short-haul flight + 0.60 tCO2e / long-haul flight + 0.50 tCO2e per $1,000 cloud spend
+        scope1 = round(payload.employees * c_scope1, 2)
+        scope2 = round((payload.sqft * c_scope2_sqft) + (payload.employees * c_scope2_emp), 2)
         scope3 = round(
-            (payload.short_haul_flights * 0.15) +
-            (payload.long_haul_flights * 0.60) +
-            ((payload.cloud_spend_usd / 1000.0) * 0.50),
+            (payload.short_haul_flights * c_scope3_short) +
+            (payload.long_haul_flights * c_scope3_long) +
+            ((payload.cloud_spend_usd / 1000.0) * c_scope3_cloud),
             2
         )
 

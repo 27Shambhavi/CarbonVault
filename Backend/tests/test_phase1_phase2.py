@@ -103,3 +103,62 @@ async def test_realtime_event_bus():
     identity = validate_ticket(ticket)
     assert identity["role"] == "admin"
     assert identity["email"] == "admin@carbonvault.com"
+
+
+def test_phase1_public_config_endpoint():
+    resp = client.get("/config/public")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "ok"
+    assert "configs" in data
+    configs = data["configs"]
+    assert "base_price_usd" in configs
+    assert "marketplace_commission_pct" in configs
+    assert "inr_usd_fallback_rate" in configs
+    assert configs["base_price_usd"]["source"] is not None
+
+
+def test_phase1_plantation_types_endpoint():
+    resp = client.get("/config/plantation-types")
+    assert resp.status_code == 200
+    data = resp.json()
+    types = data.get("types", data)
+    assert isinstance(types, list)
+    assert len(types) >= 4
+    keys = [t["type_key"] for t in types]
+    assert "mangrove" in keys
+    assert "teak" in keys
+    mangrove = next(t for t in types if t["type_key"] == "mangrove")
+    assert "IPCC" in mangrove["source"]
+
+
+def test_phase1_fx_rate_endpoint():
+    resp = client.get("/config/fx-rate")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "rate" in data
+    assert data["rate"] > 70.0
+    assert "source" in data
+
+
+def test_phase1_grs_score_endpoint():
+    resp = client.get("/grs/score?company=Microsoft%20Sustainability")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "score" in data
+    assert 0 <= data["score"] <= 1000
+    assert 0 <= data.get("score_100", 0) <= 100
+    assert "transparency" in data
+    assert "quality" in data
+
+
+def test_phase1_esg_truthful_reporting():
+    resp = client.get("/esg/portfolio?company=Microsoft%20Sustainability")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "total_offset_tonnes" in data
+    # Ensure no fabricated 49400
+    assert data["total_offset_tonnes"] != 49400
+    assert "disclaimer" in data
+    assert "reporting_frameworks_aligned" in data
+

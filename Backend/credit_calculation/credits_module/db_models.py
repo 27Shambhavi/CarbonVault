@@ -1,5 +1,4 @@
-# credits_module/db_models.py
-
+from datetime import datetime
 from sqlalchemy import Column, Integer, Float, String, Date, DateTime, Text, ForeignKey, Boolean
 from sqlalchemy.orm import relationship
 from .db import Base
@@ -335,3 +334,55 @@ class PhotoHash(Base):
     created_at = Column(DateTime, nullable=False)
 
     project = relationship("Project")
+
+
+class SystemConfig(Base):
+    __tablename__ = "system_config"
+
+    key = Column(String, primary_key=True, index=True)
+    value = Column(String, nullable=False)
+    unit = Column(String, nullable=True)
+    source = Column(String, nullable=True)
+    is_public = Column(Boolean, default=False)
+    updated_by = Column(String, nullable=True)
+    updated_at = Column(DateTime, default=datetime.utcnow)
+
+
+class ConfigAuditHistory(Base):
+    __tablename__ = "config_audit_history"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    key = Column(String, index=True, nullable=False)
+    old_value = Column(String, nullable=True)
+    new_value = Column(String, nullable=False)
+    unit = Column(String, nullable=True)
+    source = Column(String, nullable=True)
+    changed_by = Column(String, nullable=True)
+    changed_at = Column(DateTime, default=datetime.utcnow)
+
+
+class PlantationType(Base):
+    __tablename__ = "plantation_types"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    type_key = Column(String, unique=True, index=True, nullable=False)
+    label = Column(String, nullable=False)
+    annual_rate_min = Column(Float, nullable=False)
+    annual_rate_max = Column(Float, nullable=False)
+    annual_rate_mid = Column(Float, nullable=False)
+    unit = Column(String, default="credits/acre/year")
+    source = Column(String, nullable=False)
+    reviewed_at = Column(DateTime, default=datetime.utcnow)
+
+
+class FxRate(Base):
+    __tablename__ = "fx_rates"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    base_currency = Column(String, default="USD", nullable=False)
+    quote_currency = Column(String, default="INR", nullable=False)
+    rate = Column(Float, nullable=False)
+    source = Column(String, nullable=False)
+    fetched_at = Column(DateTime, default=datetime.utcnow, index=True)
+    is_override = Column(Boolean, default=False)
+    updated_by = Column(String, nullable=True)

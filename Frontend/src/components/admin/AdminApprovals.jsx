@@ -258,8 +258,6 @@ export default function AdminApprovals() {
     fontFamily: 'Plus Jakarta Sans, sans-serif'
   };
 
-  const inrAmount = (usd) => `₹${(usd * 83.5).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
-
   if (loading) return (
     <div style={{ padding: 28, display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '40vh' }}>
       <div style={{ textAlign: 'center' }}>

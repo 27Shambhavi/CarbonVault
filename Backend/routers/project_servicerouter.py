@@ -526,19 +526,19 @@ async def create_project(
             delta = math.sqrt(area_hectares / 10000.0) if area_hectares else 0.02
             polygon_clean = f"POLYGON(({longitude - delta:.4f} {latitude - delta:.4f}, {longitude + delta:.4f} {latitude - delta:.4f}, {longitude + delta:.4f} {latitude + delta:.4f}, {longitude - delta:.4f} {latitude + delta:.4f}, {longitude - delta:.4f} {latitude - delta:.4f}))"
 
-        # Find or create NGO
+        # Find or associate NGO
         ngo_name_clean = (ngo_name or "").strip()
-        if not ngo_name_clean or ngo_name_clean.lower() in ["ecoguard brazil", "ecoguard", "ngo", "demo"]:
-            ngo = db.query(NGO).filter(NGO.id == 1).first()
+        if ngo_name_clean:
+            ngo = db.query(NGO).filter(NGO.name == ngo_name_clean).first()
             if not ngo:
-                ngo = NGO(id=1, name="EcoGuard Brazil", email="contact@ecoguard.org")
+                ngo = NGO(name=ngo_name_clean)
                 db.add(ngo)
                 db.commit()
                 db.refresh(ngo)
         else:
-            ngo = db.query(NGO).filter(NGO.name == ngo_name_clean).first()
+            ngo = db.query(NGO).first()
             if not ngo:
-                ngo = NGO(name=ngo_name_clean)
+                ngo = NGO(name="Default Partner NGO", email="contact@carbonvault.org")
                 db.add(ngo)
                 db.commit()
                 db.refresh(ngo)
@@ -745,7 +745,7 @@ async def import_projects_csv(
             area_str = row.get("area_hectares") or row.get("area") or row.get("hectares")
             trees_str = row.get("number_of_trees") or row.get("trees") or row.get("tree_count")
             date_str = row.get("start_date") or row.get("date")
-            ngo_val = row.get("ngo_id") or row.get("ngo_name") or row.get("ngo") or "EcoGuard Brazil"
+            ngo_val = row.get("ngo_id") or row.get("ngo_name") or row.get("ngo") or ""
 
             # Validation
             if not name:
@@ -815,7 +815,7 @@ async def import_projects_csv(
             if not ngo:
                 ngo = db.query(NGO).first()
                 if not ngo:
-                    ngo = NGO(name="EcoGuard Brazil", email="contact@ecoguard.org")
+                    ngo = NGO(name=str(ngo_val) if ngo_val else "Partner NGO", email="contact@carbonvault.org")
                     db.add(ngo)
                     db.commit()
                     db.refresh(ngo)
@@ -1440,41 +1440,36 @@ def get_audit_logs():
 
 @router.get("/climate-analytics")
 def get_climate_analytics():
-    """Real climate resilience analytics and per-project co-benefit metrics."""
+    """Real climate resilience analytics derived strictly from approved afforestation/reforestation projects."""
     db = SessionLocal()
     try:
-        all_projects = db.query(Project).all()
-        approved = [p for p in all_projects if p.status == "approved"]
+        approved = db.query(Project).filter(Project.status == "approved").all()
 
-        total_co2 = sum(p.credits or 0 for p in approved)
-        total_area = sum(p.area_hectares or 0 for p in approved)
+        total_co2 = sum(p.credits or 0.0 for p in approved)
+        total_area = sum(p.area_hectares or 0.0 for p in approved)
 
-        # Calculate co-benefits from real project data
-        avg_env = sum(p.env_score or 80.0 for p in approved) / len(approved) if approved else 86.0
-        avg_mrv = sum(p.mrv_score or 80.0 for p in approved) / len(approved) if approved else 88.0
+        # Derive verified co-benefits from approved project attributes
+        if approved:
+            avg_env = sum(p.env_score or 75.0 for p in approved) / len(approved)
+            avg_mrv = sum(p.mrv_score or 75.0 for p in approved) / len(approved)
 
-        # Authentic scaling based on live MRV & Eco scores
-        flood_control = int(min(98, max(55, round(avg_env * 0.90))))
-        biodiversity = int(min(99, max(60, round(avg_env * 0.97))))
-        fisheries = int(min(95, max(45, round(avg_env * 0.72))))
-        coastal_prot = int(min(96, max(50, round(avg_env * 0.82))))
-        carbon_seq = int(min(99, max(65, round(avg_mrv * 1.05))))
-        livelihood = int(min(95, max(50, round(avg_env * 0.77))))
-
-        co_benefits = [
-            {"metric": "Flood Control", "value": flood_control},
-            {"metric": "Biodiversity", "value": biodiversity},
-            {"metric": "Fisheries", "value": fisheries},
-            {"metric": "Coastal Prot.", "value": coastal_prot},
-            {"metric": "Carbon Seq.", "value": carbon_seq},
-            {"metric": "Livelihood", "value": livelihood},
-        ]
+            co_benefits = [
+                {"metric": "Flood Control", "value": int(round(min(98, max(40, avg_env * 0.90))))},
+                {"metric": "Biodiversity", "value": int(round(min(99, max(40, avg_env * 0.96))))},
+                {"metric": "Coastal & Soil Prot.", "value": int(round(min(96, max(40, avg_env * 0.85))))},
+                {"metric": "Carbon Sequestration", "value": int(round(min(99, max(40, avg_mrv * 1.02))))},
+                {"metric": "Community Livelihood", "value": int(round(min(95, max(40, avg_env * 0.78))))},
+            ]
+        else:
+            co_benefits = []
 
         return {
+            "status": "ok",
             "co2_removed_tons": round(total_co2, 2),
             "forest_area_ha": round(total_area, 2),
-            "renewable_energy_gwh": round(len(approved) * 14.8, 1),
+            "active_projects_count": len(approved),
             "co_benefits": co_benefits,
+            "source": "CarbonVault Ecological MRV Registry"
         }
     finally:
         db.close()
@@ -1751,20 +1746,12 @@ def get_users():
     try:
         users = db.query(User).all()
         if not users:
-            # Seed default users
-            default_users = [
-                User(id=1, name="EcoGuard Brazil", email="contact@ecoguard.org", role="ngo", projects=3, credits=34600, joined="2023-06-12", status="active"),
-                User(id=2, name="Microsoft Sustainability", email="carbon@microsoft.com", role="buyer", projects=0, credits=15200, joined="2023-09-01", status="active"),
-                User(id=3, name="Google Carbon Team", email="sustainability@google.com", role="buyer", projects=0, credits=28000, joined="2023-07-14", status="active"),
-                User(id=4, name="Green Delta", email="info@greendelta.org", role="ngo", projects=2, credits=8200, joined="2024-01-05", status="active"),
-                User(id=5, name="Shell Renewables", email="offsets@shell.com", role="buyer", projects=0, credits=42000, joined="2023-04-22", status="active"),
-                User(id=6, name="Borneo Earth", email="team@borneoearth.org", role="ngo", projects=1, credits=0, joined="2024-03-08", status="suspended"),
-                User(id=7, name="HSBC Green Finance", email="carbon@hsbc.com", role="buyer", projects=0, credits=9800, joined="2024-02-17", status="active"),
-                User(id=8, name="CongoCare", email="ops@congocare.org", role="ngo", projects=2, credits=22000, joined="2023-11-30", status="active"),
-            ]
-            db.add_all(default_users)
-            db.commit()
-            users = db.query(User).all()
+            try:
+                from main import seed_initial_data
+                seed_initial_data()
+                users = db.query(User).all()
+            except Exception:
+                users = []
 
         return [
             {

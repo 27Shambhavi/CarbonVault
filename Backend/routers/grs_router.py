@@ -1,180 +1,183 @@
-# grs_engine.py
+# routers/grs_router.py
+"""
+Green Reputation Score (GRS) Engine:
+Computes unbiased, non-hardcoded corporate climate performance scores
+derived from real stored transactions, wallet balances, project verifications,
+and configurable weights from system_config.
+"""
 
-from pydantic import BaseModel
-from typing import Dict
 import math
+from typing import Dict, Any, Optional
+from datetime import datetime
 
-from fastapi import APIRouter
-router = APIRouter()
+from fastapi import APIRouter, Depends, Query
+from pydantic import BaseModel
+from sqlalchemy.orm import Session
+from sqlalchemy import desc
 
-# -------------------------
-# In-Memory Database
-# -------------------------
+from credit_calculation.credits_module.db import get_db
+from credit_calculation.credits_module.db_models import (
+    Wallet, Transaction, Project, User, SystemConfig
+)
 
-corporates: Dict[str, dict] = {
-    "Microsoft Sustainability": {
-        "GRS": 88.5,
-        "Badge": "Platinum",
-        "Breakdown": {"Impact Score": 92.0, "Quality Score": 89.5, "Commitment Score": 85.0, "Credibility Score": 87.0}
-    },
-    "Google Carbon Team": {
-        "GRS": 84.2,
-        "Badge": "Gold",
-        "Breakdown": {"Impact Score": 88.0, "Quality Score": 85.0, "Commitment Score": 80.0, "Credibility Score": 83.5}
-    },
-    "HSBC Green Finance": {
-        "GRS": 76.8,
-        "Badge": "Gold",
-        "Breakdown": {"Impact Score": 79.0, "Quality Score": 77.0, "Commitment Score": 75.0, "Credibility Score": 76.0}
-    },
-    "Shell Renewables": {
-        "GRS": 68.4,
-        "Badge": "Silver",
-        "Breakdown": {"Impact Score": 70.0, "Quality Score": 69.0, "Commitment Score": 65.0, "Credibility Score": 69.0}
-    }
-}
+router = APIRouter(tags=["GRS"])
 
 
-# -------------------------
-# Input Model
-# -------------------------
-
-class CorporateImpact(BaseModel):
-    company_name: str
-
-    # Climate Impact
-    total_carbon_funded: float
-    avg_survival_probability: float
-    avg_project_suitability: float
-    avg_project_risk: float
-
-    # Governance
-    years_committed: int
-    transparency_score: float
-    verification_score: float
+def get_config_weight(db: Session, key: str, default: float) -> float:
+    row = db.query(SystemConfig).filter(SystemConfig.key == key).first()
+    if row and row.value:
+        try:
+            return float(row.value)
+        except ValueError:
+            pass
+    return default
 
 
-# -------------------------
-# Core GRS Formula (Unbiased)
-# -------------------------
+def compute_company_grs(db: Session, company_name: str) -> Dict[str, Any]:
+    """Compute real GRS score for a company using verified database ledger data."""
+    # 1. Fetch real wallet & transactions
+    wallet = db.query(Wallet).filter(Wallet.corporate_name == company_name).first()
+    txns = db.query(Transaction).filter(Transaction.corporate_name == company_name).all()
+    
+    total_carbon = wallet.total_credits if wallet else sum(t.quantity or 0 for t in txns)
+    total_spent = wallet.total_spent_inr if wallet else sum(t.amount_inr or 0 for t in txns)
+    txn_count = len(txns)
 
-def calculate_grs(data: CorporateImpact):
+    # 2. Configurable weights from system_config
+    w_transparency = get_config_weight(db, "grs_weight_transparency", 0.35)
+    w_quality = get_config_weight(db, "grs_weight_quality", 0.40)
+    w_commitment = get_config_weight(db, "grs_weight_commitment", 0.25)
 
-    # 1️⃣ Effective Climate Impact
-    effective_carbon = (
-        data.total_carbon_funded *
-        data.avg_survival_probability
-    )
-
-    # Log scaling removes size bias
-    impact_score = min(math.log1p(effective_carbon) / 12, 1) * 100
-
-    # 2️⃣ Project Quality
-    quality_score = (
-        (data.avg_project_suitability / 100) * 0.6 +
-        (1 - data.avg_project_risk) * 0.4
-    ) * 100
-
-    # 3️⃣ Long-Term Commitment
-    commitment_score = min(data.years_committed / 15, 1) * 100
-
-    # 4️⃣ Transparency & Verification
-    credibility_score = (
-        data.transparency_score * 0.5 +
-        data.verification_score * 0.5
-    )
-
-    # Final Weighted Score
-    grs = (
-        impact_score * 0.35 +
-        quality_score * 0.25 +
-        commitment_score * 0.20 +
-        credibility_score * 0.20
-    )
-
-    breakdown = {
-        "Impact Score": round(impact_score, 2),
-        "Quality Score": round(quality_score, 2),
-        "Commitment Score": round(commitment_score, 2),
-        "Credibility Score": round(credibility_score, 2)
-    }
-
-    return round(grs, 2), breakdown
-
-
-# -------------------------
-# Badge Logic
-# -------------------------
-
-def badge_from_score(score):
-
-    if score >= 85:
-        return "Platinum"
-    elif score >= 70:
-        return "Gold"
-    elif score >= 55:
-        return "Silver"
-    elif score >= 40:
-        return "Bronze"
+    # 3. Project quality proxy: average MRV and survival probability of supported projects
+    supported_pids = list({t.project_id for t in txns if t.project_id})
+    if supported_pids:
+        supported_projects = db.query(Project).filter(Project.project_id.in_(supported_pids)).all()
+        avg_suitability = (
+            sum(p.mrv_score or 80.0 for p in supported_projects) / len(supported_projects)
+            if supported_projects else 75.0
+        )
+        avg_risk = (
+            sum(p.fraud_risk or 5.0 for p in supported_projects) / len(supported_projects)
+            if supported_projects else 5.0
+        )
     else:
-        return "Starter"
+        avg_suitability = 70.0
+        avg_risk = 5.0
 
+    # 4. Dimension Sub-scores (0 - 100)
+    # Impact / Volume (log-scaled to prevent extreme corporate scale bias)
+    volume_score = min(100.0, (math.log1p(total_carbon) / math.log1p(50000.0)) * 100.0) if total_carbon > 0 else 0.0
+    # Quality (suitability minus fraud risk penalty)
+    quality_score = max(0.0, min(100.0, avg_suitability - (avg_risk * 1.5)))
+    # Transparency (verified ledger transactions audit ratio)
+    transparency_score = min(100.0, 50.0 + (min(txn_count, 10) * 5.0)) if txn_count > 0 else 0.0
+    # Commitment (repeat purchases and portfolio depth)
+    commitment_score = min(100.0, 40.0 + (min(len(supported_pids), 6) * 10.0)) if supported_pids else 0.0
 
-# -------------------------
-# Leaderboard Builder
-# -------------------------
+    # 5. Composite 100-point GRS
+    normalized_weights = w_transparency + w_quality + w_commitment
+    raw_grs = (
+        (transparency_score * w_transparency) +
+        (quality_score * w_quality) +
+        (commitment_score * w_commitment)
+    ) / (normalized_weights if normalized_weights > 0 else 1.0)
 
-def build_leaderboard():
+    # Scale to 1,000 max score as per UI convention
+    final_score_1000 = int(round(raw_grs * 10))
 
-    sorted_companies = sorted(
-        corporates.items(),
-        key=lambda x: x[1]["GRS"],
-        reverse=True
-    )
-
-    leaderboard = []
-
-    rank = 1
-    for company, data in sorted_companies:
-        leaderboard.append({
-            "Rank": rank,
-            "Company": company,
-            "GRS": data["GRS"],
-            "Badge": data["Badge"]
-        })
-        rank += 1
-
-    return leaderboard
-
-
-# -------------------------
-# API Endpoints
-# -------------------------
-
-@router.post("/calculate-grs")
-def compute_grs(data: CorporateImpact):
-
-    score, breakdown = calculate_grs(data)
-    badge = badge_from_score(score)
-
-    # Save / Update company
-    corporates[data.company_name] = {
-        "GRS": score,
-        "Badge": badge,
-        "Breakdown": breakdown
-    }
+    # Badge classification
+    if final_score_1000 >= 800:
+        badge = "Platinum Verifier"
+    elif final_score_1000 >= 650:
+        badge = "Gold Verifier"
+    elif final_score_1000 >= 500:
+        badge = "Silver Verifier"
+    elif final_score_1000 >= 300:
+        badge = "Bronze Verifier"
+    else:
+        badge = "Participant"
 
     return {
-        "Company": data.company_name,
-        "Green Reputation Score": score,
-        "Badge": badge,
-        "Breakdown": breakdown,
-        "Message": "GRS calculated successfully. Use /leaderboard to view rankings."
+        "company_name": company_name,
+        "score": final_score_1000,
+        "score_100": round(raw_grs, 1),
+        "badge": badge,
+        "transparency": int(round(transparency_score)),
+        "quality": int(round(quality_score)),
+        "commitment": int(round(commitment_score)),
+        "carbon_funded": round(total_carbon, 1),
+        "transactions_count": txn_count
+    }
+
+
+@router.get("/score")
+def get_corporate_grs_score(
+    company_name: str = Query("Corporate Buyer"),
+    db: Session = Depends(get_db)
+):
+    """
+    Computes real-time GRS score for a corporate organization,
+    and calculates its rank strictly among real registered corporate buyers.
+    """
+    # Real registered corporate entities in database
+    corporate_users = db.query(User).filter(User.role == "corporate").all()
+    corp_names = list({u.name for u in corporate_users if u.name})
+    if company_name not in corp_names:
+        corp_names.append(company_name)
+
+    # Score all real entities to compute real rank
+    all_scores = [compute_company_grs(db, name) for name in corp_names]
+    all_scores.sort(key=lambda x: x["score"], reverse=True)
+
+    # Determine rank
+    rank = 1
+    target_data = None
+    for idx, item in enumerate(all_scores, 1):
+        if item["company_name"].lower() == company_name.lower():
+            rank = idx
+            target_data = item
+            break
+
+    if not target_data:
+        target_data = compute_company_grs(db, company_name)
+        rank = 1
+
+    return {
+        "status": "ok",
+        "company_name": target_data["company_name"],
+        "score": target_data["score"],
+        "max_score": 1000,
+        "rank": rank,
+        "total": max(1, len(all_scores)),
+        "badge": target_data["badge"],
+        "transparency": target_data["transparency"],
+        "quality": target_data["quality"],
+        "commitment": target_data["commitment"],
+        "carbon_funded": target_data["carbon_funded"],
+        "transactions_count": target_data["transactions_count"]
     }
 
 
 @router.get("/leaderboard")
-def get_leaderboard():
-    return build_leaderboard()
+def get_grs_leaderboard(db: Session = Depends(get_db)):
+    """Real ranking among registered organisations only. Empty when none."""
+    corporate_users = db.query(User).filter(User.role == "corporate").all()
+    corp_names = list({u.name for u in corporate_users if u.name})
+    
+    if not corp_names:
+        return {"status": "ok", "leaderboard": []}
 
-print("GRS router loaded")
+    scores = [compute_company_grs(db, name) for name in corp_names]
+    scores.sort(key=lambda x: x["score"], reverse=True)
+    
+    leaderboard = [
+        {
+            "rank": idx,
+            "company": s["company_name"],
+            "score": s["score"],
+            "badge": s["badge"],
+            "carbon_funded": s["carbon_funded"]
+        }
+        for idx, s in enumerate(scores, 1)
+    ]
+    return {"status": "ok", "leaderboard": leaderboard}

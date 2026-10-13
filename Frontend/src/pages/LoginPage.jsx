@@ -172,7 +172,7 @@ export default function LoginPage() {
 
         <div style={{marginTop:28,display:'flex',alignItems:'center',gap:14}}>
           <div style={{height:1,flex:1,background:`linear-gradient(90deg, rgba(45,212,191,0.4), transparent)`}}/>
-          <span style={{fontSize:11,color:T.t4,fontWeight:600,letterSpacing:'0.8px',textTransform:'uppercase',whiteSpace:'nowrap'}}>Live Blockchain & Satellite Ledger</span>
+          <span style={{fontSize:11,color:T.t4,fontWeight:600,letterSpacing:'0.8px',textTransform:'uppercase',whiteSpace:'nowrap'}}>Cryptographic Audit & Satellite MRV Ledger</span>
         </div>
       </div>
 

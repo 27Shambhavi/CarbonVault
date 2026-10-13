@@ -16,7 +16,8 @@ from sqlalchemy import func
 
 from credit_calculation.credits_module.db import get_db
 from credit_calculation.credits_module.db_models import (
-    Project, FundingDetails, Transaction, Wallet, ProjectCredits, NGO
+    Project, FundingDetails, Transaction, Wallet, ProjectCredits, NGO,
+    AuditLog, Certificate, User
 )
 
 router = APIRouter(tags=["Statistics"])
@@ -211,26 +212,48 @@ def get_stats_overview(
 @router.get("/public/stats")
 def get_public_stats(db: Session = Depends(get_db)):
     """
-    Real public marketing numbers computed dynamically from the database.
-    Replaces all static hardcoded numbers on public landing and login pages.
+    Real public metrics computed dynamically from database tables.
+    Single source of truth used across LoginPage, Impact Stats, and Dashboards.
+    Computes: credits issued, active projects, audits conducted, certificates, fraud flags, approval rate.
     """
+    total_projects = db.query(Project).count()
     approved_projects = db.query(Project).filter(Project.status == "approved").all()
-    total_sequestered = sum(p.credits or 0 for p in approved_projects)
-    active_ngos = db.query(NGO).count()
+    credits_issued = sum(p.credits or 0 for p in approved_projects)
+    active_projects_count = len(approved_projects)
+    
+    audits_conducted = db.query(AuditLog).count()
+    certificates_issued = db.query(Certificate).count()
+    
+    # Fraud flags identified
+    fraud_flags = db.query(Project).filter(Project.fraud_risk > 15.0).count()
+    
+    # Real approval rate
+    approval_rate = round((active_projects_count / total_projects * 100.0), 1) if total_projects > 0 else 0.0
+    
+    # Organizations
+    ngos_count = db.query(NGO).count()
+    corps_count = db.query(User).filter(User.role == "corporate").count()
+    total_orgs = ngos_count + corps_count
 
     funding_rows = db.query(FundingDetails).all()
     total_funding = sum(f.total_funding or 0 for f in funding_rows)
-    if total_funding == 0:
-        total_funding = sum((p.credits or 0) * (p.price or 25.0) for p in approved_projects)
-
     txns = db.query(Transaction).all()
     total_tx_usd = sum(t.amount_usd or 0 for t in txns)
 
     return {
-        "total_tonnes_sequestered": round(total_sequestered, 0),
-        "verified_projects_count": len(approved_projects),
-        "active_ngos_count": active_ngos,
+        "credits_issued": round(credits_issued, 0),
+        "total_tonnes_sequestered": round(credits_issued, 0),
+        "active_projects": active_projects_count,
+        "verified_projects_count": active_projects_count,
+        "total_projects": total_projects,
+        "audits_conducted": audits_conducted,
+        "certificates_issued": certificates_issued,
+        "fraud_flags": fraud_flags,
+        "approval_rate_pct": approval_rate,
+        "active_organisations": total_orgs,
+        "active_ngos_count": ngos_count,
+        "corporate_buyers_count": corps_count,
         "total_capital_deployed_usd": round(total_funding + total_tx_usd, 0),
         "as_of": datetime.utcnow().isoformat() + "Z",
-        "source": "CarbonVault Ledger Database"
+        "source": "CarbonVault Verified Ledger Database"
     }
