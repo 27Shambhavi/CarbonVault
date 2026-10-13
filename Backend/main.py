@@ -1068,6 +1068,7 @@ app.include_router(marketplace_router, prefix="/marketplace", tags=["Marketplace
 app.include_router(credit_router, tags=["Credits"])
 app.include_router(fraud_router, prefix="/fraud", tags=["Fraud Detection"])
 app.include_router(payment_router, prefix="/payment", tags=["Payment"])
+app.include_router(payment_router, prefix="", tags=["Payment-Root"])
 app.include_router(esg_router, prefix="/esg", tags=["ESG"])
 app.include_router(realtime_router)
 app.include_router(auth_router)

@@ -24,6 +24,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 from core.config import RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET
+from credit_calculation.credits_module.db import SessionLocal
 from credit_calculation.credits_module.db_models import (
     Project, FundingDetails, Transaction, Wallet, ProjectCredits, CorporateRequest, Certificate, FxRate
 )
@@ -386,6 +387,7 @@ def get_transactions(company: str):
                 "amount_inr": t.amount_inr,
                 "amount_usd": t.amount_usd,
                 "status": t.status,
+                "razorpay_order_id": t.razorpay_order_id,
                 "razorpay_payment_id": t.razorpay_payment_id,
                 "certificate_id": cert_id,
             })
