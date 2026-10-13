@@ -27,15 +27,23 @@ let _authToken = null;
 export function setAuthToken(token) {
   _authToken = token;
   if (token) {
-    try { localStorage.setItem('carbonvault_jwt', token); } catch {}
+    try {
+      localStorage.setItem('carbonvault_token', token);
+      localStorage.setItem('carbonvault_jwt', token);
+    } catch {}
   } else {
-    try { localStorage.removeItem('carbonvault_jwt'); } catch {}
+    try {
+      localStorage.removeItem('carbonvault_token');
+      localStorage.removeItem('carbonvault_jwt');
+    } catch {}
   }
 }
 
 export function getAuthToken() {
   if (!_authToken) {
-    try { _authToken = localStorage.getItem('carbonvault_jwt'); } catch {}
+    try {
+      _authToken = localStorage.getItem('carbonvault_token') || localStorage.getItem('carbonvault_jwt');
+    } catch {}
   }
   return _authToken;
 }
@@ -139,6 +147,19 @@ export async function loginUser(email, password, timeoutMs = 15000) {
     body: JSON.stringify({ email, password }),
     timeout: timeoutMs,
   }, 0);
+}
+
+export async function registerUser(registrationData, timeoutMs = 15000) {
+  return request(`${API_BASE}/auth/register`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(registrationData),
+    timeout: timeoutMs,
+  }, 0);
+}
+
+export async function fetchCurrentUserProfile() {
+  return request(`${API_BASE}/auth/me`, { timeout: 8000 }, 0);
 }
 
 // ══════════════════════════════════════════════════════════════════════════════

@@ -51,7 +51,8 @@ def test_auth_hashing_and_jwt():
     mock_user = User(id=99, email="testadmin@carbonvault.com", name="Test Admin", role="admin")
     token = create_access_token(mock_user)
     payload = decode_access_token(token)
-    assert payload["sub"] == "testadmin@carbonvault.com"
+    assert payload["email"] == "testadmin@carbonvault.com"
+    assert payload["sub"] == str(mock_user.id)
     assert payload["role"] == "admin"
 
 
@@ -161,4 +162,92 @@ def test_phase1_esg_truthful_reporting():
     assert data["total_offset_tonnes"] != 49400
     assert "disclaimer" in data
     assert "reporting_frameworks_aligned" in data
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# PHASE 2 TESTS: REGISTRATION, JWT ME, RATE LIMITING, AUDIT LOGGING
+# ══════════════════════════════════════════════════════════════════════════════
+
+def test_phase2_ngo_registration_and_login():
+    import uuid
+    uid = uuid.uuid4().hex[:6]
+    test_email = f"ngo_{uid}@testvault.org"
+    reg_payload = {
+        "email": test_email,
+        "password": "StrongPassword123!",
+        "full_name": "Amazonian Forest Guardian",
+        "role": "ngo",
+        "organization_name": "Guardian Ecology Foundation",
+        "country": "Brazil",
+        "registration_number": "BR-2026-99"
+    }
+    # 1. Register NGO
+    resp = client.post("/auth/register", json=reg_payload)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "ok"
+    assert data["user"]["role"] == "ngo"
+    assert "access_token" in data
+
+    # 2. Login with newly registered credentials
+    login_resp = client.post("/auth/login", json={"email": test_email, "password": "StrongPassword123!"})
+    assert login_resp.status_code == 200
+    login_data = login_resp.json()
+    assert login_data["user"]["email"] == test_email
+    assert login_data["user"]["role"] == "ngo"
+
+    # 3. Call /auth/me with Bearer token
+    token = login_data["access_token"]
+    me_resp = client.get("/auth/me", headers={"Authorization": f"Bearer {token}"})
+    assert me_resp.status_code == 200
+    me_data = me_resp.json()
+    assert me_data["authenticated"] is True
+    assert me_data["email"] == test_email
+    assert me_data["role"] == "ngo"
+
+
+def test_phase2_corporate_registration_and_wallet():
+    import uuid
+    uid = uuid.uuid4().hex[:6]
+    test_email = f"corp_{uid}@testglobal.com"
+    reg_payload = {
+        "email": test_email,
+        "password": "CorporatePassword2026!",
+        "full_name": "Sarah Connor",
+        "role": "corporate",
+        "company_name": f"Nordic Energy {uid}",
+        "industry": "Renewables",
+        "country": "Norway",
+        "website": "https://nordicenergy.example.com"
+    }
+    resp = client.post("/auth/register", json=reg_payload)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["user"]["role"] == "corporate"
+
+    # Verify duplicate email is rejected
+    dup_resp = client.post("/auth/register", json=reg_payload)
+    assert dup_resp.status_code == 400
+
+
+def test_phase2_rate_limiting():
+    # Test rate limiter: 5 allowed, 6th triggers 429 Too Many Requests
+    test_ip = "192.0.2.77"
+    for i in range(5):
+        resp = client.post(
+            "/auth/login",
+            json={"email": "ratelimit@example.com", "password": "wrong"},
+            headers={"X-Forwarded-For": test_ip}
+        )
+        assert resp.status_code in [401, 429]
+
+    # 6th attempt must be 429
+    blocked_resp = client.post(
+        "/auth/login",
+        json={"email": "ratelimit@example.com", "password": "wrong"},
+        headers={"X-Forwarded-For": test_ip}
+    )
+    assert blocked_resp.status_code == 429
+    assert "Too many" in blocked_resp.json()["detail"]
+
 

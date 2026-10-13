@@ -1,5 +1,8 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { fetchNotifications, markNotificationRead, markAllNotificationsRead, setApiAdminContext } from './services/api.js';
+import {
+  fetchNotifications, markNotificationRead, markAllNotificationsRead,
+  setApiAdminContext, getAuthToken, setAuthToken, fetchCurrentUserProfile
+} from './services/api.js';
 import { useLiveStream } from './hooks/useLiveStream.js';
 import { LiveToastContainer } from './components/LiveToast.jsx';
 
@@ -183,15 +186,59 @@ export function AppProvider({ children }) {
     }
   };
 
-  const login = (role, customAdminRole) => {
-    if (role === 'public') {
+  // Session restoration on page mount (Task 2.5)
+  useEffect(() => {
+    const token = getAuthToken();
+    if (token) {
+      fetchCurrentUserProfile()
+        .then((res) => {
+          if (res.data && res.data.authenticated) {
+            setUser(res.data);
+          } else {
+            setAuthToken(null);
+          }
+        })
+        .catch(() => {
+          setAuthToken(null);
+        });
+    }
+  }, []);
+
+  // Listen for session expiry event
+  useEffect(() => {
+    const handleExpired = () => {
+      setUser(null);
+      setAuthToken(null);
+      addToast({
+        type: 'warning',
+        title: 'Session Expired',
+        message: 'Your session has expired. Please sign in again.'
+      });
+    };
+    window.addEventListener('carbonvault:auth-expired', handleExpired);
+    return () => window.removeEventListener('carbonvault:auth-expired', handleExpired);
+  }, [addToast]);
+
+  const login = (userOrRole, tokenOrCustomRole) => {
+    if (userOrRole === 'public') {
       setUser({ role: 'public', name: 'Public Visitor', org: 'Carbon Transparency Portal', email: 'guest@carbonvault.com' });
       setApiAdminContext('', 'guest@carbonvault.com');
       setPage('dashboard');
       return;
     }
+    // If passed a real user profile object from /auth/login
+    if (typeof userOrRole === 'object' && userOrRole !== null) {
+      if (tokenOrCustomRole && typeof tokenOrCustomRole === 'string') {
+        setAuthToken(tokenOrCustomRole);
+      }
+      setUser(userOrRole);
+      setPage('dashboard');
+      return;
+    }
+    // Fallback for role identifier
+    const role = userOrRole;
     const account =
-      demoAccounts.find((a) => a.role === role && (!customAdminRole || a.admin_role === customAdminRole)) ||
+      demoAccounts.find((a) => a.role === role && (!tokenOrCustomRole || a.admin_role === tokenOrCustomRole)) ||
       demoAccounts.find((a) => a.role === role);
     if (!account) return;
     setUser(account);
@@ -205,6 +252,7 @@ export function AppProvider({ children }) {
 
   const logout = () => {
     setUser(null);
+    setAuthToken(null);
     setApiAdminContext('', '');
     setPage('dashboard');
   };
