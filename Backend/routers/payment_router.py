@@ -23,7 +23,7 @@ from sqlalchemy.orm import Session
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-from core.config import RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET, PAYMENT_MODE
+from core.config import RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET, RAZORPAY_WEBHOOK_SECRET, PAYMENT_MODE
 from credit_calculation.credits_module.db import SessionLocal
 from credit_calculation.credits_module.db_models import (
     Project, FundingDetails, Transaction, Wallet, ProjectCredits, CorporateRequest, Certificate, FxRate,
@@ -608,6 +608,7 @@ async def razorpay_webhook(
 
     # Get secret: test secret or production webhook secret
     webhook_secret = (
+        RAZORPAY_WEBHOOK_SECRET or
         os.getenv("RAZORPAY_WEBHOOK_SECRET") or
         RAZORPAY_KEY_SECRET or
         "9m0Tq4EB8zFLXKJUgzgmCy9I"
