@@ -27,5 +27,5 @@ statsmodels>=0.14.0
 bcrypt>=4.0.0
 pyjwt>=2.8.0
 sse-starlette>=2.0.0
-email-validator>=2.0.0
+email-validator>=2.3.0
 hypothesis>=6.100.0
