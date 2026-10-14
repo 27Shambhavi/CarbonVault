@@ -25,3 +25,19 @@ services:
         value: "False"
       - key: APP_MODE
         value: demo
+
+  - type: cron
+    name: carbonvault-worker
+    runtime: python
+    rootDir: Backend
+    buildCommand: pip install -r requirements.txt
+    schedule: "0 */6 * * *"
+    startCommand: python worker.py --job all
+    plan: free
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: APP_MODE
+        value: demo

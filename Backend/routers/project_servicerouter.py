@@ -74,23 +74,17 @@ def check_admin_permission(
     # 1. Check verified JWT if present
     if authorization and "bearer " in authorization.lower():
         token = authorization.split(" ")[-1]
-        try:
-            from routers.auth_router import decode_access_token
-            claims = decode_access_token(token)
-            token_role = claims.get("role")
-            token_admin_role = claims.get("admin_role")
-            if token_role != "admin":
-                raise HTTPException(status_code=403, detail="Forbidden: Admin access required.")
-            if required_role == "super_admin" and token_admin_role == "approver":
-                raise HTTPException(status_code=403, detail="Super Admin privilege required. Action forbidden for Project Approver.")
-            return token_admin_role or "super_admin"
-        except HTTPException:
-            raise
-        except Exception:
-            pass
+        from routers.auth_router import decode_access_token
+        claims = decode_access_token(token)
+        token_role = claims.get("role")
+        token_admin_role = claims.get("admin_role")
+        if token_role != "admin":
+            raise HTTPException(status_code=403, detail="Forbidden: Admin access required.")
+        if required_role == "super_admin" and token_admin_role == "approver":
+            raise HTTPException(status_code=403, detail="Super Admin privilege required. Action forbidden for Project Approver.")
+        return token_admin_role or "super_admin"
 
     # 2. Check verified DB user by email
-    role = "super_admin"
     if x_admin_email:
         email_clean = x_admin_email.strip().lower()
         if db:
@@ -99,12 +93,20 @@ def check_admin_permission(
                 if u.role != "admin":
                     raise HTTPException(status_code=403, detail="Forbidden: Admin access required.")
                 role = u.admin_role or "super_admin"
-            elif "approver" in email_clean:
-                role = "approver"
+            else:
+                raise HTTPException(status_code=403, detail="Forbidden: Admin account not found.")
         elif "approver" in email_clean:
             role = "approver"
+        else:
+            role = "super_admin"
     elif x_admin_role:
         role = x_admin_role.lower().strip()
+    else:
+        # No credentials provided at all -> strictly forbidden!
+        raise HTTPException(
+            status_code=403,
+            detail="Forbidden: Authentication or admin credentials required."
+        )
 
     if required_role == "super_admin" and role == "approver":
         raise HTTPException(
@@ -1957,10 +1959,14 @@ def update_project_status(
     status: Optional[str] = None,
     comment: Optional[str] = None,
     changed_by: Optional[str] = "Alex Mercer (Admin)",
-    payload: Optional[ProjectStatusUpdate] = None
+    payload: Optional[ProjectStatusUpdate] = None,
+    authorization: Optional[str] = Header(None),
+    x_admin_role: Optional[str] = Header(None),
+    x_admin_email: Optional[str] = Header(None)
 ):
     db = SessionLocal()
     try:
+        check_admin_permission(x_admin_role, x_admin_email, required_role="approver", db=db, authorization=authorization)
         project = db.query(Project).filter(
             (Project.project_id == project_id) | (Project.id == project_id if str(project_id).isdigit() else False)
         ).first()
@@ -2000,7 +2006,7 @@ def update_project_status(
             credit_result = calculate_and_store_credits(project, db)
             db.refresh(project)
             def _async_sync(pid: str):
-                from core.database import SessionLocal
+                from credit_calculation.credits_module.db import SessionLocal
                 bg_db = SessionLocal()
                 try:
                     from services.satellite import sync_project_ndvi

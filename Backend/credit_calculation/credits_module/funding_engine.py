@@ -15,6 +15,7 @@ Ecosystem multipliers adjust price based on plantation value:
 
 Price range: ₹418 - ₹585 per credit ($5 - $7 USD)
 """
+from typing import Optional
 
 
 class FundingEngine:
@@ -41,7 +42,8 @@ class FundingEngine:
         self,
         verified_credits: float,
         ecosystem_type: str,
-        base_market_price: float = 12.0
+        base_market_price: float = 12.0,
+        inr_rate: Optional[float] = None,
     ) -> dict:
         """
         Calculate total funding value for verified credits.

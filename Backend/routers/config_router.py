@@ -15,6 +15,7 @@ from credit_calculation.credits_module.db_models import (
     SystemConfig, ConfigAuditHistory, PlantationType, FxRate
 )
 from core.config import APP_MODE
+from routers.auth_router import require_role
 
 logger = logging.getLogger("carbonvault")
 router = APIRouter(prefix="/config", tags=["configuration"])
@@ -180,7 +181,11 @@ def get_all_config(db: Session = Depends(get_db)):
 
 
 @router.post("/set")
-def set_config(req: ConfigSetRequest, db: Session = Depends(get_db)):
+def set_config(
+    req: ConfigSetRequest,
+    db: Session = Depends(get_db),
+    current_user: Any = Depends(require_role(["super_admin"]))
+):
     """Admin-only: set or update a configuration value with audit history."""
     row = db.query(SystemConfig).filter(SystemConfig.key == req.key).first()
     old_val = row.value if row else None
@@ -369,7 +374,11 @@ def get_fx_rate(force_refresh: bool = False, db: Session = Depends(get_db)):
 
 
 @router.post("/fx-rate/override")
-def override_fx_rate(req: FxRateOverrideRequest, db: Session = Depends(get_db)):
+def override_fx_rate(
+    req: FxRateOverrideRequest,
+    db: Session = Depends(get_db),
+    current_user: Any = Depends(require_role(["super_admin"]))
+):
     """Admin-only: manual audited override of the USD/INR conversion rate."""
     now = datetime.utcnow()
     # Mark earlier overrides false

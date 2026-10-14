@@ -12,10 +12,12 @@ from fastapi.staticfiles import StaticFiles
 # Setup path and config
 sys.path.append(os.path.dirname(__file__))
 from core.config import (
-    DATABASE_URL, CORS_ORIGINS, UPLOAD_DIR, DEBUG, DEFAULT_DB_FILE
+    DATABASE_URL, CORS_ORIGINS, UPLOAD_DIR, DEBUG, DEFAULT_DB_FILE, settings
 )
+from core.logging_middleware import setup_structured_logging, RequestIdMiddleware
+from core.errors import http_exception_handler, validation_exception_handler
 
-logging.basicConfig(level=logging.INFO if not DEBUG else logging.DEBUG)
+setup_structured_logging(debug=DEBUG, sentry_dsn=settings.SENTRY_DSN)
 logger = logging.getLogger("carbonvault")
 
 # DB Models & Engine
@@ -25,7 +27,6 @@ from credit_calculation.credits_module.db_models import (
     FootprintEstimate, Certificate
 )
 from credit_calculation.credits_module.db import engine, SessionLocal
-Base.metadata.create_all(bind=engine)
 
 # Import Routers
 from routers.project_servicerouter import router as project_router
@@ -795,12 +796,25 @@ GLOBAL_SCHEDULER = None
 LAST_SCHEDULER_HEARTBEAT = None
 
 
+def apply_alembic_migrations():
+    """Apply Alembic migrations to bring the database to head revision."""
+    try:
+        from alembic import command
+        from alembic.config import Config
+        backend_dir = os.path.dirname(os.path.abspath(__file__))
+        alembic_cfg = Config(os.path.join(backend_dir, "alembic.ini"))
+        command.upgrade(alembic_cfg, "head")
+        logger.info("[OK] Alembic migrations applied to head.")
+    except Exception as e:
+        logger.warning("Alembic upgrade warning: %s; ensuring metadata via create_all", e)
+        Base.metadata.create_all(bind=engine)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global GLOBAL_SCHEDULER, LAST_SCHEDULER_HEARTBEAT
-    # Startup: ensure tables exist, run migrations, seed data
-    Base.metadata.create_all(bind=engine)
-    migrate_db()
+    # Startup: ensure tables exist via Alembic, seed data
+    apply_alembic_migrations()
     seed_initial_data()
     try:
         from routers.certificate_router import backfill_certificates
@@ -906,6 +920,15 @@ else:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+# Request ID & Latency Tracking Middleware
+app.add_middleware(RequestIdMiddleware, slow_threshold_ms=settings.SLOW_QUERY_THRESHOLD_MS)
+
+# Consistent API Error Format Handlers
+from starlette.exceptions import HTTPException as StarletteHTTPException
+from fastapi.exceptions import RequestValidationError
+app.add_exception_handler(StarletteHTTPException, http_exception_handler)
+app.add_exception_handler(RequestValidationError, validation_exception_handler)
 
 # Static file serving for uploads (evidence images)
 app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")

@@ -120,10 +120,13 @@ def decode_access_token(token: str) -> dict:
 def get_current_user(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
     db: Session = Depends(get_db)
-) -> Optional[User]:
-    """Extract authenticated User from JWT token. Returns None for unauthenticated callers."""
+) -> User:
+    """Extract authenticated User from JWT token. Raises 401 for unauthenticated callers."""
     if not credentials or not credentials.credentials:
-        return None
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required. Provide a valid Bearer token."
+        )
     token = credentials.credentials
     claims = decode_access_token(token)
     email = claims.get("email") or claims.get("sub")
@@ -363,12 +366,20 @@ def register(req: RegisterRequest, db: Session = Depends(get_db)):
 
 
 @router.get("/me")
-def get_current_user_profile(user: Optional[User] = Depends(get_current_user)):
+def get_current_user_profile(user: User = Depends(get_current_user)):
     """Validates JWT from Authorization header and returns fresh user profile from DB."""
-    if not user:
-        return {"authenticated": False, "role": "public"}
     return {
         "authenticated": True,
+        "user": {
+            "id": user.id,
+            "name": user.name,
+            "email": user.email,
+            "role": user.role,
+            "admin_role": getattr(user, "admin_role", None),
+            "projects": user.projects or 0,
+            "credits": user.credits or 0.0,
+            "status": user.status or "active"
+        },
         "id": user.id,
         "name": user.name,
         "email": user.email,
