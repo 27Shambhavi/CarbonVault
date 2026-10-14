@@ -1,0 +1,13 @@
+{
+  "name": "carbonvault-workspace",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "Frontend"
+  ],
+  "scripts": {
+    "build": "npm --prefix Frontend run build",
+    "lint": "npm --prefix Frontend run lint",
+    "test": "npm --prefix Frontend test"
+  }
+}

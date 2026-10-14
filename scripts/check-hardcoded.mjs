@@ -11,7 +11,11 @@ import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const rootDir = path.resolve(__dirname, '..');
+let candidateDir = path.resolve(__dirname, '..');
+if (!fs.existsSync(path.join(candidateDir, 'Backend')) && fs.existsSync(path.join(candidateDir, '..', 'Backend'))) {
+  candidateDir = path.resolve(candidateDir, '..');
+}
+const rootDir = candidateDir;
 
 const EXEMPT_PATHS = [
   'node_modules',
@@ -29,7 +33,8 @@ const EXEMPT_PATHS = [
 const SCAN_DIRS = [
   path.join(rootDir, 'Frontend', 'src'),
   path.join(rootDir, 'Backend'),
-];
+  path.join(rootDir, 'src'),
+].filter((d) => fs.existsSync(d));
 
 // Rules and banned patterns
 const BANNED_PATTERNS = [

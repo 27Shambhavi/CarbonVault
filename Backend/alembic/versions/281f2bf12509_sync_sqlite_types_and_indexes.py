@@ -47,7 +47,6 @@ def upgrade() -> None:
                type_=sa.String(),
                existing_nullable=True,
                existing_server_default=sa.text("'admin'"))
-        batch_op.create_index(batch_op.f('ix_price_history_ts'), ['ts'], unique=False)
 
     with op.batch_alter_table('pricing_config', schema=None) as batch_op:
         batch_op.alter_column('mode',
@@ -81,7 +80,6 @@ def upgrade() -> None:
                existing_type=sa.TEXT(),
                type_=sa.String(),
                existing_nullable=True)
-        batch_op.create_index(batch_op.f('ix_transactions_certificate_id'), ['certificate_id'], unique=False)
 
     with op.batch_alter_table('users', schema=None) as batch_op:
         batch_op.alter_column('password_hash',
@@ -112,7 +110,6 @@ def downgrade() -> None:
                existing_nullable=True)
 
     with op.batch_alter_table('transactions', schema=None) as batch_op:
-        batch_op.drop_index(batch_op.f('ix_transactions_certificate_id'))
         batch_op.alter_column('certificate_id',
                existing_type=sa.String(),
                type_=sa.TEXT(),
@@ -146,7 +143,6 @@ def downgrade() -> None:
                existing_server_default=sa.text("'manual'"))
 
     with op.batch_alter_table('price_history', schema=None) as batch_op:
-        batch_op.drop_index(batch_op.f('ix_price_history_ts'))
         batch_op.alter_column('source',
                existing_type=sa.String(),
                type_=sa.TEXT(),

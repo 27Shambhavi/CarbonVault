@@ -21,7 +21,8 @@ try:
     from alembic.config import Config
 
     alembic_cfg = Config(str(backend_dir / "alembic.ini"))
-    print("[CHECK] [CarbonVault CI Gate] Verifying Alembic migrations vs SQLAlchemy models...")
+    print("[CHECK] [CarbonVault CI Gate] Verifying Alembic migrations upgrade and model parity...")
+    command.upgrade(alembic_cfg, "head")
     command.check(alembic_cfg)
     print("[PASS] Schema & migrations are perfectly in sync. No unmigrated changes detected.")
     sys.exit(0)
