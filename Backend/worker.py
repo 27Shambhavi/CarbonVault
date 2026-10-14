@@ -114,11 +114,40 @@ def run_price_snapshot():
         db.close()
 
 
+def run_reconciliation():
+    """Run nightly reconciliation audit for credit batches, accounts, and payments."""
+    logger.info("Starting scheduled ledger and payment reconciliation audit...")
+    db = SessionLocal()
+    try:
+        from core.reconciliation import run_full_reconciliation
+        report = run_full_reconciliation(db)
+        if report.get("status") == "clean":
+            logger.info("[OK] Nightly reconciliation PASSED. Ledger is consistent.")
+        else:
+            logger.critical("[ALERT] Nightly reconciliation detected anomalies: %s", report.get("discrepancies"))
+    finally:
+        db.close()
+
+
+def run_reap_reservations():
+    """Reap expired order inventory reservations and return them to the available pool."""
+    logger.info("Starting expired inventory reservation reaper...")
+    db = SessionLocal()
+    try:
+        from core.credit_engine import reap_expired_reservations
+        reaped = reap_expired_reservations(db)
+        logger.info(f"[OK] Reaped {reaped} expired reservations.")
+    finally:
+        db.close()
+
+
 def run_all_jobs():
     logger.info("Running all scheduled batch worker jobs...")
     run_satellite_sync()
     run_ml_refresh()
     run_price_snapshot()
+    run_reap_reservations()
+    run_reconciliation()
     logger.info("[OK] All scheduled worker jobs finished.")
 
 
@@ -132,9 +161,12 @@ def run_daemon():
     scheduler.add_job(run_satellite_sync, 'interval', hours=24, id='satellite_sync')
     scheduler.add_job(run_ml_refresh, 'interval', hours=12, id='ml_refresh')
     scheduler.add_job(run_price_snapshot, 'interval', hours=6, id='price_snapshot')
+    scheduler.add_job(run_reap_reservations, 'interval', minutes=1, id='reap_reservations')
+    scheduler.add_job(run_reconciliation, 'interval', hours=24, id='nightly_reconciliation')
 
     # Run immediate initial snapshot
     run_price_snapshot()
+    run_reap_reservations()
 
     try:
         scheduler.start()
@@ -146,7 +178,7 @@ def main():
     parser = argparse.ArgumentParser(description="CarbonVault Worker CLI")
     parser.add_argument(
         "--job",
-        choices=["satellite-sync", "ml-refresh", "price-snapshot", "all"],
+        choices=["satellite-sync", "ml-refresh", "price-snapshot", "reconcile", "reap-reservations", "all"],
         help="Execute a specific batch job once and exit",
     )
     parser.add_argument(
@@ -165,6 +197,10 @@ def main():
         run_ml_refresh()
     elif args.job == "price-snapshot":
         run_price_snapshot()
+    elif args.job == "reconcile":
+        run_reconciliation()
+    elif args.job == "reap-reservations":
+        run_reap_reservations()
     elif args.job == "all":
         run_all_jobs()
     else:

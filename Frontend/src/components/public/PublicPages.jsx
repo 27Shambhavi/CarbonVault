@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
-import { fetchLeaderboard, fetchPlatformStats, fetchPublicStats, fetchAuditLogs, fetchCertificates, fetchClimateAnalytics, fetchUsers, fetchGrsLeaderboard, timeAgo, getCertificateDownloadUrl } from '../../services/api.js';
+import { fetchLeaderboard, fetchPlatformStats, fetchPublicStats, fetchAuditLogs, fetchCertificates, fetchClimateAnalytics, fetchUsers, fetchGrsLeaderboard, timeAgo, getCertificateDownloadUrl, fetchPublicRetirements } from '../../services/api.js';
 
 import { Card, SectionHeader, Table, Badge, KPICard, T } from '../UI.jsx';
 import CertificateModal from '../CertificateModal.jsx';
@@ -275,26 +275,33 @@ export function PublicAudit() {
 
 export function PublicCertificates() {
   const [certs, setCerts] = useState([]);
+  const [retirements, setRetirements] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [search, setSearch] = useState('');
-  const [typeFilter, setTypeFilter] = useState('all'); // 'all' | 'retirement' | 'issuance'
+  const [typeFilter, setTypeFilter] = useState('all'); // 'all' | 'retirement' | 'issuance' | 'registry'
   const [selectedCert, setSelectedCert] = useState(null);
 
   const loadCertificates = () => {
     setLoading(true);
     setError(null);
-    fetchCertificates()
-      .then(res => {
-        if (res.error) {
-          setError(res.error);
+    Promise.all([
+      fetchCertificates(),
+      fetchPublicRetirements().catch(() => ({ data: { retirements: [] } }))
+    ])
+      .then(([certRes, retRes]) => {
+        if (certRes.error) {
+          setError(certRes.error);
           setCerts([]);
-        } else if (Array.isArray(res.data)) {
-          setCerts(res.data);
+        } else if (Array.isArray(certRes.data)) {
+          setCerts(certRes.data);
           setError(null);
         } else {
           setCerts([]);
         }
+
+        const retData = retRes?.data?.retirements || retRes?.retirements || [];
+        setRetirements(Array.isArray(retData) ? retData : []);
       })
       .catch(err => {
         setError(err.message || 'Failed to fetch certificates');
@@ -317,6 +324,16 @@ export function PublicCertificates() {
     link.click();
     document.body.removeChild(link);
   };
+
+  const filteredRetirements = retirements.filter(r => {
+    const q = search.toLowerCase();
+    return !q ||
+      (r.certificate_id && r.certificate_id.toLowerCase().includes(q)) ||
+      (r.project_name && r.project_name.toLowerCase().includes(q)) ||
+      (r.project_id && r.project_id.toLowerCase().includes(q)) ||
+      (r.beneficiary && r.beneficiary.toLowerCase().includes(q)) ||
+      (r.purpose && r.purpose.toLowerCase().includes(q));
+  });
 
   const filtered = certs.filter(c => {
     const q = search.toLowerCase();
@@ -363,7 +380,10 @@ export function PublicCertificates() {
     <div style={{ padding: 28 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
         <div>
-          <SectionHeader title="Verification Certificates" subtitle="Publicly accessible, cryptographically verified certificate registry" />
+          <SectionHeader
+            title={typeFilter === 'registry' ? 'Public Retirement Registry' : 'Verification Certificates'}
+            subtitle={typeFilter === 'registry' ? 'Public transparency ledger of permanently retired credits and unique serial ranges' : 'Publicly accessible, cryptographically verified certificate registry'}
+          />
         </div>
         <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
           {/* Search box */}
@@ -375,7 +395,7 @@ export function PublicCertificates() {
             <Search size={14} color={T.t3} />
             <input
               type="text"
-              placeholder="Search ID, project, buyer…"
+              placeholder="Search ID, project, buyer, serial…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               style={{
@@ -396,6 +416,16 @@ export function PublicCertificates() {
               }}
             >
               All ({certs.length})
+            </button>
+            <button
+              onClick={() => setTypeFilter('registry')}
+              style={{
+                padding: '6px 12px', borderRadius: 6, fontSize: 12, fontWeight: 600, border: 'none', cursor: 'pointer',
+                background: typeFilter === 'registry' ? '#a78bfa' : 'transparent',
+                color: typeFilter === 'registry' ? '#041d1a' : T.t2
+              }}
+            >
+              Retirement Registry ({retirements.length})
             </button>
             <button
               onClick={() => setTypeFilter('retirement')}
@@ -421,7 +451,83 @@ export function PublicCertificates() {
         </div>
       </div>
 
-      {filtered.length === 0 ? (
+      {typeFilter === 'registry' ? (
+        filteredRetirements.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '60px 0', color: T.t3 }}>
+            No permanent retirements recorded in public registry yet.
+          </div>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
+            {filteredRetirements.map((ret) => (
+              <Card key={ret.retirement_id || ret.certificate_id} style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', border: '1px solid rgba(167, 139, 250, 0.25)' }}>
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
+                    <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                      <div style={{ background: 'rgba(167, 139, 250, 0.15)', borderRadius: 10, padding: 9, display: 'flex' }}>
+                        <Award size={18} color="#a78bfa" />
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: '#f1f5f9', fontFamily: 'monospace' }}>
+                          {ret.certificate_id}
+                        </div>
+                        <span style={{ fontSize: 11, color: '#a78bfa' }}>Permanent Retirement</span>
+                      </div>
+                    </div>
+                    <Badge color="violet">
+                      <ShieldCheck size={11} style={{ marginRight: 3 }} /> NON-TRANSFERABLE
+                    </Badge>
+                  </div>
+
+                  <div style={{ marginBottom: 12, padding: '10px 12px', background: T.bg1, borderRadius: 8, border: `1px solid ${T.border}` }}>
+                    <div style={{ fontSize: 11, color: T.t3, textTransform: 'uppercase' }}>Beneficiary</div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: T.t1, marginTop: 2 }}>
+                      {ret.beneficiary}
+                    </div>
+                    <div style={{ fontSize: 11, color: T.t2, marginTop: 4 }}>
+                      Purpose: <span style={{ color: T.t1 }}>{ret.purpose}</span>
+                    </div>
+                    <div style={{ fontSize: 11, color: T.t2, marginTop: 4 }}>
+                      Project: <strong style={{ color: T.teal }}>{ret.project_name || ret.project_id}</strong>
+                    </div>
+                  </div>
+
+                  <div style={{ padding: '8px 10px', background: 'rgba(255,255,255,0.02)', borderRadius: 6, marginBottom: 12, fontSize: 11, fontFamily: 'monospace', color: T.t2, border: `1px solid ${T.border}` }}>
+                    <span style={{ color: T.t3 }}>Serial Range:</span> <strong style={{ color: T.emeraldL }}>{ret.serial_range}</strong>
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 12, marginBottom: 16, color: T.t2 }}>
+                    <span>Volume: <strong style={{ color: T.emeraldL }}>{(ret.quantity || 0).toLocaleString()} tCO₂e</strong></span>
+                    <span style={{ fontSize: 11, color: T.t3 }}>{ret.retired_at ? new Date(ret.retired_at).toLocaleDateString() : '—'}</span>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', gap: 8, borderTop: `1px solid ${T.border}`, paddingTop: 12 }}>
+                  <button
+                    onClick={() => setSelectedCert(ret.certificate_id)}
+                    style={{
+                      flex: 1,
+                      background: 'rgba(167, 139, 250, 0.1)',
+                      border: '1px solid rgba(167, 139, 250, 0.3)',
+                      borderRadius: 7,
+                      padding: '7px 12px',
+                      color: '#c4b5fd',
+                      fontSize: 12,
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 6
+                    }}
+                  >
+                    <Award size={13} /> View Impact Certificate
+                  </button>
+                </div>
+              </Card>
+            ))}
+          </div>
+        )
+      ) : filtered.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '60px 0', color: T.t3 }}>
           No certificates found matching your criteria.
         </div>

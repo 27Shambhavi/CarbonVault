@@ -1,5 +1,5 @@
 from datetime import datetime
-from sqlalchemy import Column, Integer, Float, String, Date, DateTime, Text, ForeignKey, Boolean
+from sqlalchemy import Column, Integer, Float, String, Date, DateTime, Text, ForeignKey, Boolean, BigInteger
 from sqlalchemy.orm import relationship
 from .db import Base
 
@@ -418,3 +418,115 @@ class PaymentQuote(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     expires_at = Column(DateTime, nullable=False)
     is_used = Column(Boolean, default=False)
+
+
+# -------------------------
+# Phase 5: Credit Integrity & Double-Entry Ledger Models
+# -------------------------
+
+class CreditBatch(Base):
+    __tablename__ = "credit_batches"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    batch_id = Column(String, unique=True, index=True, nullable=False)
+    project_id = Column(String, ForeignKey("projects.project_id"), index=True, nullable=False)
+    vintage_year = Column(Integer, nullable=False, index=True)
+    total_quantity = Column(Integer, nullable=False)          # Total minted (integer tonnes)
+    available_quantity = Column(Integer, nullable=False)      # Available for sale
+    reserved_quantity = Column(Integer, default=0, nullable=False) # Reserved under pending orders with TTL
+    retired_quantity = Column(Integer, default=0, nullable=False)  # Permanently retired
+    buffer_quantity = Column(Integer, default=0, nullable=False)   # Withheld for risk buffer pool
+    serial_start = Column(Integer, nullable=False)
+    serial_end = Column(Integer, nullable=False)
+    status = Column(String, default="active", nullable=False) # 'active', 'exhausted', 'revoked'
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    project = relationship("Project")
+
+
+class CreditAccount(Base):
+    __tablename__ = "credit_accounts"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    account_id = Column(String, unique=True, index=True, nullable=False) # e.g. ACC-SYS-INVENTORY, ACC-SYS-BUFFER, ACC-SYS-RETIRED, ACC-ORG-1
+    account_type = Column(String, nullable=False, index=True) # 'system_inventory', 'system_buffer', 'system_retired', 'user', 'organisation'
+    entity_id = Column(String, nullable=True, index=True)     # user_id or organisation identifier
+    name = Column(String, nullable=False)
+    balance = Column(Integer, default=0, nullable=False)      # Invariant: balance >= 0
+    currency = Column(String, default="CREDIT", nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+
+class LedgerEntry(Base):
+    __tablename__ = "ledger_entries"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    entry_id = Column(String, unique=True, index=True, nullable=False) # LEDG-uuid
+    transaction_id = Column(String, index=True, nullable=True)        # Links dual legs of double-entry
+    order_id = Column(String, index=True, nullable=True)
+    from_account_id = Column(String, ForeignKey("credit_accounts.account_id"), index=True, nullable=False)
+    to_account_id = Column(String, ForeignKey("credit_accounts.account_id"), index=True, nullable=False)
+    batch_id = Column(String, ForeignKey("credit_batches.batch_id"), index=True, nullable=False)
+    quantity = Column(Integer, nullable=False)                        # Integer tonnes (> 0)
+    entry_type = Column(String, nullable=False, index=True)           # 'mint', 'reserve', 'release', 'transfer', 'retire', 'reverse'
+    serial_start = Column(Integer, nullable=False)
+    serial_end = Column(Integer, nullable=False)
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    from_account = relationship("CreditAccount", foreign_keys=[from_account_id])
+    to_account = relationship("CreditAccount", foreign_keys=[to_account_id])
+    batch = relationship("CreditBatch")
+
+
+class Order(Base):
+    __tablename__ = "orders"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    order_id = Column(String, unique=True, index=True, nullable=False) # ORD-uuid
+    buyer_id = Column(String, index=True, nullable=False)              # User email or org name
+    project_id = Column(String, ForeignKey("projects.project_id"), index=True, nullable=False)
+    batch_id = Column(String, ForeignKey("credit_batches.batch_id"), index=True, nullable=True)
+    quantity = Column(Integer, nullable=False)                         # Integer tonnes
+    serial_start = Column(Integer, nullable=True)
+    serial_end = Column(Integer, nullable=True)
+    unit_price_usd_cents = Column(Integer, nullable=False)             # In cents (e.g. 2850 = $28.50)
+    fx_rate_scaled = Column(Integer, nullable=False)                   # Scaled x100 integer representation of reference FX rate
+    amount_inr_paise = Column(BigInteger, nullable=False)              # Amount in minor units (paise)
+    amount_usd_cents = Column(Integer, nullable=False)                 # Amount in minor units (cents)
+    status = Column(String, default="created", nullable=False, index=True)
+    # State transitions: created -> payment_pending -> paid -> credits_transferred -> completed; failed, expired, refunded
+    idempotency_key = Column(String, unique=True, index=True, nullable=True)
+    quote_id = Column(String, nullable=True)
+    quote_expires_at = Column(DateTime, nullable=True)
+    reservation_expires_at = Column(DateTime, nullable=False, index=True) # 15-minute inventory hold TTL
+    razorpay_order_id = Column(String, nullable=True, index=True)
+    razorpay_payment_id = Column(String, nullable=True, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    project = relationship("Project")
+    batch = relationship("CreditBatch")
+
+
+class Retirement(Base):
+    __tablename__ = "retirements"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    retirement_id = Column(String, unique=True, index=True, nullable=False) # RET-uuid
+    certificate_id = Column(String, unique=True, index=True, nullable=False)
+    beneficiary = Column(String, index=True, nullable=False)
+    purpose = Column(Text, nullable=False)
+    batch_id = Column(String, ForeignKey("credit_batches.batch_id"), index=True, nullable=False)
+    project_id = Column(String, ForeignKey("projects.project_id"), index=True, nullable=False)
+    quantity = Column(Integer, nullable=False)
+    serial_start = Column(Integer, nullable=False)
+    serial_end = Column(Integer, nullable=False)
+    account_id = Column(String, ForeignKey("credit_accounts.account_id"), index=True, nullable=False)
+    retired_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    account = relationship("CreditAccount")
+    batch = relationship("CreditBatch")
+    project = relationship("Project")

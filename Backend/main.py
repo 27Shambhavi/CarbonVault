@@ -44,6 +44,7 @@ from routers.realtime_router import router as realtime_router
 from routers.auth_router import router as auth_router, hash_password
 from routers.stats_router import router as stats_router
 from routers.config_router import router as config_router
+from routers.credit_integrity_router import router as credit_integrity_router
 
 
 def migrate_db():
@@ -790,6 +791,13 @@ def seed_initial_data():
         except Exception as ae:
             logger.warning("Error running audit chain backfill during seed: %s", ae)
 
+        # Seed Phase 5 Verified Credit Batches & System Accounts
+        try:
+            from core.credit_engine import seed_initial_credit_batches
+            seed_initial_credit_batches(db)
+        except Exception as cbe:
+            logger.warning("Error running credit batch seeding: %s", cbe)
+
         logger.info("[OK] Initial demo data seeded successfully")
 
     except Exception as e:
@@ -887,10 +895,38 @@ async def lifespan(app: FastAPI):
 
         scheduler.add_job(daily_satellite_sync_job, 'interval', hours=24, id='daily_satellite_sync')
         scheduler.add_job(nightly_ml_refresh_job, 'interval', hours=24, id='nightly_ml_refresh')
+
+        def periodic_reservation_reaper_job():
+            logger.info("Running expired reservation inventory reaper...")
+            db_r = SessionLocal()
+            try:
+                from core.credit_engine import reap_expired_reservations
+                reap_expired_reservations(db_r)
+            except Exception as re:
+                logger.warning("Error in reservation reaper job: %s", re)
+            finally:
+                db_r.close()
+
+        def nightly_reconciliation_job():
+            global LAST_SCHEDULER_HEARTBEAT
+            LAST_SCHEDULER_HEARTBEAT = datetime.utcnow().isoformat() + "Z"
+            logger.info("Running nightly ledger & payment reconciliation...")
+            db_rc = SessionLocal()
+            try:
+                from core.reconciliation import run_full_reconciliation
+                run_full_reconciliation(db_rc)
+            except Exception as rce:
+                logger.warning("Error in nightly reconciliation job: %s", rce)
+            finally:
+                db_rc.close()
+
+        scheduler.add_job(periodic_reservation_reaper_job, 'interval', minutes=1, id='periodic_reservation_reaper')
+        scheduler.add_job(nightly_reconciliation_job, 'interval', hours=24, id='nightly_reconciliation')
+
         scheduler.start()
         GLOBAL_SCHEDULER = scheduler
         LAST_SCHEDULER_HEARTBEAT = datetime.utcnow().isoformat() + "Z"
-        logger.info("[OK] APScheduler started for daily satellite sync and nightly ML retraining")
+        logger.info("[OK] APScheduler started for daily satellite sync, nightly ML retraining, reaper, and reconciliation")
     except Exception as sche_err:
         logger.warning("Could not start APScheduler: %s", sche_err)
 
@@ -1139,6 +1175,7 @@ app.include_router(realtime_router)
 app.include_router(auth_router)
 app.include_router(stats_router)
 app.include_router(config_router)
+app.include_router(credit_integrity_router, tags=["Credit Integrity"])
 
 
 if __name__ == "__main__":

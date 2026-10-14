@@ -523,6 +523,36 @@ export async function fetchClimateAnalytics() {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
+// CREDIT INTEGRITY & RETIREMENT REGISTRY APIs (PHASE 5)
+// ══════════════════════════════════════════════════════════════════════════════
+
+export async function fetchCreditBatches(projectId) {
+  const url = projectId ? `${API_BASE}/credits/batches?project_id=${encodeURIComponent(projectId)}` : `${API_BASE}/credits/batches`;
+  return request(url);
+}
+
+export async function fetchPublicRetirements(params = {}) {
+  const q = new URLSearchParams(params).toString();
+  return request(`${API_BASE}/registry/retirements${q ? '?' + q : ''}`);
+}
+
+export async function fetchRetirementCertificate(certId) {
+  return request(`${API_BASE}/registry/retirements/${encodeURIComponent(certId)}`);
+}
+
+export async function executeRetirement(payload) {
+  return request(`${API_BASE}/credits/retire`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function fetchReconciliationStatus() {
+  return request(`${API_BASE}/reconciliation/status`);
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
 // PRICING ENGINE APIs
 // ══════════════════════════════════════════════════════════════════════════════
 
