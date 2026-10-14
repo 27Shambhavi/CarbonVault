@@ -59,8 +59,10 @@ jobs:
 
       - name: Run Full Test Suite (Contract, Auth Matrix, Foundations, Features)
         working-directory: Backend
+        env:
+          PYTHONPATH: .
         run: |
-          pytest tests -v
+          pytest tests -v --tb=short
 
   frontend-build:
     name: Frontend Build & Lint
