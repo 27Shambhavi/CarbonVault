@@ -58,10 +58,9 @@ jobs:
           pip install pytest httpx pytest-asyncio
 
       - name: Run Full Test Suite (Contract, Auth Matrix, Foundations, Features)
-        env:
-          PYTHONPATH: Backend
+        working-directory: Backend
         run: |
-          pytest Backend/tests -v
+          pytest tests -v
 
   frontend-build:
     name: Frontend Build & Lint

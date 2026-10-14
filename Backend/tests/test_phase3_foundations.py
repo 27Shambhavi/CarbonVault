@@ -127,7 +127,12 @@ def test_alembic_migrations_in_sync():
     from alembic import command
     from alembic.config import Config
 
-    alembic_cfg = Config(os.path.join(backend_dir, "alembic.ini"))
-    # Ensure current head is applied, then check for any model-migration drift
-    command.upgrade(alembic_cfg, "head")
-    command.check(alembic_cfg)
+    old_cwd = os.getcwd()
+    try:
+        os.chdir(backend_dir)
+        alembic_cfg = Config(os.path.join(backend_dir, "alembic.ini"))
+        # Ensure current head is applied, then check for any model-migration drift
+        command.upgrade(alembic_cfg, "head")
+        command.check(alembic_cfg)
+    finally:
+        os.chdir(old_cwd)
