@@ -62,7 +62,11 @@ jobs:
         env:
           PYTHONPATH: .
         run: |
-          pytest tests -v --tb=short
+          pytest tests -v --tb=short 2>&1 | tee pytest_out.txt || {
+            FAILED_LINE=$(grep -E '(FAILED|ERROR)' pytest_out.txt | head -n 5)
+            echo "::error::$FAILED_LINE"
+            exit 1
+          }
 
   frontend-build:
     name: Frontend Build & Lint
