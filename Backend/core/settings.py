@@ -67,9 +67,20 @@ class Settings(BaseSettings):
     # External APIs & Integrations
     SENTRY_DSN: Optional[str] = Field(default=None)
     SLOW_QUERY_THRESHOLD_MS: float = Field(default=500.0)
+
+    # Copernicus / Sentinel Hub
     SH_CLIENT_ID: str = Field(default="")
     SH_CLIENT_SECRET: str = Field(default="")
     INR_USD_RATE: float = Field(default=96.0)
+
+    # Object Storage (S3 / Cloudflare R2 / MinIO)
+    S3_BUCKET: str = Field(default="", description="S3 or Cloudflare R2 bucket name")
+    S3_ENDPOINT_URL: Optional[str] = Field(default=None, description="Custom S3 endpoint URL (e.g. for Cloudflare R2 or MinIO)")
+    S3_ACCESS_KEY_ID: str = Field(default="", description="S3/R2 Access Key ID")
+    S3_SECRET_ACCESS_KEY: str = Field(default="", description="S3/R2 Secret Access Key")
+    S3_REGION: str = Field(default="auto", description="S3 region (e.g. us-east-1, auto)")
+    S3_SIGNED_URL_TTL_SECONDS: int = Field(default=3600, description="Signed URL expiration in seconds")
+    MAX_UPLOAD_SIZE_BYTES: int = Field(default=5 * 1024 * 1024, description="Hard 5MB upload size limit")
 
     @field_validator("DATABASE_URL", mode="before")
     @classmethod

@@ -783,6 +783,13 @@ def seed_initial_data():
         except Exception as be:
             logger.warning("Error running certificate backfill during seed: %s", be)
 
+        # Ensure audit trail cryptographic hash chain is intact
+        try:
+            from core.audit import ensure_audit_chain_hashed
+            ensure_audit_chain_hashed(db)
+        except Exception as ae:
+            logger.warning("Error running audit chain backfill during seed: %s", ae)
+
         logger.info("[OK] Initial demo data seeded successfully")
 
     except Exception as e:
@@ -818,13 +825,15 @@ async def lifespan(app: FastAPI):
     seed_initial_data()
     try:
         from routers.certificate_router import backfill_certificates
+        from core.audit import ensure_audit_chain_hashed
         db = SessionLocal()
         try:
             backfill_certificates(db)
+            ensure_audit_chain_hashed(db)
         finally:
             db.close()
     except Exception as e:
-        logger.warning("Error running certificate backfill on startup: %s", e)
+        logger.warning("Error running startup tasks: %s", e)
     logger.info("[OK] Database ready at: %s", DATABASE_URL)
 
     # Start background scheduler for daily satellite sync (APScheduler)
@@ -921,6 +930,10 @@ else:
         allow_headers=["*"],
     )
 
+# Security Headers Middleware (CSP, HSTS, X-Content-Type-Options, Frame Protection)
+from core.security_headers import SecurityHeadersMiddleware
+app.add_middleware(SecurityHeadersMiddleware)
+
 # Request ID & Latency Tracking Middleware
 app.add_middleware(RequestIdMiddleware, slow_threshold_ms=settings.SLOW_QUERY_THRESHOLD_MS)
 
@@ -929,6 +942,27 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from fastapi.exceptions import RequestValidationError
 app.add_exception_handler(StarletteHTTPException, http_exception_handler)
 app.add_exception_handler(RequestValidationError, validation_exception_handler)
+
+# Signed Upload Retrieval
+@app.get("/uploads/secure/{filename}")
+def get_secure_upload(filename: str, token: str, expires: int):
+    """
+    Serves uploaded asset strictly when signed with a valid HMAC token and before expiration.
+    Returns 403 Forbidden on invalid or expired signature.
+    """
+    from fastapi import HTTPException
+    from fastapi.responses import FileResponse
+    from core.storage import get_storage
+    storage = get_storage()
+    if not storage.verify_token(filename, token, expires):
+        raise HTTPException(status_code=403, detail="Forbidden: Invalid or expired signed URL token.")
+
+    file_path = os.path.join(str(UPLOAD_DIR), filename)
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="File not found.")
+
+    return FileResponse(file_path)
+
 
 # Static file serving for uploads (evidence images)
 app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")

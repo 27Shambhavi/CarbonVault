@@ -31,12 +31,12 @@ def get_db():
 
 
 class FootprintRequest(BaseModel):
-    corporate_name: str = Field(default="Corporate Buyer", description="Name of the corporate organization")
-    employees: int = Field(default=250, ge=1, description="Total headcount")
-    sqft: float = Field(default=15000.0, ge=0, description="Total office/facility area in square feet")
-    short_haul_flights: int = Field(default=80, ge=0, description="Annual short-haul commercial flights (<1500 km)")
-    long_haul_flights: int = Field(default=25, ge=0, description="Annual long-haul commercial flights (>1500 km)")
-    cloud_spend_usd: float = Field(default=5000.0, ge=0, description="Monthly cloud and data infrastructure spend in USD")
+    corporate_name: str = Field(default="Corporate Buyer", max_length=150, description="Name of the corporate organization")
+    employees: int = Field(default=250, ge=1, le=10000000, description="Total headcount")
+    sqft: float = Field(default=15000.0, ge=0, le=1000000000.0, description="Total office/facility area in square feet")
+    short_haul_flights: int = Field(default=80, ge=0, le=10000000, description="Annual short-haul commercial flights (<1500 km)")
+    long_haul_flights: int = Field(default=25, ge=0, le=10000000, description="Annual long-haul commercial flights (>1500 km)")
+    cloud_spend_usd: float = Field(default=5000.0, ge=0, le=1000000000.0, description="Monthly cloud and data infrastructure spend in USD")
 
 
 @router.post("/estimate")

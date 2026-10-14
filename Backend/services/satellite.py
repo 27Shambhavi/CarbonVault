@@ -36,17 +36,15 @@ def fetch_modis_dates(lat: float, lon: float, timeout_s: float = 12.0) -> List[D
     params = {"latitude": f"{lat:.4f}", "longitude": f"{lon:.4f}"}
     headers = {"User-Agent": USER_AGENT, "Accept": "application/json"}
 
-    for attempt in range(2):
-        try:
-            with httpx.Client(timeout=timeout_s) as client:
-                resp = client.get(url, params=params, headers=headers)
-                if resp.status_code == 200:
-                    data = resp.json()
-                    return data.get("dates", [])
-                logger.warning("ORNL DAAC dates returned %d on attempt %d", resp.status_code, attempt + 1)
-        except Exception as e:
-            logger.warning("ORNL DAAC dates attempt %d failed: %s", attempt + 1, e)
-            time.sleep(1.0)
+    try:
+        from core.ssrf_guard import safe_request
+        resp = safe_request("GET", url, params=params, headers=headers, timeout=timeout_s, max_retries=2)
+        if resp.status_code == 200:
+            data = resp.json()
+            return data.get("dates", [])
+        logger.warning("ORNL DAAC dates returned %d", resp.status_code)
+    except Exception as e:
+        logger.warning("ORNL DAAC dates request failed: %s", e)
     return []
 
 
@@ -69,17 +67,15 @@ def fetch_modis_subset_batch(
     }
     headers = {"User-Agent": USER_AGENT, "Accept": "application/json"}
 
-    for attempt in range(2):
-        try:
-            with httpx.Client(timeout=timeout_s) as client:
-                resp = client.get(url, params=params, headers=headers)
-                if resp.status_code == 200:
-                    data = resp.json()
-                    return data.get("subset", [])
-                logger.warning("ORNL DAAC subset returned %d for range %s..%s (attempt %d)", resp.status_code, start_modis, end_modis, attempt + 1)
-        except Exception as e:
-            logger.warning("ORNL DAAC subset attempt %d failed for %s..%s: %s", attempt + 1, start_modis, end_modis, e)
-            time.sleep(1.0)
+    try:
+        from core.ssrf_guard import safe_request
+        resp = safe_request("GET", url, params=params, headers=headers, timeout=timeout_s, max_retries=2)
+        if resp.status_code == 200:
+            data = resp.json()
+            return data.get("subset", [])
+        logger.warning("ORNL DAAC subset returned %d for range %s..%s", resp.status_code, start_modis, end_modis)
+    except Exception as e:
+        logger.warning("ORNL DAAC subset request failed for %s..%s: %s", start_modis, end_modis, e)
     return []
 
 

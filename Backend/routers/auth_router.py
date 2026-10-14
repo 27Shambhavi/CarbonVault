@@ -60,23 +60,23 @@ def check_login_rate_limit(client_ip: str):
 
 
 class LoginRequest(BaseModel):
-    email: str
-    password: str
+    email: str = Field(..., max_length=150)
+    password: str = Field(..., max_length=128)
 
 
 class RegisterRequest(BaseModel):
-    email: EmailStr
-    password: str = Field(..., min_length=8)
-    full_name: str
-    role: str = "ngo"  # 'ngo' | 'corporate'
+    email: EmailStr = Field(..., max_length=150)
+    password: str = Field(..., min_length=8, max_length=128)
+    full_name: str = Field(..., min_length=2, max_length=100)
+    role: str = Field(default="ngo", max_length=20)  # 'ngo' | 'corporate'
     # Optional NGO fields
-    organization_name: Optional[str] = None
-    country: Optional[str] = None
-    registration_number: Optional[str] = None
+    organization_name: Optional[str] = Field(None, max_length=150)
+    country: Optional[str] = Field(None, max_length=100)
+    registration_number: Optional[str] = Field(None, max_length=100)
     # Optional Corporate fields
-    company_name: Optional[str] = None
-    industry: Optional[str] = None
-    website: Optional[str] = None
+    company_name: Optional[str] = Field(None, max_length=150)
+    industry: Optional[str] = Field(None, max_length=100)
+    website: Optional[str] = Field(None, max_length=200)
 
 
 def hash_password(password: str) -> str:
@@ -191,15 +191,14 @@ def require_role(allowed_roles: List[str]):
 
 def log_auth_attempt(db: Session, email: str, detail: str, action: str = "auth_login"):
     try:
-        audit = AuditLog(
+        from core.audit import record_audit_event
+        record_audit_event(
             action=action,
             name=email,
             detail=detail,
             user=email,
-            timestamp=datetime.utcnow()
+            db=db,
         )
-        db.add(audit)
-        db.commit()
     except Exception as e:
         logger.warning("Could not persist audit log for auth attempt: %s", e)
         db.rollback()
@@ -208,8 +207,8 @@ def log_auth_attempt(db: Session, email: str, detail: str, action: str = "auth_l
 @router.post("/login")
 def login(req: LoginRequest, request: Request, db: Session = Depends(get_db)):
     """Authenticate user with bcrypt password verification, rate-limit check, and audit logging."""
-    client_ip = request.headers.get("x-forwarded-for", "").split(",")[0].strip() or (request.client.host if request.client else "127.0.0.1")
-    check_login_rate_limit(client_ip)
+    from core.rate_limiter import rate_limit_auth
+    rate_limit_auth(request)
 
     email_clean = req.email.strip().lower()
     user = db.query(User).filter(func.lower(User.email) == email_clean).first()
@@ -263,7 +262,7 @@ def login(req: LoginRequest, request: Request, db: Session = Depends(get_db)):
 
 
 @router.post("/register")
-def register(req: RegisterRequest, db: Session = Depends(get_db)):
+def register(req: RegisterRequest, request: Request, db: Session = Depends(get_db)):
     """
     Allow public self-registration for both NGO and Corporate organizations.
     - Stores bcrypt password_hash
@@ -271,6 +270,9 @@ def register(req: RegisterRequest, db: Session = Depends(get_db)):
     - Issues a welcome notification
     - Logs audit trail entry: action='auth_register'
     """
+    from core.rate_limiter import rate_limit_auth
+    rate_limit_auth(request)
+
     email_clean = req.email.strip().lower()
     existing_user = db.query(User).filter(func.lower(User.email) == email_clean).first()
     if existing_user:

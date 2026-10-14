@@ -103,29 +103,31 @@ except Exception:
 
 # ── Schemas ─────────────────────────────────────────────────────────────
 
+from pydantic import BaseModel, Field
+
 class QuoteRequest(BaseModel):
-    project_id: str
-    quantity: float
-    corporate_name: Optional[str] = "Corporate Buyer"
+    project_id: str = Field(..., max_length=50)
+    quantity: float = Field(..., gt=0, le=1000000)
+    corporate_name: Optional[str] = Field("Corporate Buyer", max_length=150)
 
 
 class CreateOrderRequest(BaseModel):
-    amount: float        # Amount in INR (NOT paise)
-    currency: str = "INR"
-    project_id: Optional[str] = None
-    corporate_name: Optional[str] = None
-    quantity: Optional[float] = None
-    quote_id: Optional[str] = None
+    amount: float = Field(..., le=100000000)        # Amount in INR (NOT paise)
+    currency: str = Field(default="INR", max_length=10)
+    project_id: Optional[str] = Field(None, max_length=50)
+    corporate_name: Optional[str] = Field(None, max_length=150)
+    quantity: Optional[float] = Field(None, gt=0, le=1000000)
+    quote_id: Optional[str] = Field(None, max_length=50)
 
 
 class BuyCreditsRequest(BaseModel):
-    razorpay_order_id: str
-    razorpay_payment_id: str
-    razorpay_signature: str
-    project_id: str
-    corporate_name: str
-    quantity: float      # tonnes of credits
-    amount: float        # INR paid
+    razorpay_order_id: str = Field(..., max_length=100)
+    razorpay_payment_id: str = Field(..., max_length=100)
+    razorpay_signature: str = Field(..., max_length=256)
+    project_id: str = Field(..., max_length=50)
+    corporate_name: str = Field(..., max_length=150)
+    quantity: float = Field(..., gt=0, le=1000000)      # tonnes of credits
+    amount: float = Field(..., gt=0, le=100000000)        # INR paid
 
 
 # ── Locked Quote Engine (R2-7) ───────────────────────────────────────────
@@ -214,11 +216,13 @@ def create_payment_quote(
 # ── POST /create-order ──────────────────────────────────────────────────
 
 @router.post("/create-order")
-def create_order(req: CreateOrderRequest):
+def create_order(req: CreateOrderRequest, request: Request):
     """
     Create a Razorpay order.
     Checks Razorpay health, validates locked quote if provided, and converts INR to paise.
     """
+    from core.rate_limiter import rate_limit_payment
+    rate_limit_payment(request)
     # R2-4: Check gateway health
     rp_status = get_razorpay_status()
     if rp_status == "auth_failed":
@@ -319,7 +323,7 @@ def create_order(req: CreateOrderRequest):
 # ── POST /buy-credits ────────────────────────────────────────────────────
 
 @router.post("/buy-credits")
-def buy_credits(req: BuyCreditsRequest):
+def buy_credits(req: BuyCreditsRequest, request: Request):
     """
     Called after Razorpay payment success.
 
@@ -328,6 +332,8 @@ def buy_credits(req: BuyCreditsRequest):
     3. Update wallet balance
     4. Return confirmation
     """
+    from core.rate_limiter import rate_limit_payment
+    rate_limit_payment(request)
     # 1. Verify signature (skip for demo orders)
     if not req.razorpay_order_id.startswith("order_demo_"):
         if razorpay_client and RAZORPAY_KEY_SECRET:
@@ -441,18 +447,16 @@ def buy_credits(req: BuyCreditsRequest):
 
         db.commit()
 
-        # Record audit log
+        # Record audit log (cryptographic hash chain)
         try:
-            from credit_calculation.credits_module.db_models import AuditLog
-            audit_entry = AuditLog(
+            from core.audit import record_audit_event
+            record_audit_event(
                 action="payment",
                 name=req.project_id,
                 detail=f"{req.corporate_name} purchased {req.quantity:,.0f} credits of '{project.name}' for ₹{req.amount:,.2f} (Cert: {cert_pub_id})",
                 user=req.corporate_name,
-                timestamp=datetime.utcnow()
+                db=db,
             )
-            db.add(audit_entry)
-            db.commit()
         except Exception as e:
             logger.warning("Failed to record audit log for payment: %s", e)
 
@@ -722,17 +726,19 @@ async def razorpay_webhook(
                 )
                 db.add(wallet)
 
-            # Audit log
-            from credit_calculation.credits_module.db_models import AuditLog
-            audit_entry = AuditLog(
-                action="payment",
-                name=target_proj_id,
-                detail=f"Webhook captured payment: {corporate_name} acquired {quantity:,.2f} credits for ₹{amount_inr:,.2f} (Cert: {cert_pub_id})",
-                user="Razorpay Webhook",
-                timestamp=now_dt
-            )
-            db.add(audit_entry)
-            db.commit()
+            # Audit log (cryptographic hash chain)
+            try:
+                from core.audit import record_audit_event
+                record_audit_event(
+                    action="payment",
+                    name=target_proj_id,
+                    detail=f"Webhook captured payment: {corporate_name} acquired {quantity:,.2f} credits for ₹{amount_inr:,.2f} (Cert: {cert_pub_id})",
+                    user="Razorpay Webhook",
+                    db=db,
+                    timestamp=now_dt,
+                )
+            except Exception as e:
+                logger.warning("Failed to record webhook audit log: %s", e)
 
             # Emit notification
             try:

@@ -1,5 +1,5 @@
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Header, Response
-from pydantic import BaseModel
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Header, Response, Request
+from pydantic import BaseModel, Field
 from typing import List, Optional
 import uuid
 import os
@@ -7,6 +7,7 @@ import math
 import logging
 import csv
 import io
+import html
 import hashlib
 from datetime import datetime, timedelta
 
@@ -46,17 +47,10 @@ def _get_evidence_url(evidence_image: Optional[str]) -> Optional[str]:
     return f"/uploads/{base}"
 
 def log_audit_event(action: str, name: str, detail: str, user: str, db):
-    """Record an immutable event in the audit trail."""
+    """Record an immutable cryptographic event in the audit trail."""
     try:
-        entry = AuditLog(
-            action=action,
-            name=name,
-            detail=detail,
-            user=user,
-            timestamp=datetime.utcnow()
-        )
-        db.add(entry)
-        db.commit()
+        from core.audit import record_audit_event
+        record_audit_event(action=action, name=name, detail=detail, user=user, db=db)
     except Exception as e:
         logger.warning("Failed to record audit log: %s", e)
 
@@ -528,6 +522,7 @@ def generate_project_id(plantation_type):
 
 @router.post("/create-project")
 async def create_project(
+    request: Request,
     project_name: str = Form(...),
     ngo_name: str = Form(...),
     latitude: float = Form(...),
@@ -539,6 +534,8 @@ async def create_project(
     polygon_wkt: Optional[str] = Form(None),
     evidence_image: Optional[UploadFile] = File(None)
 ):
+    from core.rate_limiter import rate_limit_upload
+    rate_limit_upload(request)
     db = SessionLocal()
     try:
         # Validate or auto-generate polygon
@@ -569,14 +566,13 @@ async def create_project(
 
         # Save Image if provided, else use default placeholder
         if evidence_image and hasattr(evidence_image, "filename") and evidence_image.filename:
-            orig_name = getattr(evidence_image, "filename", "") or "evidence.jpg"
-            file_extension = orig_name.split(".")[-1].lower() if "." in orig_name else "jpg"
-            unique_suffix = str(uuid.uuid4())[:8]
-            file_name = f"{project_id}_{unique_suffix}.{file_extension}"
-            file_path = os.path.join(UPLOAD_FOLDER, file_name)
-            with open(file_path, "wb") as buffer:
-                content = await evidence_image.read()
-                buffer.write(content)
+            content = await evidence_image.read()
+            from core.upload_security import validate_and_sanitize_image
+            from core.storage import get_storage
+            sanitized_bytes, safe_filename, mime = validate_and_sanitize_image(content, evidence_image.filename)
+            storage = get_storage()
+            storage.upload_file(sanitized_bytes, safe_filename, content_type=mime)
+            file_path = storage.get_signed_url(safe_filename)
         else:
             file_path = "/uploads/default_plantation.jpg"
 
@@ -725,9 +721,11 @@ async def create_project(
 @router.post("/import-csv")
 @router.post("/projects/import-csv")
 async def import_projects_csv(
+    request: Request,
     file: UploadFile = File(...),
     x_admin_role: Optional[str] = Header(None),
-    x_admin_email: Optional[str] = Header(None)
+    x_admin_email: Optional[str] = Header(None),
+    authorization: Optional[str] = Header(None)
 ):
     """
     Bulk import projects from a CSV file.
@@ -735,9 +733,21 @@ async def import_projects_csv(
     calculates MRV/fraud scores, records status history, emits notifications,
     and returns a structured import report.
     """
+    from core.rate_limiter import rate_limit_upload
+    rate_limit_upload(request)
     db = SessionLocal()
     try:
+        check_admin_permission(
+            x_admin_role=x_admin_role,
+            x_admin_email=x_admin_email,
+            required_role="admin",
+            db=db,
+            authorization=authorization
+        )
         content = await file.read()
+        from core.settings import get_settings
+        if len(content) > get_settings().MAX_UPLOAD_SIZE_BYTES:
+            raise HTTPException(status_code=413, detail="CSV file exceeds 5MB limit.")
         try:
             text = content.decode("utf-8-sig")
         except UnicodeDecodeError:
@@ -1342,10 +1352,13 @@ def generate_platform_pdf_report(db) -> bytes:
     ]]
 
     for p in approved[:15]:
+        p_id_esc = html.escape(str(p.project_id or ""))
+        p_name_esc = html.escape(str(p.name or "")[:28])
+        p_type_esc = html.escape((p.plantation_type or "mixed").title())
         proj_rows.append([
-            Paragraph(f"<font color='#0D9488'><b>{p.project_id}</b></font>", table_cell),
-            Paragraph(p.name[:28], table_cell_bold),
-            Paragraph((p.plantation_type or "mixed").title(), table_cell),
+            Paragraph(f"<font color='#0D9488'><b>{p_id_esc}</b></font>", table_cell),
+            Paragraph(p_name_esc, table_cell_bold),
+            Paragraph(p_type_esc, table_cell),
             Paragraph(f"{p.area_hectares or 0:,.1f}", table_cell),
             Paragraph(f"{p.credits or 0:,.0f}", table_cell),
             Paragraph(f"<font color='#10B981'><b>{p.mrv_score or 85}</b></font>", table_cell),
@@ -1434,7 +1447,7 @@ def export_platform_pdf():
 
 @router.get("/audit-logs")
 def get_audit_logs():
-    """Retrieve immutable audit trail entries with precise timestamps."""
+    """Retrieve immutable audit trail entries with precise timestamps and cryptographic hashes."""
     db = SessionLocal()
     try:
         logs = db.query(AuditLog).order_by(AuditLog.timestamp.desc()).limit(50).all()
@@ -1447,8 +1460,26 @@ def get_audit_logs():
                 "detail": l.detail,
                 "user": l.user,
                 "timestamp": l.timestamp.isoformat() + "Z" if l.timestamp else None,
+                "prev_hash": l.prev_hash,
+                "hash": l.hash,
             })
         return result
+    finally:
+        db.close()
+
+
+@router.get("/audit-logs/verify")
+@router.get("/projects/audit-logs/verify")
+def get_audit_logs_verify():
+    """
+    Verifies the cryptographic hash chain of the append-only audit ledger from Genesis to Head.
+    Returns status: 'intact' with total records and head hash,
+    or status: 'broken' identifying the exact entry ID and cause of tampering.
+    """
+    db = SessionLocal()
+    try:
+        from core.audit import verify_audit_hash_chain
+        return verify_audit_hash_chain(db)
     finally:
         db.close()
 
@@ -2157,15 +2188,13 @@ async def submit_progress_update(
 
         photo_path = None
         if photo and photo.filename:
-            file_ext = os.path.splitext(photo.filename)[1].lower()
-            if file_ext not in [".jpg", ".jpeg", ".png", ".webp"]:
-                raise HTTPException(status_code=400, detail="Only JPG, PNG, and WebP images allowed")
-            file_name = f"progress_{uuid.uuid4().hex[:10]}{file_ext}"
-            file_path = os.path.join(UPLOAD_FOLDER, file_name)
-            with open(file_path, "wb") as f:
-                content = await photo.read()
-                f.write(content)
-            photo_path = f"/uploads/{file_name}"
+            content = await photo.read()
+            from core.upload_security import validate_and_sanitize_image
+            from core.storage import get_storage
+            sanitized_bytes, safe_filename, mime = validate_and_sanitize_image(content, photo.filename)
+            storage = get_storage()
+            storage.upload_file(sanitized_bytes, safe_filename, content_type=mime)
+            photo_path = storage.get_signed_url(safe_filename)
 
         update = ProjectProgressUpdate(
             project_id=project.project_id,
@@ -2472,11 +2501,13 @@ def get_project_ml_assessment(project_id: str):
 
 @router.get("/{project_id}/ai-summary")
 @router.get("/projects/{project_id}/ai-summary")
-def get_project_ai_summary_endpoint(project_id: str, audience: str = "admin"):
+def get_project_ai_summary_endpoint(project_id: str, request: Request, audience: str = "admin"):
     """
     Phase 5: Grounded AI narrative summary with strict post-check verification.
     Audience: 'admin' | 'ngo' | 'corporate'
     """
+    from core.rate_limiter import rate_limit_ai
+    rate_limit_ai(request)
     db = SessionLocal()
     try:
         from ai.explainer import explain_project

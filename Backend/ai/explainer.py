@@ -322,46 +322,46 @@ def explain_project(
                 "messages": [{"role": "user", "content": user_content}]
             }
 
-            with httpx.Client(timeout=15.0) as client:
-                resp = client.post(ANTHROPIC_API_URL, json=body, headers=headers)
-                if resp.status_code == 200:
-                    resp_json = resp.json()
-                    content_blocks = resp_json.get("content", [])
-                    raw_text = content_blocks[0].get("text", "") if content_blocks else ""
+            from core.ssrf_guard import safe_request
+            resp = safe_request("POST", ANTHROPIC_API_URL, json=body, headers=headers, timeout=15.0)
+            if resp.status_code == 200:
+                resp_json = resp.json()
+                content_blocks = resp_json.get("content", [])
+                raw_text = content_blocks[0].get("text", "") if content_blocks else ""
 
-                    # Parse JSON block
-                    json_match = re.search(r'\{.*\}', raw_text, re.DOTALL)
-                    if json_match:
-                        parsed = json.loads(json_match.group(0))
-                        candidate_summary = parsed.get("summary", "")
-                        candidate_steps = parsed.get("next_steps", [])[:3]
+                # Parse JSON block
+                json_match = re.search(r'\{.*\}', raw_text, re.DOTALL)
+                if json_match:
+                    parsed = json.loads(json_match.group(0))
+                    candidate_summary = parsed.get("summary", "")
+                    candidate_steps = parsed.get("next_steps", [])[:3]
 
-                        # ── Strict Grounded Number Post-Check ──
-                        is_valid, unsupplied = verify_grounded_numbers(
-                            candidate_summary + " " + " ".join(candidate_steps),
-                            allowed_numbers
-                        )
+                    # ── Strict Grounded Number Post-Check ──
+                    is_valid, unsupplied = verify_grounded_numbers(
+                        candidate_summary + " " + " ".join(candidate_steps),
+                        allowed_numbers
+                    )
 
-                        if is_valid:
-                            final_summary = candidate_summary
-                            final_steps = candidate_steps
-                            status = "grounded_ai"
-                        else:
-                            logger.warning(
-                                "AI output for %s rejected by post-check: unsupplied numbers %s",
-                                project_id, unsupplied
-                            )
-                            final_summary, final_steps = generate_deterministic_summary(facts, audience)
-                            status = "rejected_unsupplied_number"
-                            note = f"Rejected unsupplied numbers ({unsupplied}); reverted to deterministic template."
+                    if is_valid:
+                        final_summary = candidate_summary
+                        final_steps = candidate_steps
+                        status = "grounded_ai"
                     else:
+                        logger.warning(
+                            "AI output for %s rejected by post-check: unsupplied numbers %s",
+                            project_id, unsupplied
+                        )
                         final_summary, final_steps = generate_deterministic_summary(facts, audience)
-                        status = "deterministic_fallback"
+                        status = "rejected_unsupplied_number"
+                        note = f"Rejected unsupplied numbers ({unsupplied}); reverted to deterministic template."
                 else:
-                    logger.warning("Anthropic API returned %s: %s", resp.status_code, resp.text)
                     final_summary, final_steps = generate_deterministic_summary(facts, audience)
                     status = "deterministic_fallback"
-                    note = "AI summary unavailable (using database-grounded template)"
+            else:
+                logger.warning("Anthropic API returned %s: %s", resp.status_code, resp.text)
+                final_summary, final_steps = generate_deterministic_summary(facts, audience)
+                status = "deterministic_fallback"
+                note = "AI summary unavailable (using database-grounded template)"
         except Exception as api_err:
             logger.warning("Anthropic API call failed: %s", api_err)
             final_summary, final_steps = generate_deterministic_summary(facts, audience)

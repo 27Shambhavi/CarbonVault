@@ -129,6 +129,19 @@ class AuditLog(Base):
     detail = Column(Text)
     user = Column(String)
     timestamp = Column(DateTime)
+    prev_hash = Column(String, nullable=True, index=True)
+    hash = Column(String, nullable=True, index=True)
+
+
+from sqlalchemy import event
+
+@event.listens_for(AuditLog, "before_update")
+def block_audit_log_update(mapper, connection, target):
+    raise PermissionError("Audit logs are cryptographically immutable. UPDATE operations are forbidden.")
+
+@event.listens_for(AuditLog, "before_delete")
+def block_audit_log_delete(mapper, connection, target):
+    raise PermissionError("Audit logs are cryptographically immutable. DELETE operations are forbidden.")
 
 
 class User(Base):

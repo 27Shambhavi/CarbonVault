@@ -31,12 +31,12 @@ def get_db():
 
 # Pydantic schemas
 class ConfigSetRequest(BaseModel):
-    key: str
-    value: str
-    unit: Optional[str] = None
-    source: Optional[str] = "admin_setting"
+    key: str = Field(..., max_length=100)
+    value: str = Field(..., max_length=1000)
+    unit: Optional[str] = Field(None, max_length=50)
+    source: Optional[str] = Field("admin_setting", max_length=100)
     is_public: bool = False
-    admin_name: str = "Admin"
+    admin_name: str = Field("Admin", max_length=100)
 
 
 class PlantationTypeCreate(BaseModel):

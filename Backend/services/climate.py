@@ -52,18 +52,16 @@ def fetch_nasa_power_climate(
     }
     headers = {"User-Agent": USER_AGENT, "Accept": "application/json"}
 
-    for attempt in range(2):
-        try:
-            with httpx.Client(timeout=timeout_s) as client:
-                resp = client.get(NASA_POWER_BASE, params=params, headers=headers)
-                if resp.status_code == 200:
-                    data = resp.json()
-                    props = data.get("properties", {})
-                    return props.get("parameter", {})
-                logger.warning("NASA POWER API returned %d (attempt %d)", resp.status_code, attempt + 1)
-        except Exception as e:
-            logger.warning("NASA POWER API attempt %d failed: %s", attempt + 1, e)
-            time.sleep(1.0)
+    try:
+        from core.ssrf_guard import safe_request
+        resp = safe_request("GET", NASA_POWER_BASE, params=params, headers=headers, timeout=timeout_s, max_retries=2)
+        if resp.status_code == 200:
+            data = resp.json()
+            props = data.get("properties", {})
+            return props.get("parameter", {})
+        logger.warning("NASA POWER API returned %d", resp.status_code)
+    except Exception as e:
+        logger.warning("NASA POWER API request failed: %s", e)
     return {}
 
 
