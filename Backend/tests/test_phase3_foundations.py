@@ -128,5 +128,6 @@ def test_alembic_migrations_in_sync():
     from alembic.config import Config
 
     alembic_cfg = Config(os.path.join(backend_dir, "alembic.ini"))
-    # command.check will raise an exception if new upgrade operations exist
+    # Ensure current head is applied, then check for any model-migration drift
+    command.upgrade(alembic_cfg, "head")
     command.check(alembic_cfg)
