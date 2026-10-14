@@ -530,3 +530,112 @@ class Retirement(Base):
     account = relationship("CreditAccount")
     batch = relationship("CreditBatch")
     project = relationship("Project")
+
+
+class OrganizationProfile(Base):
+    __tablename__ = "organization_profiles"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id"), index=True, nullable=False)
+    legal_name = Column(String, index=True, nullable=False)
+    registration_number = Column(String, index=True, nullable=False)
+    country = Column(String, nullable=False)
+    org_type = Column(String, nullable=False)  # 'ngo' | 'corporate'
+    kyc_status = Column(String, default="pending", nullable=False)  # 'pending', 'verified', 'rejected'
+    kyc_reviewed_by = Column(String, nullable=True)
+    kyc_reviewed_at = Column(DateTime, nullable=True)
+    kyc_notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    user = relationship("User")
+
+
+class OrganizationDocument(Base):
+    __tablename__ = "organization_documents"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    org_profile_id = Column(Integer, ForeignKey("organization_profiles.id"), index=True, nullable=False)
+    doc_type = Column(String, nullable=False)  # 'incorporation', 'tax_id', 'board_resolution', 'identity_proof'
+    file_url = Column(String, nullable=False)
+    sha256_checksum = Column(String, nullable=False)
+    version = Column(Integer, default=1, nullable=False)
+    uploaded_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    org_profile = relationship("OrganizationProfile")
+
+
+class ProjectDocument(Base):
+    __tablename__ = "project_documents"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    project_id = Column(String, ForeignKey("projects.project_id"), index=True, nullable=False)
+    doc_type = Column(String, nullable=False)  # 'land_proof', 'methodology_reference', 'monitoring_plan', 'baseline_notes'
+    file_url = Column(String, nullable=False)
+    sha256_checksum = Column(String, nullable=False)
+    version = Column(Integer, default=1, nullable=False)
+    uploaded_by = Column(String, nullable=True)
+    uploaded_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    project = relationship("Project")
+
+
+class FieldVerification(Base):
+    __tablename__ = "field_verifications"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    project_id = Column(String, ForeignKey("projects.project_id"), index=True, nullable=False)
+    verifier_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    verifier_name = Column(String, nullable=False)
+    report_url = Column(String, nullable=False)
+    decision = Column(String, nullable=False)  # 'verified', 'rejected'
+    notes = Column(Text, nullable=True)
+    signature_hash = Column(String, nullable=False)
+    verified_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    verifier = relationship("User")
+    project = relationship("Project")
+
+
+class MLFlagFeedback(Base):
+    __tablename__ = "ml_flag_feedbacks"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    flag_name = Column(String, index=True, nullable=False)
+    project_id = Column(String, index=True, nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    feedback = Column(String, nullable=False)  # 'useful', 'not_useful'
+    comments = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    user = relationship("User")
+
+
+class AccountDeletionRequest(Base):
+    __tablename__ = "account_deletion_requests"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id"), index=True, nullable=False)
+    reason = Column(Text, nullable=True)
+    status = Column(String, default="pending", nullable=False)  # 'pending', 'processed', 'cancelled'
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    user = relationship("User")
+
+
+class Payout(Base):
+    __tablename__ = "payouts"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    payout_id = Column(String, unique=True, index=True, nullable=False)  # PAY-uuid
+    ngo_id = Column(Integer, ForeignKey("ngos.id"), index=True, nullable=False)
+    amount_inr = Column(Float, nullable=False)
+    currency = Column(String, default="INR", nullable=False)
+    status = Column(String, default="pending", nullable=False)  # 'pending', 'settled', 'failed'
+    bank_account_last4 = Column(String, nullable=True)
+    ifsc_code = Column(String, nullable=True)
+    reference_note = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    settled_at = Column(DateTime, nullable=True)
+
+    ngo = relationship("NGO")

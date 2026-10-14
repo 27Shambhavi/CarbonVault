@@ -161,7 +161,7 @@ def require_role(allowed_roles: List[str]):
         token = credentials.credentials
         claims = decode_access_token(token)
         user_role = claims.get("role", "public")
-        user_admin_role = claims.get("admin_role")
+        user_admin_role = claims.get("admin_role") if user_role == "admin" else None
 
         # Check if user role matches allowed roles
         has_role = (
@@ -239,6 +239,10 @@ def login(req: LoginRequest, request: Request, db: Session = Depends(get_db)):
     if not is_valid:
         log_auth_attempt(db, email_clean, detail="invalid_password")
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password")
+
+    if getattr(user, "status", "active") == "suspended":
+        log_auth_attempt(db, email_clean, detail="account_suspended")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account is suspended. Please contact platform administration.")
 
     # Successful login
     log_auth_attempt(db, email_clean, detail="success")

@@ -15,9 +15,9 @@ import uuid
 import json
 from datetime import datetime, timedelta
 
-from fastapi import APIRouter, HTTPException, Request, Header
-from pydantic import BaseModel
-from typing import Optional
+from fastapi import APIRouter, HTTPException, Request, Header, Response
+from pydantic import BaseModel, Field
+from typing import Optional, List
 from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
@@ -27,7 +27,7 @@ from core.config import RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET, RAZORPAY_WEBHOOK_S
 from credit_calculation.credits_module.db import SessionLocal
 from credit_calculation.credits_module.db_models import (
     Project, FundingDetails, Transaction, Wallet, ProjectCredits, CorporateRequest, Certificate, FxRate,
-    PaymentQuote, PricingConfig
+    PaymentQuote, PricingConfig, Payout, NGO
 )
 
 
@@ -792,4 +792,220 @@ async def razorpay_webhook(
         db.close()
 
 
+# ── Admin Refund Flow (Phase 7) ──────────────────────────────────────────
+
+class RefundRequest(BaseModel):
+    transaction_id: int
+    reason: Optional[str] = "Admin authorized refund"
+
+
+@router.post("/refund")
+def process_refund(
+    req: RefundRequest,
+    authorization: Optional[str] = Header(None)
+):
+    """
+    Admin refund flow:
+    - Verifies transaction exists and is not already refunded
+    - Reverses credits and spend in corporate wallet
+    - Marks transaction as 'refunded'
+    - Notifies corporate buyer
+    - Logs immutable audit trail event
+    """
+    db = SessionLocal()
+    try:
+        # Check admin credentials if authorization header provided
+        if authorization and authorization.startswith("Bearer "):
+            try:
+                from routers.auth_router import decode_access_token
+                claims = decode_access_token(authorization.split(" ")[1])
+                role = claims.get("role")
+                admin_role = claims.get("admin_role")
+                if role not in ["admin", "super_admin"] and admin_role not in ["super_admin", "approver"]:
+                    raise HTTPException(status_code=403, detail="Admin permissions required for refunds.")
+            except Exception as e:
+                if isinstance(e, HTTPException):
+                    raise e
+                raise HTTPException(status_code=401, detail="Invalid token.")
+
+        txn = db.query(Transaction).filter(Transaction.id == req.transaction_id).first()
+        if not txn:
+            raise HTTPException(status_code=404, detail="Transaction not found.")
+
+        if getattr(txn, "status", None) == "refunded":
+            raise HTTPException(status_code=400, detail="Transaction has already been refunded.")
+
+        prev_status = getattr(txn, "status", "success")
+        txn.status = "refunded"
+
+        # Reverse corporate wallet balance
+        wallet = db.query(Wallet).filter(Wallet.corporate_name == txn.corporate_name).first()
+        reversed_credits = 0.0
+        reversed_amount = 0.0
+        if wallet:
+            reversed_credits = min(wallet.total_credits, float(txn.quantity or 0))
+            wallet.total_credits = max(0.0, wallet.total_credits - reversed_credits)
+            reversed_amount = min(wallet.total_spent_inr, float(txn.amount_inr or 0))
+            wallet.total_spent_inr = max(0.0, wallet.total_spent_inr - reversed_amount)
+
+        # Notify buyer
+        try:
+            from routers.notifications_router import create_notification
+            create_notification(
+                db=db,
+                title="Refund Processed",
+                message=f"A refund of ₹{txn.amount_inr:,.2f} for {txn.quantity} credits has been processed for {txn.corporate_name}. Reason: {req.reason}",
+                type="info",
+                recipient_role="buyer",
+                related_project_id=txn.project_id
+            )
+        except Exception:
+            pass
+
+        # Record Audit Log
+        try:
+            from core.audit import record_audit_event
+            record_audit_event(
+                action="payment_refund",
+                name=f"TXN-{txn.id}",
+                detail=f"Refund of ₹{txn.amount_inr} for {txn.quantity} credits processed for {txn.corporate_name}. Reversal: -{reversed_credits} credits. Reason: {req.reason}",
+                user="admin",
+                db=db
+            )
+        except Exception as ae:
+            logger.warning("Failed to record refund audit: %s", ae)
+
+        db.commit()
+
+        return {
+            "status": "ok",
+            "message": f"Transaction #{txn.id} refunded successfully.",
+            "transaction_id": txn.id,
+            "refunded_amount": txn.amount_inr,
+            "reversed_credits": reversed_credits,
+            "corporate_name": txn.corporate_name,
+            "previous_status": prev_status,
+            "current_status": "refunded"
+        }
+    finally:
+        db.close()
+
+
+# ── Payouts Ledger & Settlement (Phase 7) ────────────────────────────────
+
+class PayoutCreateRequest(BaseModel):
+    ngo_id: int
+    amount_inr: float = Field(..., gt=0)
+    bank_account_last4: Optional[str] = Field(None, max_length=4)
+    ifsc_code: Optional[str] = Field(None, max_length=20)
+    reference_note: Optional[str] = None
+
+
+@router.post("/payouts")
+def create_payout(req: PayoutCreateRequest):
+    """Record an NGO payout owed or ready for settlement."""
+    import uuid
+    db = SessionLocal()
+    try:
+        ngo = db.query(NGO).filter(NGO.id == req.ngo_id).first()
+        if not ngo:
+            raise HTTPException(status_code=404, detail="NGO entity not found.")
+
+        payout = Payout(
+            payout_id=f"PAY-{uuid.uuid4().hex[:8].upper()}",
+            ngo_id=ngo.id,
+            amount_inr=req.amount_inr,
+            currency="INR",
+            status="pending",
+            bank_account_last4=req.bank_account_last4 or "9876",
+            ifsc_code=req.ifsc_code or "HDFC0001234",
+            reference_note=req.reference_note or f"Credit proceeds payout for {ngo.name}",
+            created_at=datetime.utcnow()
+        )
+        db.add(payout)
+        db.commit()
+        db.refresh(payout)
+
+        return {
+            "status": "ok",
+            "message": "Payout created successfully.",
+            "payout": {
+                "id": payout.id,
+                "payout_id": payout.payout_id,
+                "ngo_name": ngo.name,
+                "amount_inr": payout.amount_inr,
+                "status": payout.status,
+                "created_at": payout.created_at.isoformat()
+            }
+        }
+    finally:
+        db.close()
+
+
+@router.get("/payouts")
+def list_payouts(ngo_id: Optional[int] = None):
+    """Retrieve payouts ledger entries for NGOs."""
+    db = SessionLocal()
+    try:
+        query = db.query(Payout)
+        if ngo_id:
+            query = query.filter(Payout.ngo_id == ngo_id)
+        records = query.order_by(Payout.created_at.desc()).all()
+        return [
+            {
+                "id": p.id,
+                "payout_id": p.payout_id,
+                "ngo_id": p.ngo_id,
+                "ngo_name": p.ngo.name if p.ngo else None,
+                "amount_inr": p.amount_inr,
+                "currency": p.currency,
+                "status": p.status,
+                "bank_account_last4": p.bank_account_last4,
+                "ifsc_code": p.ifsc_code,
+                "reference_note": p.reference_note,
+                "created_at": p.created_at.isoformat()
+            }
+            for p in records
+        ]
+    finally:
+        db.close()
+
+
+@router.get("/payouts/export-csv")
+def export_payouts_csv():
+    """Export payouts ledger as a bank settlement CSV for manual/batch wire processing."""
+    import csv
+    import io
+    db = SessionLocal()
+    try:
+        payouts = db.query(Payout).order_by(Payout.created_at.desc()).all()
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow([
+            "Payout ID", "Beneficiary NGO", "Bank Account Last 4", "IFSC Code",
+            "Amount (INR)", "Currency", "Status", "Reference", "Created At"
+        ])
+        for p in payouts:
+            writer.writerow([
+                p.payout_id,
+                p.ngo.name if p.ngo else "Unknown NGO",
+                f"****{p.bank_account_last4}" if p.bank_account_last4 else "",
+                p.ifsc_code or "",
+                f"{p.amount_inr:.2f}",
+                p.currency,
+                p.status,
+                p.reference_note or "",
+                p.created_at.strftime("%Y-%m-%d %H:%M:%S") if p.created_at else ""
+            ])
+        csv_content = output.getvalue()
+        return Response(
+            content=csv_content,
+            media_type="text/csv",
+            headers={"Content-Disposition": "attachment; filename=carbonvault_payouts_settlement.csv"}
+        )
+    finally:
+        db.close()
+
+
 print("[OK] payment_router loaded")
+

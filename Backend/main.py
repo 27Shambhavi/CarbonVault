@@ -24,7 +24,7 @@ logger = logging.getLogger("carbonvault")
 from credit_calculation.credits_module.db_models import (
     Base, Project, NGO, CorporateRequest, Transaction, Wallet, ProjectCredits, FundingDetails, AuditLog,
     User, PricingConfig, PriceHistory, Notification, ProjectStatusHistory, ProjectProgressUpdate,
-    FootprintEstimate, Certificate
+    FootprintEstimate, Certificate, OrganizationProfile, ProjectDocument, FieldVerification
 )
 from credit_calculation.credits_module.db import engine, SessionLocal
 
@@ -45,6 +45,7 @@ from routers.auth_router import router as auth_router, hash_password
 from routers.stats_router import router as stats_router
 from routers.config_router import router as config_router
 from routers.credit_integrity_router import router as credit_integrity_router
+from routers.onboarding_router import router as onboarding_router
 
 
 def migrate_db():
@@ -377,6 +378,7 @@ def seed_initial_data():
                 User(name="Borneo Earth", email="team@borneoearth.org", password_hash=hash_password("ngo123"), role="ngo", projects=1, credits=0, joined="2024-03-08", status="suspended"),
                 User(name="HSBC Green Finance", email="carbon@hsbc.com", password_hash=hash_password("corp123"), role="buyer", projects=0, credits=9800, joined="2024-02-17", status="active"),
                 User(name="CongoCare", email="ops@congocare.org", password_hash=hash_password("ngo123"), role="ngo", projects=2, credits=22000, joined="2023-11-30", status="active"),
+                User(name="TUV Rheinland Verifier", email="verifier@carbonvault.com", password_hash=hash_password("verifier123"), role="verifier", admin_role=None, projects=0, credits=0, joined="2024-01-01", status="active"),
             ]
             db.add_all(default_users)
             db.commit()
@@ -387,6 +389,7 @@ def seed_initial_data():
                 "approver@carbonvault.com": ("approver123", "Sarah Jenkins", "admin", "approver"),
                 "contact@ecoguard.org": ("ngo123", "EcoGuard Brazil", "ngo", None),
                 "carbon@microsoft.com": ("corp123", "Microsoft Sustainability", "corporate", None),
+                "verifier@carbonvault.com": ("verifier123", "TUV Rheinland Verifier", "verifier", None),
             }
             for em, (pw, nm, rl, arl) in users_to_fix.items():
                 u = db.query(User).filter(User.email == em).first()
@@ -533,6 +536,39 @@ def seed_initial_data():
             )
             db.add_all([u1, u2, u3])
             db.commit()
+
+        # Ensure PRJ-MAN-AMAZON has field verification sign-off and documents
+        try:
+            if not db.query(FieldVerification).filter(FieldVerification.project_id == "PRJ-MAN-AMAZON").first():
+                verifier_u = db.query(User).filter(User.role == "verifier").first()
+                v_id = verifier_u.id if verifier_u else 1
+                v_name = verifier_u.name if verifier_u else "TUV Rheinland Verifier"
+                db.add(FieldVerification(
+                    project_id="PRJ-MAN-AMAZON",
+                    verifier_id=v_id,
+                    verifier_name=v_name,
+                    report_url="/evidence/field_audit_PRJ-MAN-AMAZON.pdf",
+                    decision="verified",
+                    notes="LiDAR canopy scanning and tree density census completed on-site.",
+                    signature_hash="f5a7924e321e845b08e22a4b2e8a3427928e12dcf643f808b6b45a494156699d",
+                    verified_at=datetime.utcnow() - timedelta(days=30)
+                ))
+                db.commit()
+
+            if not db.query(ProjectDocument).filter(ProjectDocument.project_id == "PRJ-MAN-AMAZON").first():
+                for dt in ["land_proof", "methodology_reference", "monitoring_plan", "baseline_notes"]:
+                    db.add(ProjectDocument(
+                        project_id="PRJ-MAN-AMAZON",
+                        doc_type=dt,
+                        file_url=f"/evidence/PRJ-MAN-AMAZON_{dt}.pdf",
+                        sha256_checksum="e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                        version=1,
+                        uploaded_by="contact@ecoguard.org",
+                        uploaded_at=datetime.utcnow() - timedelta(days=45)
+                    ))
+                db.commit()
+        except Exception as p6_err:
+            logger.warning("Error ensuring PRJ-MAN-AMAZON verification: %s", p6_err)
 
         # Check if projects already exist
         if db.query(Project).first():
@@ -797,6 +833,60 @@ def seed_initial_data():
             seed_initial_credit_batches(db)
         except Exception as cbe:
             logger.warning("Error running credit batch seeding: %s", cbe)
+
+        # Seed Phase 6 Onboarding KYC, Project Documents, and Field Verification
+        try:
+            ngo_user = db.query(User).filter(User.email == "contact@ecoguard.org").first()
+            if ngo_user and not db.query(OrganizationProfile).filter(OrganizationProfile.user_id == ngo_user.id).first():
+                prof = OrganizationProfile(
+                    user_id=ngo_user.id,
+                    legal_name="EcoGuard Brazil Conservation Ltda",
+                    registration_number="BR-CNPJ-98765432000199",
+                    country="Brazil",
+                    org_type="ngo",
+                    kyc_status="verified",
+                    kyc_reviewed_by="admin@carbonvault.com",
+                    kyc_reviewed_at=datetime.utcnow() - timedelta(days=60),
+                    kyc_notes="Verified against Brazilian Ministry of Environment NGO registry",
+                    created_at=datetime.utcnow() - timedelta(days=90),
+                    updated_at=datetime.utcnow() - timedelta(days=60)
+                )
+                db.add(prof)
+                db.commit()
+
+            # Seed 4 mandatory project documents for PRJ-MAN-AMAZON
+            if not db.query(ProjectDocument).filter(ProjectDocument.project_id == "PRJ-MAN-AMAZON").first():
+                doc_types = ["land_proof", "methodology_reference", "monitoring_plan", "baseline_notes"]
+                for dt in doc_types:
+                    db.add(ProjectDocument(
+                        project_id="PRJ-MAN-AMAZON",
+                        doc_type=dt,
+                        file_url=f"/evidence/PRJ-MAN-AMAZON_{dt}.pdf",
+                        sha256_checksum="e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                        version=1,
+                        uploaded_by="contact@ecoguard.org",
+                        uploaded_at=datetime.utcnow() - timedelta(days=45)
+                    ))
+                db.commit()
+
+            # Seed FieldVerification for PRJ-MAN-AMAZON
+            verifier_u = db.query(User).filter(User.email == "verifier@carbonvault.com").first()
+            v_id = verifier_u.id if verifier_u else 1
+            if not db.query(FieldVerification).filter(FieldVerification.project_id == "PRJ-MAN-AMAZON").first():
+                fv = FieldVerification(
+                    project_id="PRJ-MAN-AMAZON",
+                    verifier_id=v_id,
+                    verifier_name="TUV Rheinland Verifier",
+                    report_url="/evidence/field_audit_PRJ-MAN-AMAZON.pdf",
+                    decision="verified",
+                    notes="LiDAR canopy scanning and tree density census completed on-site.",
+                    signature_hash="f5a7924e321e845b08e22a4b2e8a3427928e12dcf643f808b6b45a494156699d",
+                    verified_at=datetime.utcnow() - timedelta(days=30)
+                )
+                db.add(fv)
+                db.commit()
+        except Exception as p6_seed_err:
+            logger.warning("Error seeding Phase 6 onboarding demo data: %s", p6_seed_err)
 
         logger.info("[OK] Initial demo data seeded successfully")
 
@@ -1176,6 +1266,7 @@ app.include_router(auth_router)
 app.include_router(stats_router)
 app.include_router(config_router)
 app.include_router(credit_integrity_router, tags=["Credit Integrity"])
+app.include_router(onboarding_router)
 
 
 if __name__ == "__main__":

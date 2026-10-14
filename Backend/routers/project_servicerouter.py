@@ -19,7 +19,7 @@ from reportlab.lib.pagesizes import letter
 from credit_calculation.credits_module.db_models import (
     Project, ProjectCredits, FundingDetails, NGO, AuditLog, Transaction,
     User, PricingConfig, PriceHistory, ProjectStatusHistory, ProjectProgressUpdate,
-    Certificate
+    Certificate, FieldVerification, ProjectDocument, OrganizationProfile
 )
 from credit_calculation.credits_module.db import SessionLocal
 from credit_calculation.credits_module.calculator import CreditCalculator
@@ -2012,6 +2012,33 @@ def update_project_status(
             raise HTTPException(status_code=400, detail="Status is required")
 
         old_status = project.status or "draft"
+
+        # Phase 6 Guard: Independent Verifier sign-off required before admin approval
+        if target_status == "approved":
+            has_verified_signoff = db.query(FieldVerification).filter(
+                FieldVerification.project_id == project.project_id,
+                FieldVerification.decision == "verified"
+            ).first()
+            if not has_verified_signoff:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Approval blocked: Field verification sign-off with 'verified' decision from an independent verifier is required before project approval."
+                )
+
+        # Phase 6 Guard: All 4 project documents required to leave draft
+        if target_status in ["submitted", "under_review"] and old_status == "draft":
+            uploaded_docs = db.query(ProjectDocument).filter(
+                ProjectDocument.project_id == project.project_id
+            ).all()
+            uploaded_types = {d.doc_type for d in uploaded_docs}
+            required_types = {"land_proof", "methodology_reference", "monitoring_plan", "baseline_notes"}
+            missing_types = required_types - uploaded_types
+            if missing_types:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Submission blocked: Missing required project documents: {list(missing_types)}. All 4 documents must be uploaded before leaving draft."
+                )
+
         project.status = target_status
         db.commit()
 
