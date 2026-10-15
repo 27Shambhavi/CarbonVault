@@ -16,7 +16,7 @@ Pillow==12.3.0
 exifread==3.5.1
 imagehash==4.3.2
 geoalchemy2==0.18.4
-psycopg2-binary==2.9.11
+psycopg2-binary==2.9.13
 shapely==2.1.2
 pyproj==3.7.1
 razorpay==2.0.1
