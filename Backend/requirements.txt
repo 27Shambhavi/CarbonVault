@@ -4,7 +4,7 @@ sqlalchemy==2.0.52
 alembic==1.15.0
 pydantic==2.13.4
 pydantic-settings==2.13.1
-python-json-logger==4.0.0
+python-json-logger==4.2.0
 python-multipart==0.0.32
 scikit-learn==1.7.2
 pandas==2.3.3
