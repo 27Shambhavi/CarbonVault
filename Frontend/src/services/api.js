@@ -690,3 +690,142 @@ export async function downloadPlatformPDF() {
   document.body.removeChild(link);
   URL.revokeObjectURL(blobUrl);
 }
+
+// ══════════════════════════════════════════════════════════════════════════════
+// PHASE 6 & 7: ONBOARDING, KYC, DOCUMENTS, VERIFIER, REFUNDS, PAYOUTS
+// ══════════════════════════════════════════════════════════════════════════════
+
+// 1. Organisation Profile & KYC
+export async function submitOrgProfile(data) {
+  return request(`${API_BASE}/onboarding/profile`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+}
+
+export async function fetchOrgProfile() {
+  return request(`${API_BASE}/onboarding/profile/me`);
+}
+
+export async function fetchPendingKycProfiles() {
+  return request(`${API_BASE}/onboarding/kyc/pending`);
+}
+
+export async function reviewKycProfile(profileId, decision, notes = '') {
+  return request(`${API_BASE}/onboarding/kyc/review`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      profile_id: profileId,
+      decision,
+      notes,
+    }),
+  });
+}
+
+// 2. Project Documents (4 Required Documents Gate)
+export async function uploadProjectDocument(projectId, file, docType, title = '') {
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('doc_type', docType);
+  if (title) formData.append('title', title);
+  return request(`${API_BASE}/projects/${encodeURIComponent(projectId)}/documents`, {
+    method: 'POST',
+    body: formData,
+  });
+}
+
+export async function fetchProjectDocuments(projectId) {
+  return request(`${API_BASE}/projects/${encodeURIComponent(projectId)}/documents`);
+}
+
+export async function fetchSubmissionReadiness(projectId) {
+  return request(`${API_BASE}/projects/${encodeURIComponent(projectId)}/submission-readiness`);
+}
+
+// 3. Verifier Gates & Dashboard
+export async function assignVerifier(projectId, verifierEmail, notes = '') {
+  return request(`${API_BASE}/projects/${encodeURIComponent(projectId)}/verifier/assign`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ verifier_email: verifierEmail, notes }),
+  });
+}
+
+export async function submitVerifierSignoff(projectId, decision, comments = '', reportUrl = '') {
+  return request(`${API_BASE}/projects/${encodeURIComponent(projectId)}/verifier/signoff`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ decision, comments, report_url: reportUrl }),
+  });
+}
+
+export async function fetchVerifierStatus(projectId) {
+  return request(`${API_BASE}/projects/${encodeURIComponent(projectId)}/verifier/status`);
+}
+
+// 4. ML Feedback
+export async function submitMLFeedback(projectId, flagId, useful, notes = '') {
+  return request(`${API_BASE}/projects/${encodeURIComponent(projectId)}/ml-flags/${encodeURIComponent(flagId)}/feedback`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ useful, notes }),
+  });
+}
+
+// 5. Account Lifecycle & Data Export
+export async function exportUserData() {
+  return request(`${API_BASE}/users/me/export`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+  });
+}
+
+export async function requestAccountDeletion(reason = '') {
+  return request(`${API_BASE}/users/me/delete-request`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ reason }),
+  });
+}
+
+export async function toggleUserStatus(userId, status) {
+  return request(`${API_BASE}/users/${encodeURIComponent(userId)}/status`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ status }),
+  });
+}
+
+// 6. Refunds & Payouts Ledger
+export async function processPaymentRefund(transactionId, reason = '') {
+  return request(`${API_BASE}/payments/refund`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ transaction_id: transactionId, reason }),
+  });
+}
+
+export async function fetchPayoutsLedger(ngoId = null) {
+  const qs = ngoId ? `?ngo_id=${encodeURIComponent(ngoId)}` : '';
+  return request(`${API_BASE}/payments/payouts${qs}`);
+}
+
+export async function createPayout(ngoId, amountINR, bankLast4 = '9876', ifsc = 'HDFC0001234', reference = '') {
+  return request(`${API_BASE}/payments/payouts`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      ngo_id: ngoId,
+      amount_inr: amountINR,
+      bank_account_last4: bankLast4,
+      ifsc_code: ifsc,
+      reference_note: reference,
+    }),
+  });
+}
+
+export function getPayoutsExportUrl() {
+  return `${API_BASE}/payments/payouts/export-csv`;
+}

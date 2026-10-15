@@ -14,8 +14,10 @@ import DataBoundary from '../DataBoundary.jsx';
 import {
   TreePine, Layers, ShoppingCart, Plus, MapPin, Upload, CheckCircle,
   Clock, TrendingUp, Search, Filter, Star, AlertCircle, X, Leaf,
-  DollarSign, Camera, ShieldCheck, Eye, Calendar
+  DollarSign, Camera, ShieldCheck, Eye, Calendar, FileText
 } from 'lucide-react';
+import { ProjectDocumentGate } from '../projects/ProjectDocumentGate.jsx';
+
 
 // ── Shared constants ────────────────────────────────────────────────────────────
 const NGO_ID = 1; // Hardcoded for demo — backend auto-creates NGO by name
@@ -227,6 +229,7 @@ export function NGOProjects() {
   const [uploadPhoto, setUploadPhoto] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [lightboxImg, setLightboxImg] = useState(null);
+  const [docModalProject, setDocModalProject] = useState(null);
 
   useEffect(() => {
     setLoading(true);
@@ -351,9 +354,14 @@ export function NGOProjects() {
               <span style={{color:T.emeraldL,fontWeight:700}}>{(p.credits || 0).toLocaleString()}</span>,
               <span style={{color:T.goldL,fontWeight:700}}>{p.price_per_ton ? `$${p.price_per_ton}` : '—'}</span>,
               <Badge type={p.status} label={p.status.replace('_', ' ')}/>,
-              <Btn variant="secondary" style={{padding:'5px 11px',fontSize:11,gap:6}} onClick={()=>openProgress(p)}>
-                <TrendingUp size={12} color={T.teal}/> Timeline & Reports
-              </Btn>
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                <Btn variant="secondary" style={{padding:'5px 9px',fontSize:11,gap:4}} onClick={()=>openProgress(p)}>
+                  <TrendingUp size={12} color={T.teal}/> Timeline
+                </Btn>
+                <Btn variant="secondary" style={{padding:'5px 9px',fontSize:11,gap:4}} onClick={()=>setDocModalProject(p)}>
+                  <FileText size={12} color={T.teal}/> Docs Gate
+                </Btn>
+              </div>
             ])}
           />
         )}
@@ -554,6 +562,15 @@ export function NGOProjects() {
         )}
       </Modal>
 
+      {/* 4-Document Integrity Gate Modal */}
+      <Modal open={!!docModalProject} onClose={()=>setDocModalProject(null)} title={`Four-Document Integrity Gate: ${docModalProject?.name || ''}`} width={720}>
+        {docModalProject && (
+          <div style={{ padding: '6px 0' }}>
+            <ProjectDocumentGate projectId={docModalProject.project_id || docModalProject.id} canUpload={true} />
+          </div>
+        )}
+      </Modal>
+
       {ToastEl}
     </div>
   );
@@ -673,6 +690,9 @@ export function NGONewProject() {
             </div>
           </div>
         )}
+        <div style={{ marginTop: 20, textAlign: 'left', width: '100%', marginBottom: 20 }}>
+          <ProjectDocumentGate projectId={actualProjectId} canUpload={true} />
+        </div>
         <Btn onClick={()=>{setSubmitted(false);resetForm();}}>Submit Another Project</Btn>
       </div>
       {ToastEl}

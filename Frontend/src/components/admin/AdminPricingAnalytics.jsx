@@ -4,6 +4,7 @@ import { useApp } from '../../AppContext.jsx';
 import { fetchPricingConfig, savePricingConfig, fetchPlatformStats, fetchAllProjects, fetchClimateAnalytics, fetchPricingForecast } from '../../services/api.js';
 import { Card, SectionHeader, KPICard, Btn, T, withAlpha } from '../UI.jsx';
 import { DollarSign, TrendingUp, Package, Activity, Save, RotateCcw, ShieldAlert, Lock, Cpu, Sliders, ArrowUpRight, ArrowDownRight, Minus } from 'lucide-react';
+import { AdminRefundPayouts } from './AdminRefundPayouts.jsx';
 
 const CT = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null;
@@ -426,6 +427,9 @@ export function AdminPricing() {
           )}
         </div>
       </div>
+
+      {/* Refunds and Payouts Settlement Section */}
+      <AdminRefundPayouts />
     </div>
   );
 }

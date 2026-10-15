@@ -21,8 +21,10 @@ import { LineChart, Line, XAxis, YAxis, Tooltip as ChartTooltip, ResponsiveConta
 import {
   CheckCircle, XCircle, MessageSquare, AlertTriangle, ImageOff,
   ZoomIn, Leaf, DollarSign, Clock, ArrowRight, ShieldCheck, History,
-  RotateCcw, Sparkles, Trash2, Lock, Upload, CloudRain, Sun, Activity
+  RotateCcw, Sparkles, Trash2, Lock, Upload, CloudRain, Sun, Activity, Building2, FolderCheck
 } from 'lucide-react';
+import { AdminKYCReviewQueue } from '../onboarding/OnboardingKYC.jsx';
+import { ProjectDocumentGate } from '../projects/ProjectDocumentGate.jsx';
 
 const STAGES = [
   { key: 'draft', label: 'Draft' },
@@ -51,6 +53,7 @@ export default function AdminApprovals() {
   const [loading, setLoading] = useState(true);
   const [selId, setSelId] = useState(null);
   const [fs, setFs] = useState('all');
+  const [adminTab, setAdminTab] = useState('projects'); // 'projects' | 'kyc'
   const [actionLoading, setActionLoading] = useState(false);
   const [imgLightbox, setImgLightbox] = useState(null);
   const [importModalOpen, setImportModalOpen] = useState(false);
@@ -273,18 +276,50 @@ export default function AdminApprovals() {
 
   return (
     <div style={{ padding: 28 }}>
-      <Card style={{ marginBottom: 18, padding: 0, overflow: 'hidden' }}>
-        <div style={{ padding: '16px 20px 10px' }}>
-          <SectionHeader
-            title="Plantation map"
-            subtitle="Approved (green) and pending (yellow). Click a polygon to select a project in the list."
-            action={
-              <Btn onClick={() => setImportModalOpen(true)}>
-                <Upload size={13} /> Bulk Import (CSV)
-              </Btn>
-            }
-          />
-        </div>
+      {/* Top Level Approvals & KYC Tab Switcher */}
+      <div style={{ display: 'flex', gap: 10, marginBottom: 20 }}>
+        <button
+          onClick={() => setAdminTab('projects')}
+          style={{
+            background: adminTab === 'projects' ? 'rgba(45,212,191,0.12)' : 'transparent',
+            border: `1px solid ${adminTab === 'projects' ? T.teal : 'transparent'}`,
+            borderRadius: 8, padding: '9px 18px', color: adminTab === 'projects' ? T.tealL : T.t3,
+            fontSize: 13, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8
+          }}
+        >
+          <FolderCheck size={16} />
+          <span>Project Approvals & Plantation Map</span>
+        </button>
+        <button
+          onClick={() => setAdminTab('kyc')}
+          style={{
+            background: adminTab === 'kyc' ? 'rgba(45,212,191,0.12)' : 'transparent',
+            border: `1px solid ${adminTab === 'kyc' ? T.teal : 'transparent'}`,
+            borderRadius: 8, padding: '9px 18px', color: adminTab === 'kyc' ? T.tealL : T.t3,
+            fontSize: 13, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8
+          }}
+        >
+          <Building2 size={16} />
+          <span>Organisation KYC Compliance Queue</span>
+        </button>
+      </div>
+
+      {adminTab === 'kyc' ? (
+        <AdminKYCReviewQueue />
+      ) : (
+        <>
+          <Card style={{ marginBottom: 18, padding: 0, overflow: 'hidden' }}>
+            <div style={{ padding: '16px 20px 10px' }}>
+              <SectionHeader
+                title="Plantation map"
+                subtitle="Approved (green) and pending (yellow). Click a polygon to select a project in the list."
+                action={
+                  <Btn onClick={() => setImportModalOpen(true)}>
+                    <Upload size={13} /> Bulk Import (CSV)
+                  </Btn>
+                }
+              />
+            </div>
         <ProjectMap
           features={mapFeatures}
           adminMode
@@ -434,6 +469,11 @@ export default function AdminApprovals() {
                     );
                   })}
                 </div>
+              </div>
+
+              {/* ── Four-Document Integrity Gate Display ── */}
+              <div style={{ marginBottom: 22 }}>
+                <ProjectDocumentGate projectId={sel.project_id || sel.id} canUpload={false} />
               </div>
 
               {/* ── MRV / Fraud / Env Scores ── */}
@@ -1024,6 +1064,8 @@ export default function AdminApprovals() {
           </div>
         )}
       </div>
+        </>
+      )}
 
       {/* ── Image Lightbox Modal ── */}
       <Modal open={!!imgLightbox} onClose={() => setImgLightbox(null)} title="Evidence Image" width={720}>

@@ -379,6 +379,7 @@ def seed_initial_data():
                 User(name="HSBC Green Finance", email="carbon@hsbc.com", password_hash=hash_password("corp123"), role="buyer", projects=0, credits=9800, joined="2024-02-17", status="active"),
                 User(name="CongoCare", email="ops@congocare.org", password_hash=hash_password("ngo123"), role="ngo", projects=2, credits=22000, joined="2023-11-30", status="active"),
                 User(name="TUV Rheinland Verifier", email="verifier@carbonvault.com", password_hash=hash_password("verifier123"), role="verifier", admin_role=None, projects=0, credits=0, joined="2024-01-01", status="active"),
+                User(name="Public Auditor", email="guest@carbonvault.com", password_hash=hash_password("guest123"), role="public", admin_role=None, projects=0, credits=0, joined="2024-01-01", status="active"),
             ]
             db.add_all(default_users)
             db.commit()
@@ -390,6 +391,7 @@ def seed_initial_data():
                 "contact@ecoguard.org": ("ngo123", "EcoGuard Brazil", "ngo", None),
                 "carbon@microsoft.com": ("corp123", "Microsoft Sustainability", "corporate", None),
                 "verifier@carbonvault.com": ("verifier123", "TUV Rheinland Verifier", "verifier", None),
+                "guest@carbonvault.com": ("guest123", "Public Auditor", "public", None),
             }
             for em, (pw, nm, rl, arl) in users_to_fix.items():
                 u = db.query(User).filter(User.email == em).first()

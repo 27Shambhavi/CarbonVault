@@ -39,13 +39,18 @@ const publicNav = [
   {id:'certificates', label:'Certificates',     icon:Award},
   {id:'audit',        label:'Audit Trail',      icon:FileSearch},
 ];
-const navMap = {admin:adminNav, ngo:ngoNav, corporate:corporateNav, public:publicNav};
+const verifierNav = [
+  {id:'dashboard', label:'Audit Queue', icon:FolderCheck},
+];
+const navMap = {admin:adminNav, ngo:ngoNav, corporate:corporateNav, public:publicNav, verifier:verifierNav, approver:verifierNav};
 
 const RC = {
   admin:     {color:T.goldL,    bg:'rgba(245,158,11,0.1)',   border:'rgba(251,191,36,0.22)',   label:'Administrator'},
   ngo:       {color:T.skyL,     bg:'rgba(56,189,248,0.1)',   border:'rgba(56,189,248,0.22)',   label:'NGO Organization'},
   corporate: {color:T.violetLL, bg:'rgba(167,139,250,0.1)',  border:'rgba(167,139,250,0.22)',  label:'Corporate Buyer'},
   public:    {color:T.emeraldL, bg:'rgba(16,185,129,0.1)',   border:'rgba(16,185,129,0.22)',   label:'Public Transparency'},
+  verifier:  {color:T.tealL,    bg:'rgba(45,212,191,0.1)',   border:'rgba(45,212,191,0.22)',   label:'Accredited Verifier'},
+  approver:  {color:T.tealL,    bg:'rgba(45,212,191,0.1)',   border:'rgba(45,212,191,0.22)',   label:'Accredited Verifier'},
 };
 
 export function Sidebar() {

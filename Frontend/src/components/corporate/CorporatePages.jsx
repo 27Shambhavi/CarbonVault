@@ -716,6 +716,15 @@ export function CorporateMarketplace() {
               <label style={{fontSize:10,color:T.t3,fontWeight:700,letterSpacing:'0.7px',textTransform:'uppercase',marginBottom:7,display:'block'}}>Quantity (tonnes CO₂e)</label>
               <input type="number" value={qty} onChange={e=>setQty(Math.min(buyModal.credits||9999,Math.max(1,parseInt(e.target.value)||0)))} style={inp}/>
             </div>
+            {lockedQuote && (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(245,158,11,0.08)', border: `1px solid rgba(245,158,11,0.25)`, borderRadius: 8, padding: '7px 12px', marginBottom: 12 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: T.goldL, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <Clock size={13} />
+                  <span>Guaranteed Locked Quote (15-Min Window)</span>
+                </div>
+                <span style={{ fontSize: 10.5, fontWeight: 800, color: T.goldL, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Status: Confirmed</span>
+              </div>
+            )}
             <div style={{background:'rgba(255,255,255,0.03)',borderRadius:10,padding:14,marginBottom:18}}>
               {[
                 ['Quantity', `${qty.toLocaleString()} t`],

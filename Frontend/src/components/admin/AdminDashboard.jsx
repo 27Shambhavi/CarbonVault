@@ -12,8 +12,9 @@ import {
 import { KPICard, Card, SectionHeader, Table, Badge, MRVScore, Btn, T } from '../UI.jsx';
 import { ProjectMap } from '../GoogleMap.jsx';
 import { ActivityFeed } from '../ActivityFeed.jsx';
-import DataBoundary from '../DataBoundary.jsx';
 import { Layers, FolderCheck, Clock, AlertTriangle, Download, RefreshCw, Activity } from 'lucide-react';
+import { MLFeedbackWidget } from '../common/MLFeedbackWidget.jsx';
+import DataBoundary from '../DataBoundary.jsx';
 
 const CT = ({active,payload,label}) => {
   if (!active||!payload?.length) return null;
@@ -210,7 +211,10 @@ export default function AdminDashboard() {
                     Biometric risk score: {p.fraud_risk || p.fraudRisk}% &bull; Type: {p.plantation_type || p.type} &bull; Area: {p.area_hectares || '—'} ha
                   </div>
                 </div>
-                <Badge color="rose">REVIEW REQUIRED</Badge>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <MLFeedbackWidget projectId={p.project_id || p.id} flagId={`flag_${p.project_id || p.id}_bio`} />
+                  <Badge color="rose">REVIEW REQUIRED</Badge>
+                </div>
               </div>
             ))}
           </div>

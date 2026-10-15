@@ -245,7 +245,7 @@ export function Modal({ open, onClose, title, children, width=600 }) {
 }
 
 /* ── Button ─────────────────────────────────────────────── */
-export function Btn({ children, onClick, variant='primary', small, disabled, style={} }) {
+export function Btn({ children, onClick, variant='primary', small, size, disabled, type='button', style={}, ...rest }) {
   const vs = {
     primary:{
       background:`linear-gradient(135deg, ${T.teal} 0%, ${T.tealDD} 100%)`,
@@ -267,11 +267,17 @@ export function Btn({ children, onClick, variant='primary', small, disabled, sty
       border:'none', color:'#fff',
       boxShadow:`0 4px 16px rgba(245,158,11,0.3), inset 0 1px 0 rgba(255,255,255,0.2)`,
     },
+    ghost:{
+      background:'transparent',
+      border:`1px solid ${T.border}`,
+      color:T.t2,
+    },
   };
   const base = vs[variant]||vs.primary;
-  const sz = small?{padding:'5px 11px',fontSize:11}:{padding:'9px 18px',fontSize:13};
+  const isSmall = small || size === 'sm';
+  const sz = isSmall?{padding:'5px 11px',fontSize:11}:{padding:'9px 18px',fontSize:13};
   return (
-    <button onClick={onClick} disabled={disabled}
+    <button type={type} onClick={onClick} disabled={disabled}
       style={{
         ...base, ...sz,
         borderRadius:9, fontWeight:700,
@@ -282,11 +288,13 @@ export function Btn({ children, onClick, variant='primary', small, disabled, sty
         ...style
       }}
       onMouseEnter={e=>{if(!disabled){e.currentTarget.style.opacity='0.87';e.currentTarget.style.transform='translateY(-1px)';}}}
-      onMouseLeave={e=>{if(!disabled){e.currentTarget.style.opacity='1';e.currentTarget.style.transform='translateY(0)';}}}>
+      onMouseLeave={e=>{if(!disabled){e.currentTarget.style.opacity='1';e.currentTarget.style.transform='translateY(0)';}}}
+      {...rest}>
       {children}
     </button>
   );
 }
+export const Button = Btn;
 
 /* ── Score Gauge ────────────────────────────────────────── */
 export function ScoreGauge({ score, max=1000, label }) {

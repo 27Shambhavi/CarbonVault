@@ -176,12 +176,25 @@ export default function AdminUsers() {
             <span style={{ color: T.teal, fontWeight: 600 }}>{u.projects}</span>,
             <span style={{ color: T.emeraldL, fontWeight: 700 }}>{(u.credits || 0).toLocaleString()}</span>,
             <span style={{ color: T.t3, fontSize: 12 }}>{u.joined}</span>,
-            <Badge type={u.status} label={u.status} />,
-            <button onClick={() => setSel(u)} style={{ background: 'rgba(45,212,191,0.08)', border: '1px solid rgba(45,212,191,0.2)', borderRadius: 7, padding: '4px 11px', color: T.teal, fontSize: 12, cursor: 'pointer', fontWeight: 700, transition: 'all 0.15s' }}
-              onMouseEnter={e => { e.currentTarget.style.background = 'rgba(45,212,191,0.14)'; }}
-              onMouseLeave={e => { e.currentTarget.style.background = 'rgba(45,212,191,0.08)'; }}>
-              View
-            </button>
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+              <button onClick={() => setSel(u)} style={{ background: 'rgba(45,212,191,0.08)', border: '1px solid rgba(45,212,191,0.2)', borderRadius: 7, padding: '4px 9px', color: T.teal, fontSize: 11, cursor: 'pointer', fontWeight: 700, transition: 'all 0.15s' }}>
+                View
+              </button>
+              {!isApprover && (
+                <button
+                  onClick={() => handleToggleStatus(u)}
+                  style={{
+                    background: u.status === 'active' ? 'rgba(239,68,68,0.08)' : 'rgba(16,185,129,0.08)',
+                    border: `1px solid ${u.status === 'active' ? 'rgba(239,68,68,0.25)' : 'rgba(16,185,129,0.25)'}`,
+                    borderRadius: 7, padding: '4px 9px',
+                    color: u.status === 'active' ? T.crimsonL : T.emeraldL,
+                    fontSize: 11, cursor: 'pointer', fontWeight: 700, transition: 'all 0.15s'
+                  }}
+                >
+                  {u.status === 'active' ? 'Suspend' : 'Activate'}
+                </button>
+              )}
+            </div>
           ])}
         />
       </Card>

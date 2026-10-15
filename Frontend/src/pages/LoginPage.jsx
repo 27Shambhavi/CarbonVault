@@ -125,6 +125,7 @@ export default function LoginPage() {
     { role: 'approver', label: 'Approver', desc: 'Project Approver', icon: UserCheck, color: T.skyL, email: 'approver@carbonvault.com', pass: 'approver123' },
     { role: 'ngo', label: 'NGO', desc: 'Project Developer', icon: TreePine, color: T.emeraldL, email: 'contact@ecoguard.org', pass: 'ngo123' },
     { role: 'corporate', label: 'Corporate', desc: 'Carbon Buyer', icon: Building2, color: T.violetLL, email: 'carbon@microsoft.com', pass: 'corp123' },
+    { role: 'public', label: 'Public', desc: 'Registry Auditor', icon: Globe, color: T.tealL, email: 'guest@carbonvault.com', pass: 'guest123' },
   ];
 
   const particles = Array.from({ length: 18 }, (_, i) => ({
@@ -390,7 +391,7 @@ export default function LoginPage() {
               </div>
 
               {/* Demo Quick-Fill Shortcut Tiles */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginBottom: 18 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(85px, 1fr))', gap: 6, marginBottom: 18 }}>
                 {roles.map(({ role, label, desc, icon: Icon, color, email: roleEmail, pass }) => {
                   const active = activeRole === role;
                   return (

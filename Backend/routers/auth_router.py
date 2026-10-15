@@ -213,13 +213,14 @@ def login(req: LoginRequest, request: Request, db: Session = Depends(get_db)):
     email_clean = req.email.strip().lower()
     user = db.query(User).filter(func.lower(User.email) == email_clean).first()
 
-    # Pre-seeded demo account fallbacks (for clean first-run experience)
     demo_passwords = {
         "admin@carbonvault.com": "admin123",
         "approver@carbonvault.com": "approver123",
+        "verifier@carbonvault.com": "verifier123",
         "contact@ecoguard.org": "ngo123",
         "carbon@microsoft.com": "corp123",
         "sustainability@google.com": "corp123",
+        "guest@carbonvault.com": "guest123",
     }
 
     if not user:

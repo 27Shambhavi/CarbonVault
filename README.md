@@ -501,8 +501,8 @@ Interactive version with "Try it out": **`<your-render-url>/docs`**
 
 ### Step 1 — Get the code
 ```bash
-git clone https://github.com/27Shambhavi/final-carbon-vault.git
-cd final-carbon-vault
+git clone https://github.com/27Shambhavi/CarbonVault.git
+cd CarbonVault
 ```
 
 ### Step 2 — Start the backend
@@ -534,7 +534,7 @@ Open http://localhost:5173 and log in with a demo account (section 16).
 | `DATABASE_URL` | `postgresql://user:pass@host/db` | Production PostgreSQL connection string |
 | `JWT_SECRET` | `your-secure-jwt-secret-min-32-chars` | HMAC secret for session and role tokens |
 | `ANTHROPIC_API_KEY` | `sk-ant-api03-...` | Claude API key for Grounded AI explainer (server-side only) |
-| `LLM_MODEL` | `claude-3-5-sonnet-20241022` | Claude model tier (`claude-3-5-sonnet-20241022` or `claude-3-haiku-20240307`) |
+| `LLM_MODEL` | `claude-3-5-sonnet-20241022` | Claude model tier (`claude-3-5-sonnet-20241022` or `claude-3-5-haiku-20241022`) |
 | `RAZORPAY_KEY_ID` | `rzp_test_xxxxxxxx` | Test Key ID from Razorpay |
 | `RAZORPAY_KEY_SECRET` | *(secret)* | Must belong to the **same** key pair as the ID |
 | `RAZORPAY_WEBHOOK_SECRET` | *(secret)* | Webhook verification secret |
@@ -551,37 +551,45 @@ Open http://localhost:5173 and log in with a demo account (section 16).
 
 ## 15. 🚀 Deploying it online
 
+### Single-Branch Deployment Pipeline
+The repository operates on a single canonical branch (`main`):
+- Pushes to `main` trigger the GitHub Actions CI Pipeline (Hardcode & Schema Gate, Backend Tests, Frontend Build, Secret Scanner).
+- Upon CI passing:
+  - **Vercel** automatically deploys the `Frontend` directory to `https://final-carbon-vault.vercel.app`.
+  - **Render** automatically deploys the `Backend` directory to `https://carbonvault-api.onrender.com`.
+
 ### Backend on Render
 1. Create a **PostgreSQL** database on Render (name it `carbonvault-postgres`). Copy its **Internal Database URL**.
-2. Create a **Web Service** from this GitHub repo. Root directory `Backend`.
+2. Create a **Web Service** from `https://github.com/27Shambhavi/CarbonVault.git`. Root directory `Backend`.
    Start command: `uvicorn main:app --host 0.0.0.0 --port $PORT`
 3. Add the environment variables from section 14, with `DATABASE_URL` set to the URL from step 1.
-4. Deploy. Check `<your-render-url>/docs` loads.
+4. Deploy. Check `<your-render-url>/docs` and `<your-render-url>/ready` load.
 
 ### Frontend on Vercel
-1. Import the GitHub repo, root directory `Frontend`.
-2. Add `VITE_API_BASE_URL` = your Render URL.
-3. **Redeploy** (a variable added after a build does not apply until the next build).
+1. Import the GitHub repo `27Shambhavi/CarbonVault`, set root directory to `Frontend`.
+2. Add `VITE_API_BASE_URL` = `https://carbonvault-api.onrender.com`.
+3. Redeploy to activate headers, CSP, and rewrite routes.
 
 ### Razorpay webhook
 1. Razorpay Dashboard → Settings → Webhooks → Add.
-2. URL: `<your-render-url>/payment/webhook`. Events: `payment.captured`, `payment.failed`, `order.paid`.
+2. URL: `https://carbonvault-api.onrender.com/payment/webhook`. Events: `payment.captured`, `payment.failed`, `order.paid`.
 3. Copy the secret into `RAZORPAY_WEBHOOK_SECRET` on Render.
 
 > ⏱️ On Render's free plan the server **sleeps when idle**. The first request after a pause can take
-> 30–50 seconds. **Open the API docs page a minute before any demo** to wake it up.
+> 30–50 seconds. **Open the `/ready` or `/docs` endpoint a minute before any demo** to wake it up.
 
 ---
 
 ## 16. 🎬 Demo accounts and a 10-minute demo script
 
 ### Accounts
-| Role | Email | Password |
-|------|-------|----------|
-| Admin | `admin@carbonvault.com` | `demo@123` |
-| NGO | `ngo@carbonvault.com` | `demo@123` |
-| Corporate | `corp@carbonvault.com` | `demo@123` |
-| Public | click **Explore Public Transparency Portal** | none |
+| Role | Email | Password | Primary Purpose |
+|------|-------|----------|-----------------|
+| 🛡️ **Platform Admin** | `admin@carbonvault.com` | `admin123` | System oversight, KYC queue, approvals, pricing controls, refunds |
+| 🔍 **Field Verifier / Auditor** | `approver@carbonvault.com` | `approver123` | Accredited audit queue, document gate verification, sign-offs |
+| 🌳 **NGO / Project Developer** | `contact@ecoguard.org` | `ngo123` *(alias: `ngo@carbonvault.com` / `demo@123`)* | Register plantation projects, upload documents, view payouts |
+| 🏢 **Corporate Buyer** | `carbon@microsoft.com` | `corp123` *(alias: `corp@carbonvault.com` / `demo@123`)* | Marketplace, buy credits, wallet, certificates, ESG reporting |
+| 🌐 **Public Auditor** | `guest@carbonvault.com` | `guest123` *(or click "Explore Public Portal")* | Zero-login registry, ledger transparency, retirement verification |
 
 **Razorpay Test card:** `4111 1111 1111 1111` · any future expiry · any CVV · any OTP.
 

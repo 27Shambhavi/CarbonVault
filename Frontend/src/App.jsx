@@ -22,6 +22,9 @@ import CorporateCalculator from './components/corporate/CorporateCalculator.jsx'
 // Public
 import { PublicDashboard, PublicLeaderboard, PublicAudit, PublicCertificates, PublicClimate } from './components/public/PublicPages.jsx';
 
+// Verifier / Approver
+import VerifierDashboard from './components/verifier/VerifierDashboard.jsx';
+
 function PageRouter() {
   const { user, page } = useApp();
   if (!user) return null;
@@ -63,6 +66,10 @@ function PageRouter() {
     if (page === 'climate')      return <PublicClimate />;
     if (page === 'projects')     return <CorporateMarketplace />;
     return <PublicDashboard />;
+  }
+
+  if (user.role === 'verifier' || user.role === 'approver') {
+    return <VerifierDashboard />;
   }
 
   return (

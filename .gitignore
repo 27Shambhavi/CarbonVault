@@ -34,6 +34,8 @@ Frontend/.vite/
 *.sqlite3
 *.db-shm
 *.db-wal
+backups/
+*.sql
 
 
 # Uploads (runtime files)

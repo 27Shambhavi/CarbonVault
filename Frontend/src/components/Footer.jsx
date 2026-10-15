@@ -84,8 +84,8 @@ export default function AppFooter() {
 
   const shortCommit = healthData.commit ? healthData.commit.slice(0, 7) : 'HEAD';
   const commitUrl = healthData.commit
-    ? `https://github.com/27Shambhavi/final-carbon-vault/commit/${healthData.commit}`
-    : 'https://github.com/27Shambhavi/final-carbon-vault';
+    ? `https://github.com/27Shambhavi/CarbonVault/commit/${healthData.commit}`
+    : 'https://github.com/27Shambhavi/CarbonVault';
 
   const isDbOk = healthData.db === 'ok';
   const isSystemOnline = healthData.status === 'online';
