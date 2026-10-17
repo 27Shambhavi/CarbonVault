@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useApp } from '../AppContext.jsx';
 import { fetchPublicStats, loginUser, registerUser, setAuthToken, fetchReady } from '../services/api.js';
+import { useBackendHealth } from '../services/health.js';
 import AppFooter from '../components/Footer.jsx';
 import { T, withAlpha } from '../components/UI.jsx';
 import {
@@ -52,73 +53,31 @@ export default function LoginPage() {
   const [isRegistering, setIsRegistering] = useState(false);
   const [regError, setRegError] = useState(null);
   const [regSuccess, setRegSuccess] = useState(null);
-
-  // Health & Stats State (R2-5 Unified Source of Truth)
+  // Health & Stats State (Unified Source of Truth)
+  const health = useBackendHealth();
   const [loaded, setLoaded] = useState(false);
   const [publicStats, setPublicStats] = useState(null);
   const [statsLoading, setStatsLoading] = useState(true);
-  const [apiLatency, setApiLatency] = useState(null);
-  const [systemStatus, setSystemStatus] = useState('Checking');
-  const [lastCheckedAt, setLastCheckedAt] = useState(null);
-  const [secondsAgo, setSecondsAgo] = useState(0);
 
-  const checkReadyStatus = () => {
-    const startPing = performance.now();
-    fetchReady()
-      .then((res) => {
-        const elapsed = Math.round(performance.now() - startPing);
-        setApiLatency(elapsed);
-        setLastCheckedAt(Date.now());
-        if (res.data && res.data.status === 'ready') {
-          setSystemStatus('Online');
-        } else if (res.data && res.data.status === 'unready') {
-          setSystemStatus('Degraded');
-        } else {
-          setSystemStatus('Offline');
-        }
-      })
-      .catch(() => {
-        setApiLatency(null);
-        setLastCheckedAt(Date.now());
-        setSystemStatus('Offline');
-      });
-  };
-
+  // Fetch public platform stats whenever backend is online
   useEffect(() => {
     setTimeout(() => setLoaded(true), 80);
 
-    // Initial and periodic readiness checks
-    checkReadyStatus();
-    const interval = setInterval(checkReadyStatus, 30000);
-
-    // Fetch live public platform stats with 3s timeout
-    const statsTimer = setTimeout(() => {
-      setStatsLoading(false);
-    }, 3000);
-
-    fetchPublicStats()
-      .then((res) => {
-        clearTimeout(statsTimer);
-        if (res.data) setPublicStats(res.data);
-      })
-      .catch(() => {})
-      .finally(() => setStatsLoading(false));
-
-    return () => {
-      clearInterval(interval);
-      clearTimeout(statsTimer);
+    const loadStats = () => {
+      fetchPublicStats()
+        .then((res) => {
+          if (res.data) setPublicStats(res.data);
+        })
+        .catch(() => {})
+        .finally(() => setStatsLoading(false));
     };
-  }, []);
 
-  // Update "checked N s ago" every second
-  useEffect(() => {
-    const timer = setInterval(() => {
-      if (lastCheckedAt) {
-        setSecondsAgo(Math.max(0, Math.floor((Date.now() - lastCheckedAt) / 1000)));
-      }
-    }, 1000);
-    return () => clearInterval(timer);
-  }, [lastCheckedAt]);
+    loadStats();
+    // Re-fetch when transitioning to Online
+    if (health.status === 'Online') {
+      loadStats();
+    }
+  }, [health.status]);
 
   const roles = [
     { role: 'admin', label: 'Admin', desc: 'Platform HQ', icon: ShieldCheck, color: T.goldL, email: 'admin@carbonvault.com', pass: 'admin123' },
@@ -134,20 +93,23 @@ export default function LoginPage() {
     duration: 5 + Math.random() * 8,
   }));
 
-  // Hero Stats Formatters (R2-5: Show "—" and "Live figures unavailable" if offline or call fails)
-  const isAvailable = systemStatus !== 'Offline' && publicStats != null;
+  // Hero Stats Formatters (Cold-Start Aware)
+  const isOnline = health.status === 'Online';
+  const isWaking = health.status.startsWith('Waking');
+  const isAvailable = isOnline && publicStats != null;
+
   const verifiedCreditsText = isAvailable
-    ? `${Number(publicStats.total_tonnes_sequestered).toLocaleString()} t`
-    : (statsLoading ? '...' : '—');
+    ? `${Number(publicStats.total_tonnes_sequestered || 0).toLocaleString()} t`
+    : (isWaking ? '...' : (statsLoading ? '...' : '—'));
   const activeProjectsText = isAvailable
-    ? `${publicStats.verified_projects_count}`
-    : (statsLoading ? '...' : '—');
+    ? `${publicStats.verified_projects_count ?? '0'}`
+    : (isWaking ? '...' : (statsLoading ? '...' : '—'));
   const fundingText = isAvailable
-    ? `$${Number(publicStats.total_capital_deployed_usd).toLocaleString()}`
-    : (statsLoading ? '...' : '—');
+    ? `$${Number(publicStats.total_capital_deployed_usd || 0).toLocaleString()}`
+    : (isWaking ? '...' : (statsLoading ? '...' : '—'));
   const activeNgosText = isAvailable
-    ? `${publicStats.active_ngos_count}`
-    : (statsLoading ? '...' : '—');
+    ? `${publicStats.active_ngos_count ?? '0'}`
+    : (isWaking ? '...' : (statsLoading ? '...' : '—'));
 
   const stats = [
     { n: verifiedCreditsText, l: 'Tonnes Sequestered', icon: Award, color: T.teal },
@@ -312,8 +274,8 @@ export default function LoginPage() {
 
           <div style={{ marginTop: 28, display: 'flex', alignItems: 'center', gap: 14 }}>
             <div style={{ height: 1, flex: 1, background: `linear-gradient(90deg, rgba(45,212,191,0.4), transparent)` }} />
-            <span style={{ fontSize: 11, color: isAvailable ? T.t4 : T.goldL, fontWeight: 600, letterSpacing: '0.8px', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>
-              {isAvailable ? 'Cryptographic Audit & Satellite MRV Ledger' : 'Live figures unavailable'}
+            <span style={{ fontSize: 11, color: isAvailable ? T.t4 : (isWaking ? T.goldL : T.goldLL), fontWeight: 600, letterSpacing: '0.8px', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>
+              {isAvailable ? 'Cryptographic Audit & Satellite MRV Ledger' : (isWaking ? 'Waking up the server… live figures shortly' : 'Live figures unavailable')}
             </span>
           </div>
         </div>
@@ -325,17 +287,50 @@ export default function LoginPage() {
 
           {/* Top Header Row: Status Indicator & Theme Toggle */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-            {/* Live API Status Indicator (R2-5 Unified with /ready) */}
-            <div style={{
-              display: 'inline-flex', alignItems: 'center', gap: 6,
-              padding: '4px 10px', borderRadius: 20,
-              background: systemStatus === 'Online' ? 'rgba(16,185,129,0.1)' : systemStatus === 'Degraded' ? 'rgba(245,158,11,0.1)' : 'rgba(239,68,68,0.1)',
-              border: `1px solid ${systemStatus === 'Online' ? 'rgba(16,185,129,0.25)' : systemStatus === 'Degraded' ? 'rgba(245,158,11,0.25)' : 'rgba(239,68,68,0.25)'}`,
-              fontSize: 11, fontWeight: 600, color: systemStatus === 'Online' ? T.emeraldL : systemStatus === 'Degraded' ? T.goldL : T.roseL
-            }}>
-              <span style={{ width: 6, height: 6, borderRadius: '50%', background: systemStatus === 'Online' ? '#10b981' : systemStatus === 'Degraded' ? '#f59e0b' : '#ef4444', display: 'inline-block' }} />
-              API: {systemStatus} {apiLatency != null ? `· ${apiLatency}ms` : ''} · checked {secondsAgo}s ago · Mode: demo
-            </div>
+            {/* Live API Status Indicator (Unified with /ready & Cold-Start Aware) */}
+            {(() => {
+              const isOnline = health.status === 'Online';
+              const isWaking = health.status.startsWith('Waking');
+              const isDegraded = health.status === 'Degraded';
+              const pillBg = isOnline
+                ? 'rgba(16,185,129,0.1)'
+                : isWaking || isDegraded
+                ? 'rgba(245,158,11,0.1)'
+                : 'rgba(239,68,68,0.1)';
+              const pillBorder = isOnline
+                ? 'rgba(16,185,129,0.25)'
+                : isWaking || isDegraded
+                ? 'rgba(245,158,11,0.35)'
+                : 'rgba(239,68,68,0.25)';
+              const pillColor = isOnline
+                ? T.emeraldL
+                : isWaking || isDegraded
+                ? T.goldL
+                : T.roseL;
+              const dotColor = isOnline
+                ? '#10b981'
+                : isWaking || isDegraded
+                ? '#f59e0b'
+                : '#ef4444';
+
+              return (
+                <div style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 6,
+                  padding: '4px 10px', borderRadius: 20,
+                  background: pillBg,
+                  border: `1px solid ${pillBorder}`,
+                  fontSize: 11, fontWeight: 600, color: pillColor,
+                  transition: 'all 0.25s ease'
+                }}>
+                  <span style={{
+                    width: 6, height: 6, borderRadius: '50%',
+                    background: dotColor, display: 'inline-block',
+                    animation: isWaking ? 'pulse 1.2s ease-in-out infinite' : 'none'
+                  }} />
+                  API: {health.status} {health.latency != null ? `· ${health.latency}ms` : ''} · checked {health.secondsAgo}s ago · Mode: demo
+                </div>
+              );
+            })()}
 
             <button
               onClick={toggleTheme}

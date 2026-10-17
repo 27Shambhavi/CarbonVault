@@ -638,4 +638,36 @@ class Payout(Base):
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     settled_at = Column(DateTime, nullable=True)
 
-    ngo = relationship("NGO")
+    ngo = relationship("NGO")
+
+
+class FraudRun(Base):
+    __tablename__ = "fraud_runs"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    project_id = Column(String, ForeignKey("projects.project_id"), index=True, nullable=False)
+    started_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    finished_at = Column(DateTime, nullable=True)
+    overall_status = Column(String, default="running", nullable=False)  # 'consistent', 'needs_attention', 'manual_review', 'running', 'error'
+    risk_index = Column(Float, nullable=True)  # 0.0 to 1.0
+    model_version = Column(String, default="v2.1", nullable=False)
+    trigger = Column(String, default="submission", nullable=False)  # 'submission', 'upload', 'edit', 'manual_rerun'
+    explanation = Column(Text, nullable=True)
+
+    project = relationship("Project")
+    checks = relationship("FraudCheck", back_populates="run", cascade="all, delete-orphan")
+
+
+class FraudCheck(Base):
+    __tablename__ = "fraud_checks"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    run_id = Column(Integer, ForeignKey("fraud_runs.id"), index=True, nullable=False)
+    validator = Column(String, index=True, nullable=False)  # 'geo_boundary', 'photo_gps_exif', 'perceptual_hash', 'satellite_ndvi', 'ecological_isolation'
+    status = Column(String, nullable=False)  # 'pass', 'warn', 'fail', 'not_checked', 'error'
+    score = Column(Float, nullable=True)  # 0.0 to 1.0 (or None if not_checked)
+    details = Column(Text, nullable=True)  # JSON-encoded details
+    evidence_refs = Column(Text, nullable=True)  # JSON-encoded array of file paths / references
+    reason = Column(Text, nullable=True)  # explanatory message, mandatory if not_checked or error
+
+    run = relationship("FraudRun", back_populates="checks")

@@ -20,6 +20,8 @@ export default [
       globals: {
         ...globals.browser,
         ...globals.es2021,
+        __APP_COMMIT__: 'readonly',
+        __APP_COMMIT_FULL__: 'readonly',
       },
     },
     settings: {

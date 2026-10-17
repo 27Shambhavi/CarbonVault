@@ -24,7 +24,8 @@ logger = logging.getLogger("carbonvault")
 from credit_calculation.credits_module.db_models import (
     Base, Project, NGO, CorporateRequest, Transaction, Wallet, ProjectCredits, FundingDetails, AuditLog,
     User, PricingConfig, PriceHistory, Notification, ProjectStatusHistory, ProjectProgressUpdate,
-    FootprintEstimate, Certificate, OrganizationProfile, ProjectDocument, FieldVerification
+    FootprintEstimate, Certificate, OrganizationProfile, ProjectDocument, FieldVerification,
+    FraudRun, FraudCheck
 )
 from credit_calculation.credits_module.db import engine, SessionLocal
 
@@ -322,6 +323,37 @@ def migrate_db():
         cursor.execute("UPDATE audit_logs SET user = 'EcoGuard Brazil' WHERE name = 'PRJ-MAN-SUNDAR'")
     except Exception:
         pass
+
+    # Ensure fraud_runs and fraud_checks tables exist
+    try:
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS fraud_runs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                project_id TEXT NOT NULL,
+                started_at DATETIME NOT NULL,
+                finished_at DATETIME,
+                overall_status TEXT NOT NULL,
+                risk_index REAL,
+                model_version TEXT DEFAULT 'v2.1',
+                trigger TEXT DEFAULT 'submission',
+                explanation TEXT
+            )
+        """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS fraud_checks (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                run_id INTEGER NOT NULL,
+                validator TEXT NOT NULL,
+                status TEXT NOT NULL,
+                score REAL,
+                details TEXT,
+                evidence_refs TEXT,
+                reason TEXT
+            )
+        """)
+        logger.info("Ensured fraud_runs and fraud_checks tables exist")
+    except Exception as e:
+        logger.warning("Error creating fraud tables: %s", e)
 
     conn.commit()
     conn.close()

@@ -8,12 +8,14 @@ import {
   ShieldCheck, CheckCircle2, XCircle, FileText, AlertTriangle, TreePine, Eye, Send, Award
 } from 'lucide-react';
 import { ProjectDocumentGate } from '../projects/ProjectDocumentGate.jsx';
+import ProjectScreeningReport from './ProjectScreeningReport.jsx';
 
 export default function VerifierDashboard() {
   const { user } = useApp();
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(false);
   const [selectedProject, setSelectedProject] = useState(null);
+  const [screeningProject, setScreeningProject] = useState(null);
   const [auditModal, setAuditModal] = useState(false);
   const [decision, setDecision] = useState('verified');
   const [comments, setComments] = useState('');
@@ -138,11 +140,14 @@ export default function VerifierDashboard() {
                   </div>
 
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <Button variant="secondary" size="sm" onClick={() => setSelectedProject(proj)}>
-                      <Eye size={13} style={{ marginRight: 6 }} /> View Documents & Gate
+                    <Button variant="secondary" size="sm" onClick={() => { setScreeningProject(proj); setSelectedProject(null); }}>
+                      <ShieldCheck size={13} style={{ marginRight: 6 }} /> Screening & Checks
+                    </Button>
+                    <Button variant="secondary" size="sm" onClick={() => { setSelectedProject(proj); setScreeningProject(null); }}>
+                      <Eye size={13} style={{ marginRight: 6 }} /> Docs Gate
                     </Button>
                     <Button variant="primary" size="sm" onClick={() => handleOpenAudit(proj)}>
-                      <Award size={13} style={{ marginRight: 6 }} /> Execute Audit Sign-Off
+                      <Award size={13} style={{ marginRight: 6 }} /> Audit Sign-Off
                     </Button>
                   </div>
                 </div>
@@ -151,6 +156,20 @@ export default function VerifierDashboard() {
           </div>
         )}
       </div>
+
+      {/* Selected project Screening Pipeline Report */}
+      {screeningProject && (
+        <div style={{ marginTop: 24 }}>
+          <ProjectScreeningReport
+            projectId={screeningProject.project_id || screeningProject.id}
+            projectName={screeningProject.name}
+            canRerun={true}
+            canExplain={true}
+            canFeedback={true}
+            onClose={() => setScreeningProject(null)}
+          />
+        </div>
+      )}
 
       {/* Selected project details / document gate */}
       {selectedProject && (

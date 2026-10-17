@@ -114,14 +114,25 @@ class Settings(BaseSettings):
             return list(set(default_origins + extra))
         return default_origins
 
+    @field_validator(
+        "RAZORPAY_KEY_ID", "RAZORPAY_KEY_SECRET", "RAZORPAY_WEBHOOK_SECRET",
+        "JWT_SECRET", "SH_CLIENT_ID", "SH_CLIENT_SECRET", "S3_BUCKET",
+        "S3_ACCESS_KEY_ID", "S3_SECRET_ACCESS_KEY", mode="before"
+    )
+    @classmethod
+    def strip_env_strings(cls, v: Optional[str]) -> str:
+        if v is None:
+            return ""
+        return str(v).strip()
+
     @model_validator(mode="after")
     def validate_production_and_payment_invariants(self) -> "Settings":
-        # 1. Razorpay prefix validation
+        # 1. Razorpay prefix validation: key ID prefix (rzp_test_ or rzp_live_) and PAYMENT_MODE must agree
         if self.RAZORPAY_KEY_ID:
-            if self.PAYMENT_MODE == "test" and self.RAZORPAY_KEY_ID.startswith("rzp_live_"):
-                raise ValueError("Config mismatch: PAYMENT_MODE is 'test' but RAZORPAY_KEY_ID starts with 'rzp_live_'")
-            if self.PAYMENT_MODE == "live" and self.RAZORPAY_KEY_ID.startswith("rzp_test_"):
-                raise ValueError("Config mismatch: PAYMENT_MODE is 'live' but RAZORPAY_KEY_ID starts with 'rzp_test_'")
+            if self.PAYMENT_MODE == "test" and not self.RAZORPAY_KEY_ID.startswith("rzp_test_"):
+                raise ValueError("Config mismatch: PAYMENT_MODE is 'test' but RAZORPAY_KEY_ID does not start with 'rzp_test_'")
+            if self.PAYMENT_MODE == "live" and not self.RAZORPAY_KEY_ID.startswith("rzp_live_"):
+                raise ValueError("Config mismatch: PAYMENT_MODE is 'live' but RAZORPAY_KEY_ID does not start with 'rzp_live_'")
 
         # 2. Strict production enforcement
         if self.APP_MODE == "production":

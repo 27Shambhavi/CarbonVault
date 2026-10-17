@@ -627,14 +627,14 @@ async def create_project(
             db=db
         )
 
-        # Also try running the full fraud detection module if available
-        fraud_result = None
+        # Run unified 5-check screening pipeline
+        screening_result = None
         try:
-            from fraud_detection_new.app.services.fraud_service import run_fraud_detection
-            fraud_result = run_fraud_detection(project_id, polygon_clean, file_path)
-            logger.info("Full fraud detection result: %s", fraud_result)
+            from services.screening_service import run_project_screening
+            screening_result = run_project_screening(project_id, db, trigger="submission", save_to_db=True)
+            logger.info("Screening pipeline result for %s: %s (risk: %s)", project_id, screening_result.get("overall_status"), screening_result.get("risk_index"))
         except Exception as e:
-            logger.debug("Full fraud detection not available: %s", e)
+            logger.warning("Screening pipeline error on creation: %s", e)
 
         # Emit real platform notification
         try:
@@ -702,7 +702,8 @@ async def create_project(
             "mrvScore": scores["mrvScore"],
             "fraudRisk": scores["fraudRisk"],
             "envScore": scores["envScore"],
-            "fraud_detection": fraud_result,
+            "fraud_detection": screening_result,
+            "screening": screening_result,
             "message": "Project submitted successfully. Awaiting admin approval."
         }
     except HTTPException:
@@ -2541,5 +2542,156 @@ def get_project_ai_summary_endpoint(project_id: str, request: Request, audience:
         return explain_project(project_id, db, audience=audience)
     finally:
         db.close()
+
+
+@router.post("/{project_id}/evidence")
+@router.post("/projects/{project_id}/evidence")
+async def upload_project_evidence(
+    project_id: str,
+    request: Request,
+    file: UploadFile = File(...),
+    notes: Optional[str] = Form(None),
+    user_name: Optional[str] = Form("Project Lead")
+):
+    """
+    Upload an additional field evidence photo for a project.
+    Validates, sanitizes, saves file, appends to project evidence_images,
+    records audit trail entry, and automatically re-triggers screening pipeline.
+    """
+    from core.rate_limiter import rate_limit_upload
+    rate_limit_upload(request)
+    db = SessionLocal()
+    try:
+        project = db.query(Project).filter(Project.project_id == project_id).first()
+        if not project:
+            raise HTTPException(status_code=404, detail=f"Project {project_id} not found.")
+
+        content = await file.read()
+        from core.upload_security import validate_and_sanitize_image
+        from core.storage import get_storage
+        sanitized_bytes, safe_filename, mime = validate_and_sanitize_image(content, file.filename)
+        storage = get_storage()
+        storage.upload_file(sanitized_bytes, safe_filename, content_type=mime)
+        file_url = storage.get_signed_url(safe_filename)
+
+        # Append to project evidence_images
+        existing_images = (project.evidence_images or "").split(",") if project.evidence_images else []
+        existing_images = [img.strip() for img in existing_images if img.strip()]
+        if safe_filename not in existing_images:
+            existing_images.append(safe_filename)
+        project.evidence_images = ",".join(existing_images)
+
+        # Log audit
+        log_audit_event(
+            action="evidence_upload",
+            name=project_id,
+            detail=f"Uploaded evidence photo '{safe_filename}' ({notes or 'no notes'})",
+            user=user_name or "Project Lead",
+            db=db
+        )
+        db.commit()
+
+        # Re-trigger screening pipeline
+        screening_res = None
+        try:
+            from services.screening_service import run_project_screening
+            screening_res = run_project_screening(project_id, db, trigger="upload", save_to_db=True)
+        except Exception as se_err:
+            logger.warning("Screening re-trigger failed on upload: %s", se_err)
+
+        return {
+            "status": "ok",
+            "project_id": project_id,
+            "filename": safe_filename,
+            "url": file_url,
+            "screening": screening_res,
+            "message": "Evidence photo uploaded and screening pipeline re-evaluated."
+        }
+    finally:
+        db.close()
+
+
+class ProjectUpdateRequest(BaseModel):
+    name: Optional[str] = None
+    area_hectares: Optional[float] = None
+    number_of_trees: Optional[int] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    polygon_wkt: Optional[str] = None
+    plantation_type: Optional[str] = None
+    user_name: Optional[str] = "Project Lead"
+
+
+@router.put("/{project_id}")
+@router.put("/projects/{project_id}")
+def update_project_metadata(project_id: str, req: ProjectUpdateRequest):
+    """
+    Update project metadata (area, trees, coordinates, polygon).
+    Recomputes MRV scores, logs audit trail, and automatically re-triggers screening pipeline.
+    """
+    db = SessionLocal()
+    try:
+        project = db.query(Project).filter(Project.project_id == project_id).first()
+        if not project:
+            raise HTTPException(status_code=404, detail=f"Project {project_id} not found.")
+
+        updated_fields = []
+        if req.name is not None and req.name.strip():
+            project.name = req.name.strip()
+            updated_fields.append("name")
+        if req.area_hectares is not None and req.area_hectares > 0:
+            project.area_hectares = req.area_hectares
+            updated_fields.append("area_hectares")
+        if req.number_of_trees is not None and req.number_of_trees >= 0:
+            project.number_of_trees = req.number_of_trees
+            updated_fields.append("number_of_trees")
+        if req.latitude is not None:
+            project.latitude = req.latitude
+            updated_fields.append("latitude")
+        if req.longitude is not None:
+            project.longitude = req.longitude
+            updated_fields.append("longitude")
+        if req.polygon_wkt is not None and "POLYGON" in req.polygon_wkt.upper():
+            project.polygon_wkt = req.polygon_wkt.strip()
+            updated_fields.append("polygon_wkt")
+        if req.plantation_type is not None:
+            project.plantation_type = req.plantation_type.lower().strip()
+            updated_fields.append("plantation_type")
+
+        # Recompute scores
+        scores = compute_project_scores(project, db)
+        project.mrv_score = scores["mrvScore"]
+        project.fraud_risk = scores["fraudRisk"]
+        project.env_score = scores["envScore"]
+
+        log_audit_event(
+            action="update",
+            name=project_id,
+            detail=f"Updated fields: {', '.join(updated_fields)}",
+            user=req.user_name or "Project Lead",
+            db=db
+        )
+        db.commit()
+
+        # Re-trigger screening pipeline
+        screening_res = None
+        try:
+            from services.screening_service import run_project_screening
+            screening_res = run_project_screening(project_id, db, trigger="edit", save_to_db=True)
+        except Exception as se_err:
+            logger.warning("Screening re-trigger failed on edit: %s", se_err)
+
+        return {
+            "status": "ok",
+            "project_id": project_id,
+            "updated_fields": updated_fields,
+            "mrv_score": project.mrv_score,
+            "fraud_risk": project.fraud_risk,
+            "screening": screening_res,
+            "message": "Project updated and screening pipeline re-evaluated."
+        }
+    finally:
+        db.close()
+
 
 

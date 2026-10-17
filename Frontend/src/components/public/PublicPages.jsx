@@ -689,3 +689,126 @@ export function PublicClimate() {
   );
 }
 
+export function PublicScreeningGuide() {
+  const checks = [
+    {
+      num: 1,
+      title: 'Boundary Geometry & Registry Overlap',
+      icon: '🗺️',
+      desc: 'Calculates spherical surface area in hectares using planar projection at mean latitude. Verifies that claimed project area matches within ±10% and checks against all registered projects in the registry to prevent overlapping boundaries and double-issuance.',
+      threshold: '±10% area tolerance · 0.00% registry overlap',
+    },
+    {
+      num: 2,
+      title: 'Field Photo GPS & Proximity Verification',
+      icon: '📸',
+      desc: 'Extracts embedded EXIF GPS tags directly from original camera image files. Computes geodesic distance to the project centroid using the Haversine formula to confirm photographs were taken on-site.',
+      threshold: 'Camera GPS within 25.0 km of project centroid',
+    },
+    {
+      num: 3,
+      title: 'Perceptual Hash & Replay Screening',
+      icon: '✨',
+      desc: 'Generates multi-orientation perceptual hashes (pHash) for each image across original, horizontal flip, and 90°/180°/270° rotations. Compares against the entire repository to detect duplicate or transformed photos.',
+      threshold: 'Min Hamming distance > 10 bits across all orientations',
+    },
+    {
+      num: 4,
+      title: 'Satellite NDVI Vegetative Health Trend',
+      icon: '🛰️',
+      desc: 'Queries orbital Sentinel-2 and NASA MODIS multi-spectral surface reflectance. Compares vegetative index trajectory before vs. after planting date to confirm sustained canopy growth.',
+      threshold: 'Stable greenness (NDVI > 0.35 or slope >= -0.05)',
+    },
+    {
+      num: 5,
+      title: 'Regional Peer Anomaly & Allometrics',
+      icon: '🌲',
+      desc: 'Evaluates 7 standardized biometric parameters (tree density, area ratio, photo count, NDVI mean/trend, coordinates, plantation type) using an Isolation Forest trained on regional peer projects to highlight unusual features.',
+      threshold: 'Anomaly score < 55/100 (standard peer cohort)',
+    },
+  ];
+
+  return (
+    <div style={{ padding: 28, maxWidth: 1200, margin: '0 auto' }}>
+      <SectionHeader
+        title="Automated 5-Check Verification & Screening Guide"
+        subtitle="How CarbonVault ensures mathematical integrity and prevents double-counting without accusatory jargon"
+      />
+
+      {/* Philosophy Banner */}
+      <div style={{
+        background: 'linear-gradient(135deg, rgba(45,212,191,0.08) 0%, rgba(16,185,129,0.04) 100%)',
+        border: '1px solid rgba(45,212,191,0.3)', borderRadius: 16, padding: 24, marginBottom: 24
+      }}>
+        <div style={{ fontSize: 18, fontWeight: 900, color: '#f1f5f9', fontFamily: 'Fraunces, serif', marginBottom: 8 }}>
+          Objective Science Over Accusation
+        </div>
+        <div style={{ fontSize: 13, color: '#94a3b8', lineHeight: 1.6 }}>
+          CarbonVault screens every restoration project across 5 mathematical and orbital checkpoints upon creation, edit, and evidence upload.
+          We never label developers with accusatory language. If an anomaly occurs—such as boundary buffer zones or photos taken with camera GPS disabled—the developer receives clear guidance and can submit explanations directly into the immutable audit trail.
+        </div>
+      </div>
+
+      {/* Review Status Legend */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 14, marginBottom: 28 }}>
+        <div style={{ padding: 18, borderRadius: 12, background: 'rgba(16,185,129,0.05)', border: '1px solid rgba(16,185,129,0.3)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+            <span style={{ width: 10, height: 10, borderRadius: '50%', background: '#10b981' }} />
+            <span style={{ fontSize: 15, fontWeight: 800, color: '#34d399' }}>Looks consistent</span>
+          </div>
+          <div style={{ fontSize: 12, color: '#94a3b8', lineHeight: 1.5 }}>
+            All 5 checks conform within scientific and empirical thresholds. Ready for verifier sign-off and issuance.
+          </div>
+        </div>
+
+        <div style={{ padding: 18, borderRadius: 12, background: 'rgba(245,158,11,0.05)', border: '1px solid rgba(245,158,11,0.3)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+            <span style={{ width: 10, height: 10, borderRadius: '50%', background: '#fbbf24' }} />
+            <span style={{ fontSize: 15, fontWeight: 800, color: '#fbbf24' }}>Needs attention</span>
+          </div>
+          <div style={{ fontSize: 12, color: '#94a3b8', lineHeight: 1.5 }}>
+            Minor variance detected (e.g. uncompressed photo stripped of GPS metadata). Developer can clarify via explanation.
+          </div>
+        </div>
+
+        <div style={{ padding: 18, borderRadius: 12, background: 'rgba(239,68,68,0.05)', border: '1px solid rgba(239,68,68,0.3)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+            <span style={{ width: 10, height: 10, borderRadius: '50%', background: '#ef4444' }} />
+            <span style={{ fontSize: 15, fontWeight: 800, color: '#f87171' }}>Needs manual review</span>
+          </div>
+          <div style={{ fontSize: 12, color: '#94a3b8', lineHeight: 1.5 }}>
+            Significant divergence (e.g. boundary overlap or duplicate photograph). Requires field auditor inspection.
+          </div>
+        </div>
+      </div>
+
+      {/* 5 Checks Cards */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        {checks.map((c) => (
+          <Card key={c.num} style={{ padding: 20 }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
+              <div style={{ fontSize: 28, flexShrink: 0 }}>{c.icon}</div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 16, fontWeight: 800, color: '#f1f5f9', marginBottom: 4 }}>
+                  Check {c.num}: {c.title}
+                </div>
+                <div style={{ fontSize: 13, color: '#94a3b8', lineHeight: 1.6, marginBottom: 10 }}>
+                  {c.desc}
+                </div>
+                <div style={{
+                  display: 'inline-block', padding: '4px 10px', borderRadius: 6,
+                  background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)',
+                  fontSize: 11, fontWeight: 700, color: '#2dd4bf'
+                }}>
+                  Standard Benchmark: {c.threshold}
+                </div>
+              </div>
+            </div>
+          </Card>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+

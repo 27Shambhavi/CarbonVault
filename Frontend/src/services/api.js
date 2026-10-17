@@ -99,11 +99,20 @@ export async function request(url, options = {}, retries = 1, backoffMs = 2000) 
 
     if (ctype.includes('text/html') || text.trim().startsWith('<!DOCTYPE') || text.trim().startsWith('<html')) {
       _backendOnline = false;
-      return { data: null, error: 'Endpoint returned HTML instead of API response. Check API configuration.' };
+      return { data: null, error: 'The server is currently waking up. Please wait a moment and retry.' };
     }
 
     let data;
     try { data = JSON.parse(text); } catch { data = text; }
+
+    if (res.status === 401) {
+      // Central 401 handler: sign out cleanly, notify AppContext, never render with missing user
+      setAuthToken(null);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('carbonvault:auth-expired'));
+      }
+      return { data: null, error: (data && data.detail) || 'Session expired. Please sign in again.' };
+    }
 
     if (!res.ok) {
       if ((res.status === 502 || res.status === 503 || res.status === 504) && retries > 0 && (!options.method || options.method === 'GET')) {
@@ -277,6 +286,66 @@ export async function runFraudDetection(projectId, polygonWkt, imagePath) {
       polygon_wkt: polygonWkt,
       image_path: imagePath,
     }),
+  });
+}
+
+/** Pre-flight check before project submission (dry run) */
+export async function precheckProject(data) {
+  return request(`${API_BASE}/fraud/precheck`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+}
+
+/** Fetch full 5-check screening report for a project */
+export async function fetchScreeningReport(projectId) {
+  return request(`${API_BASE}/fraud/projects/${projectId}/report`);
+}
+
+/** Re-run 5-check screening pipeline with real-time SSE progress */
+export async function rerunProjectScreening(projectId) {
+  return request(`${API_BASE}/fraud/projects/${projectId}/rerun`, {
+    method: 'POST',
+  });
+}
+
+/** Submit explanatory note from NGO for flagged checks */
+export async function submitProjectExplanation(projectId, explanation, userName = 'Project Lead') {
+  return request(`${API_BASE}/fraud/projects/${projectId}/explanation`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ explanation, user_name: userName }),
+  });
+}
+
+/** Submit verifier feedback on check utility */
+export async function submitCheckFeedback(checkId, useful, comments = '') {
+  return request(`${API_BASE}/fraud/checks/${checkId}/feedback`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ useful, comments }),
+  });
+}
+
+/** Upload additional field evidence photo and re-trigger screening */
+export async function uploadProjectEvidence(projectId, file, notes = '', userName = 'Project Lead') {
+  const formData = new FormData();
+  formData.append('file', file);
+  if (notes) formData.append('notes', notes);
+  formData.append('user_name', userName);
+  return request(`${API_BASE}/projects/${projectId}/evidence`, {
+    method: 'POST',
+    body: formData,
+  });
+}
+
+/** Update project metadata (area, trees, polygon) and re-trigger screening */
+export async function updateProjectMetadata(projectId, data) {
+  return request(`${API_BASE}/projects/${projectId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
   });
 }
 

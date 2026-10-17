@@ -6,7 +6,8 @@ import {
   fetchMarketplaceRequests, checkSiteSuitability, acceptBuyRequest,
   createOrder, buyCredits, loadRazorpayScript,
   submitProgressUpdate, fetchProjectProgress, getImageUrl,
-  fetchPlantationTypes, fetchLiveFxRate, fetchPublicConfig, fetchReady
+  fetchPlantationTypes, fetchLiveFxRate, fetchPublicConfig, fetchReady,
+  precheckProject
 } from '../../services/api.js';
 import { Card, SectionHeader, Table, Badge, MRVScore, KPICard, Modal, Btn, T } from '../UI.jsx';
 import { ProjectMap } from '../GoogleMap.jsx';
@@ -14,9 +15,10 @@ import DataBoundary from '../DataBoundary.jsx';
 import {
   TreePine, Layers, ShoppingCart, Plus, MapPin, Upload, CheckCircle,
   Clock, TrendingUp, Search, Filter, Star, AlertCircle, X, Leaf,
-  DollarSign, Camera, ShieldCheck, Eye, Calendar, FileText
+  DollarSign, Camera, ShieldCheck, Eye, Calendar, FileText, Info
 } from 'lucide-react';
 import { ProjectDocumentGate } from '../projects/ProjectDocumentGate.jsx';
+import ProjectScreeningReport from '../verifier/ProjectScreeningReport.jsx';
 
 
 // ── Shared constants ────────────────────────────────────────────────────────────
@@ -230,6 +232,7 @@ export function NGOProjects() {
   const [uploading, setUploading] = useState(false);
   const [lightboxImg, setLightboxImg] = useState(null);
   const [docModalProject, setDocModalProject] = useState(null);
+  const [screeningProject, setScreeningProject] = useState(null);
 
   useEffect(() => {
     setLoading(true);
@@ -355,6 +358,9 @@ export function NGOProjects() {
               <span style={{color:T.goldL,fontWeight:700}}>{p.price_per_ton ? `$${p.price_per_ton}` : '—'}</span>,
               <Badge type={p.status} label={p.status.replace('_', ' ')}/>,
               <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                <Btn variant="secondary" style={{padding:'5px 9px',fontSize:11,gap:4}} onClick={()=>setScreeningProject(p)}>
+                  <ShieldCheck size={12} color={T.teal}/> Screening
+                </Btn>
                 <Btn variant="secondary" style={{padding:'5px 9px',fontSize:11,gap:4}} onClick={()=>openProgress(p)}>
                   <TrendingUp size={12} color={T.teal}/> Timeline
                 </Btn>
@@ -366,6 +372,20 @@ export function NGOProjects() {
           />
         )}
       </Card>
+
+      {/* ── Screening Report Modal ── */}
+      {screeningProject && (
+        <Modal open={!!screeningProject} onClose={()=>setScreeningProject(null)} title={`Integrity & Screening Report: ${screeningProject.name || ''}`} width={850}>
+          <ProjectScreeningReport
+            projectId={screeningProject.project_id || screeningProject.id}
+            projectName={screeningProject.name}
+            canRerun={true}
+            canExplain={true}
+            canFeedback={false}
+            onClose={()=>setScreeningProject(null)}
+          />
+        </Modal>
+      )}
 
       {/* ── Progress Tracking & Timeline Modal ── */}
       <Modal open={!!progProject} onClose={()=>setProgProject(null)} title={`Quarterly Progress: ${progProject?.name || ''}`} width={720}>
@@ -584,6 +604,8 @@ export function NGONewProject() {
   const [images,setImages] = useState([]);
   const [submitted,setSubmitted] = useState(false);
   const [submitting,setSubmitting] = useState(false);
+  const [prechecking, setPrechecking] = useState(false);
+  const [precheckResult, setPrecheckResult] = useState(null);
   const [actualProjectId, setActualProjectId] = useState(null);
   const [createdScores, setCreatedScores] = useState(null);
   const [plantationTypes, setPlantationTypes] = useState(DEFAULT_PLANTATION_TYPES);
@@ -607,6 +629,38 @@ export function NGONewProject() {
     setForm({name:'',ngo:defaultNgoName,lat:'',lng:'',area:'',plantType:'mangrove',trees:'',startDate:'',notes:'',polygon:''});
     setImages([]);
     setCreatedScores(null);
+    setPrecheckResult(null);
+  };
+
+  const handlePrecheck = async () => {
+    let finalPolygon = (form.polygon || '').trim();
+    if (!finalPolygon || !finalPolygon.toUpperCase().includes('POLYGON')) {
+      if (form.lat && form.lng && form.area) {
+        finalPolygon = generatePolygonWKT(parseFloat(form.lat), parseFloat(form.lng), parseFloat(form.area));
+        f('polygon', finalPolygon);
+      }
+    }
+    setPrechecking(true);
+    try {
+      const res = await precheckProject({
+        project_id: 'PRECHECK-TEMP',
+        name: form.name.trim() || 'New Project',
+        plantation_type: form.plantType.toLowerCase(),
+        area_hectares: parseFloat(form.area) || 1.0,
+        number_of_trees: parseInt(form.trees, 10) || 1000,
+        polygon_wkt: finalPolygon,
+        latitude: form.lat ? parseFloat(form.lat) : null,
+        longitude: form.lng ? parseFloat(form.lng) : null,
+        photos: images.map(i => i.name)
+      });
+      const data = res.data || res;
+      setPrecheckResult(data);
+      showToast('Pre-flight integrity screening complete!');
+    } catch (err) {
+      showToast(err.message || 'Precheck failed', 'error');
+    } finally {
+      setPrechecking(false);
+    }
   };
 
   // Auto-generate polygon when lat/lng/area change
@@ -819,7 +873,43 @@ export function NGONewProject() {
                 ))}
               </div>
             )}
-            <div style={{marginTop:16}}>
+            {precheckResult && (
+              <div style={{
+                marginTop: 16, padding: 14, borderRadius: 10,
+                background: precheckResult.overall_status === 'consistent' ? 'rgba(16,185,129,0.06)' : precheckResult.overall_status === 'needs_attention' ? 'rgba(245,158,11,0.06)' : 'rgba(239,68,68,0.06)',
+                border: `1px solid ${precheckResult.overall_status === 'consistent' ? T.emerald : precheckResult.overall_status === 'needs_attention' ? T.gold : T.crimson}`,
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                  <span style={{ fontSize: 13, fontWeight: 800, color: T.t1 }}>Pre-Flight Check: {precheckResult.overall_label}</span>
+                  <Badge type={precheckResult.overall_status === 'consistent' ? 'teal' : precheckResult.overall_status === 'needs_attention' ? 'gold' : 'crimson'} label={`Score: ${precheckResult.integrity_score}%`} />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 12 }}>
+                  {(precheckResult.checks || []).map((c, i) => (
+                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                      <span style={{ color: T.t2 }}>{c.validator.replace('_', ' ')}</span>
+                      <span style={{ fontWeight: 700, color: c.status === 'pass' ? T.emeraldL : c.status === 'warn' ? T.goldL : T.crimsonL }}>
+                        {c.status === 'pass' ? '✓ Looks consistent' : c.status === 'warn' ? '⚠ Needs attention' : '✕ Needs manual review'}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div style={{marginTop:16, display:'flex', flexDirection:'column', gap:10}}>
+              <button
+                type="button"
+                onClick={handlePrecheck}
+                disabled={prechecking}
+                style={{
+                  width:'100%', padding:'10px 16px', borderRadius:8,
+                  background:'rgba(45,212,191,0.08)', border:`1px solid ${T.teal}`,
+                  color:T.tealL, fontSize:13, fontWeight:700, cursor:'pointer',
+                  display:'flex', alignItems:'center', justifyContent:'center', gap:8
+                }}
+              >
+                <ShieldCheck size={15} /> {prechecking ? 'Evaluating geometry & peers…' : 'Run Pre-Flight Integrity Check'}
+              </button>
               <Btn style={{width:'100%',justifyContent:'center'}} onClick={handleSubmit} disabled={submitting}>
                 {submitting ? 'Submitting…' : 'Submit Project'}
               </Btn>

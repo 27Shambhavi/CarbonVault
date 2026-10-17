@@ -1,95 +1,29 @@
-import { useState, useEffect } from 'react';
-import { fetchReady } from '../services/api.js';
+import { useBackendHealth, BUILD_COMMIT, BUILD_COMMIT_FULL } from '../services/health.js';
 import { T } from './UI.jsx';
 import { GitCommit, Activity, Database, ShieldCheck } from 'lucide-react';
 
 export default function AppFooter() {
-  const [healthData, setHealthData] = useState({
-    commit: null,
-    status: 'checking',
-    db: 'checking',
-    scheduler: 'idle',
-    latency: null,
-    checkedAt: null,
-    error: null,
-  });
-  const [secondsAgo, setSecondsAgo] = useState(0);
+  const health = useBackendHealth();
 
-  useEffect(() => {
-    let isMounted = true;
-    const checkHealth = () => {
-      const startPing = performance.now();
-      fetchReady()
-        .then(res => {
-          if (!isMounted) return;
-          const latency = Math.round(performance.now() - startPing);
-          const checkedAt = Date.now();
-          if (res.data && res.data.status === 'ready') {
-            setHealthData({
-              commit: res.data.commit || res.data.commit_hash || null,
-              status: 'online',
-              db: res.data.database?.status || 'ok',
-              scheduler: res.data.scheduler?.status || 'active',
-              latency,
-              checkedAt,
-              error: null,
-            });
-          } else if (res.data && res.data.status === 'unready') {
-            setHealthData({
-              commit: res.data.commit || null,
-              status: 'degraded',
-              db: res.data.database?.status || 'error',
-              scheduler: 'idle',
-              latency,
-              checkedAt,
-              error: res.data.reason || 'Database unready',
-            });
-          } else if (res.error) {
-            setHealthData(prev => ({
-              ...prev,
-              status: 'offline',
-              db: 'error',
-              latency: null,
-              checkedAt,
-              error: res.error,
-            }));
-          }
-        })
-        .catch(err => {
-          if (!isMounted) return;
-          setHealthData(prev => ({
-            ...prev,
-            status: 'offline',
-            db: 'error',
-            latency: null,
-            checkedAt: Date.now(),
-            error: err.message || 'Unreachable',
-          }));
-        });
-    };
+  const isSystemOnline = health.status === 'Online';
+  const isWaking = health.status.startsWith('Waking');
+  const isChecking = health.status === 'Checking…';
+  const isDegraded = health.status === 'Degraded';
+  const isDbOk = health.db === 'ok';
 
-    checkHealth();
-    const interval = setInterval(checkHealth, 30000);
-    return () => { isMounted = false; clearInterval(interval); };
-  }, []);
+  // Real commit resolution: never the string "HEAD"
+  const rawCommit = health.commit && health.commit !== 'HEAD' && health.commit !== 'unknown'
+    ? health.commit
+    : (BUILD_COMMIT !== 'HEAD' ? BUILD_COMMIT : 'unknown');
+  const shortCommit = rawCommit.slice(0, 7);
 
-  useEffect(() => {
-    const timer = setInterval(() => {
-      if (healthData.checkedAt) {
-        setSecondsAgo(Math.max(0, Math.floor((Date.now() - healthData.checkedAt) / 1000)));
-      }
-    }, 1000);
-    return () => clearInterval(timer);
-  }, [healthData.checkedAt]);
+  const fullCommit = BUILD_COMMIT_FULL && BUILD_COMMIT_FULL !== 'unknown' && BUILD_COMMIT_FULL !== 'HEAD'
+    ? BUILD_COMMIT_FULL
+    : (rawCommit !== 'unknown' ? rawCommit : null);
 
-  const shortCommit = healthData.commit ? healthData.commit.slice(0, 7) : 'HEAD';
-  const commitUrl = healthData.commit
-    ? `https://github.com/27Shambhavi/CarbonVault/commit/${healthData.commit}`
+  const commitUrl = fullCommit
+    ? `https://github.com/27Shambhavi/CarbonVault/commit/${fullCommit}`
     : 'https://github.com/27Shambhavi/CarbonVault';
-
-  const isDbOk = healthData.db === 'ok';
-  const isSystemOnline = healthData.status === 'online';
-  const isChecking = healthData.status === 'checking';
 
   return (
     <footer style={{
@@ -119,18 +53,18 @@ export default function AppFooter() {
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 5 }} title={healthData.error || 'Database connection healthy'}>
-          <Database size={11} color={isChecking ? T.t3 : isDbOk ? T.emeraldL : T.roseL} />
-          <span>DB: <strong style={{ color: isChecking ? T.t3 : isDbOk ? T.emeraldL : T.roseL }}>
-            {isChecking ? 'CHECKING…' : healthData.db.toUpperCase()}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5 }} title={health.error || (isWaking ? 'Server waking up from cold sleep' : 'Database connection healthy')}>
+          <Database size={11} color={isChecking ? T.t3 : isWaking ? T.goldL : isDbOk ? T.emeraldL : T.roseL} />
+          <span>DB: <strong style={{ color: isChecking ? T.t3 : isWaking ? T.goldL : isDbOk ? T.emeraldL : T.roseL }}>
+            {isChecking ? 'CHECKING…' : isWaking ? 'WAKING…' : health.db.toUpperCase()}
           </strong></span>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 5 }} title={healthData.error || (isSystemOnline ? 'All core pipelines online' : healthData.status === 'degraded' ? 'System Degraded' : 'API Offline')}>
-          <Activity size={11} color={isChecking ? T.t3 : isSystemOnline ? T.teal : healthData.status === 'degraded' ? T.goldL : T.roseL} />
-          <span>System: <strong style={{ color: isChecking ? T.t3 : isSystemOnline ? T.tealL : healthData.status === 'degraded' ? T.goldL : T.roseL }}>
-            {isChecking ? 'Checking…' : isSystemOnline ? 'Online' : healthData.status === 'degraded' ? 'Degraded' : 'Offline'}
-            {healthData.latency != null ? ` · ${healthData.latency}ms` : ''} · checked {secondsAgo}s ago
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5 }} title={health.error || (isSystemOnline ? 'All core pipelines online' : isWaking ? 'Waking up Render instance…' : isDegraded ? 'System Degraded' : 'API Offline')}>
+          <Activity size={11} color={isChecking ? T.t3 : isSystemOnline ? T.teal : isWaking ? T.goldL : isDegraded ? T.goldL : T.roseL} />
+          <span>System: <strong style={{ color: isChecking ? T.t3 : isSystemOnline ? T.tealL : isWaking ? T.goldL : isDegraded ? T.goldL : T.roseL }}>
+            {health.status}
+            {health.latency != null ? ` · ${health.latency}ms` : ''} · checked {health.secondsAgo}s ago
           </strong></span>
         </div>
 
@@ -138,7 +72,7 @@ export default function AppFooter() {
           href={commitUrl}
           target="_blank"
           rel="noopener noreferrer"
-          title={healthData.commit ? `View deployed commit ${healthData.commit} on GitHub` : 'View repository on GitHub'}
+          title={fullCommit ? `View deployed commit ${fullCommit} on GitHub` : 'View repository on GitHub'}
           style={{
             display: 'inline-flex',
             alignItems: 'center',

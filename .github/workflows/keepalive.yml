@@ -1,0 +1,27 @@
+name: CarbonVault Keep-Alive & Synthetic Monitor
+
+on:
+  schedule:
+    # Run every 10 minutes to prevent Render free tier from sleeping
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+jobs:
+  ping-health:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Ping Render Backend Health Probe
+        run: |
+          echo "Pinging https://carbonvault-api.onrender.com/health..."
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 60 https://carbonvault-api.onrender.com/health)
+          echo "Health HTTP Status: $STATUS"
+          if [ "$STATUS" -ne 200 ]; then
+            echo "::warning ::Backend /health returned status $STATUS (may be waking up)"
+          fi
+
+      - name: Ping Render Backend Readiness Probe
+        run: |
+          echo "Pinging https://carbonvault-api.onrender.com/ready..."
+          READY_BODY=$(curl -s --max-time 60 https://carbonvault-api.onrender.com/ready)
+          echo "Readiness response: $READY_BODY"

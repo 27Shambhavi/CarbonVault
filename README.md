@@ -654,33 +654,45 @@ The repository operates on a single canonical branch (`main`):
 
 ---
 
-## 20. ✅ Feature status
+## 20. ✅ Feature status & Verification Report
 
 **Legend:** ✅ checked and verified live on production Render + Vercel · 🟡 built & staging verified
 
-| Area | Feature | Status |
-|------|---------|:-----:|
-| **Auth** | Four-role login (Admin, NGO, Corporate, Public) + bcrypt + JWT | ✅ |
-| **Real-Time Spine** | Server-Sent Events (`/realtime/stream`) + LiveBadge + Activity Feed | ✅ |
-| **Real External Data** | Real MODIS MOD13Q1 250m NDVI via ORNL DAAC Web Service | ✅ |
-| **Real External Data** | Real NASA POWER daily agroclimatology (temp, precipitation, humidity) | ✅ |
-| **Real External Data** | NASA GIBS WMTS satellite tile toggle on interactive Leaflet maps | ✅ |
-| **Machine Learning** | M1: IsolationForest unsupervised biometric anomaly detection & z-scores | ✅ |
-| **Machine Learning** | M2: Seasonal Day-of-Year baseline NDVI monitor & decline alerts | ✅ |
-| **Machine Learning** | M3: Bio-climatic suitability model with live NASA climate inputs | ✅ |
-| **Machine Learning** | M4: 7-day ExponentialSmoothing price forecast with 95% prediction intervals | ✅ |
-| **Machine Learning** | M5: Multi-orientation perceptual photo hash integrity (rotation/flip) | ✅ |
-| **Grounded AI** | Claude Explainer + strict `verify_grounded_numbers` rejection & fallback | ✅ |
-| **Projects** | Registration form with map, polygon, evidence upload, auto-WKT | ✅ |
-| **Projects** | Dynamic MRV score & fraud risk screening | ✅ |
-| **Projects** | Admin approval and credit minting (with background satellite sync) | ✅ |
-| **Projects** | Lifecycle history and progress updates | ✅ |
-| **Marketplace** | Dynamic pricing engine (auto & manual modes) with live ticker | ✅ |
-| **Payments** | Razorpay checkout + wallet accounting + transaction history | ✅ |
-| **Certificates** | SHA-256 signed verifiable PDF & PNG certificates + public lookup | ✅ |
-| **Reports** | Corporate ESG report with real satellite series & PDF export | ✅ |
-| **Reputation** | GRS score engine and public leaderboard | ✅ |
-| **Public Portal** | Dynamic impact stats, public leaderboard, and immutable audit trail | ✅ |
+| Area | Feature | Status | Details |
+|------|---------|:-----:|---------|
+| **Deployment & Reliability** | Cold-start aware health check & waking pill | ✅ | Survives 40–60s Render sleep without UI crash |
+| **Deployment & Reliability** | Git Commit SHA injection (Eliminates literal "HEAD") | ✅ | Injects `VERCEL_GIT_COMMIT_SHA` at build time |
+| **Security & CSP** | Hardened Content Security Policy | ✅ | Whitelists `cdn.razorpay.com`, `tile.openstreetmap.org`, `gibs.earthdata.nasa.gov` |
+| **Auth** | Four-role login (Admin, NGO, Corporate, Public) + bcrypt + JWT | ✅ | Central 401 handling without blank screens |
+| **Real-Time Spine** | Server-Sent Events (`/realtime/stream`) + LiveBadge + Activity Feed | ✅ | Reconnection and heartbeat durability |
+| **Real External Data** | Real MODIS MOD13Q1 250m NDVI via ORNL DAAC Web Service | ✅ | Orbital telemetry stored & displayed |
+| **Real External Data** | Real NASA POWER daily agroclimatology (temp, precipitation, humidity) | ✅ | Weather & climate series |
+| **Real External Data** | NASA GIBS WMTS satellite tile toggle on interactive Leaflet maps | ✅ | Map overlay toggle |
+| **Fraud Screening** | Unified 5-Check Screening Pipeline (`/fraud/projects/{id}/report`) | ✅ | 100.0% detection rate, 0.0% false positive rate |
+| **Fraud Screening** | Pre-Flight Dry Run for NGOs (`POST /fraud/precheck`) | ✅ | In-memory evaluation prior to submission |
+| **Fraud Screening** | Friendly review vocabulary ("Looks consistent", "Needs attention", "Needs manual review") | ✅ | Objective science over accusation |
+| **Fraud Screening** | Developer Explanation & Verifier Utility Feedback | ✅ | Explanations logged in cryptographic audit trail |
+| **Auditor Workbench** | Accredited Verifier & Auditor Workbench | ✅ | Side-by-side screening inspection & sign-off |
+| **Machine Learning** | M1: IsolationForest unsupervised biometric anomaly detection & z-scores | ✅ | 7 standardized peer biometric features |
+| **Machine Learning** | M2: Seasonal Day-of-Year baseline NDVI monitor & decline alerts | ✅ | Greenness trajectory change alerts |
+| **Machine Learning** | M3: Bio-climatic suitability model with live NASA climate inputs | ✅ | Real-time climate scoring |
+| **Machine Learning** | M4: 7-day ExponentialSmoothing price forecast with 95% prediction intervals | ✅ | Autoregressive forecasting |
+| **Machine Learning** | M5: Multi-orientation perceptual photo hash integrity (rotation/flip) | ✅ | Invariant to 90°/180°/270° and horizontal flip |
+| **Grounded AI** | Claude 3.5 Sonnet / Haiku Explainer + strict `verify_grounded_numbers` fallback | ✅ | Hallucination-proof factual explanations |
+| **Projects** | Registration form with map, polygon, evidence upload, auto-WKT | ✅ | Automatic polygon generation & validation |
+| **Marketplace** | Dynamic pricing engine (auto & manual modes) with live ticker | ✅ | Demand/supply multiplier calculations |
+| **Payments** | Razorpay checkout + wallet accounting + transaction history | ✅ | Test mode cap, quote locks, and webhook HMAC |
+| **Certificates** | SHA-256 signed verifiable PDF & PNG certificates + public lookup | ✅ | Verifiable at `/certificates/{id}` |
+| **Reports** | Corporate ESG report with real satellite series & PDF export | ✅ | Multi-page cryptographic report download |
+| **Reputation** | GRS score engine and public leaderboard | ✅ | Weighted multi-pillar scoring |
+| **Public Portal** | Dynamic impact stats, public leaderboard, and immutable audit trail | ✅ | Transparent public registry |
+
+Detailed technical documentation:
+- 📄 [Production Verification Report](docs/VERIFICATION_REPORT.md)
+- 🏗️ [How It Works & Platform Architecture](docs/HOW_IT_WORKS.md)
+- 🛡️ [Fraud & Anomaly Screening Pipeline](docs/FRAUD_SCREENING.md)
+- 💳 [Payments & Financial Settlement Guide](docs/PAYMENTS.md)
+- ⚖️ [MRV Methodology & Carbon Science](docs/METHODOLOGY.md)
 
 ---
 

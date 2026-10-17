@@ -32,7 +32,8 @@ from credit_calculation.credits_module.db_models import (
 
 logger = logging.getLogger("carbonvault.ai.explainer")
 
-DEFAULT_MODEL = os.getenv("LLM_MODEL", "claude-3-haiku-20240307")
+DEFAULT_MODEL = os.getenv("LLM_MODEL", "claude-3-5-haiku-20241022")
+SUPPORTED_MODELS = ["claude-3-5-haiku-20241022", "claude-3-5-sonnet-20241022", "claude-3-haiku-20240307"]
 ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages"
 
 

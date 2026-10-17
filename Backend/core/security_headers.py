@@ -13,15 +13,17 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
 
-# Strict Content Security Policy allowing necessary CDN resources for fonts & Razorpay checkout
+# Strict Content Security Policy allowing necessary CDN resources for fonts, tiles & Razorpay checkout
 CSP_POLICY = (
     "default-src 'self'; "
-    "script-src 'self' 'unsafe-inline' https://checkout.razorpay.com; "
+    "script-src 'self' 'unsafe-inline' https://checkout.razorpay.com https://cdn.razorpay.com; "
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
     "font-src 'self' https://fonts.gstatic.com data:; "
-    "img-src 'self' data: blob: https:; "
-    "connect-src 'self' https:; "
-    "frame-src https://api.razorpay.com; "
+    "img-src 'self' data: blob: https: https://*.tile.openstreetmap.org https://tile.openstreetmap.org https://gibs.earthdata.nasa.gov https://*.razorpay.com; "
+    "connect-src 'self' https://carbonvault-api.onrender.com https://api.razorpay.com https://lumberjack.razorpay.com https://lumberjack-cx.razorpay.com https://*.razorpay.com wss: https:; "
+    "frame-src 'self' https://api.razorpay.com https://checkout.razorpay.com https://*.razorpay.com; "
+    "frame-ancestors 'none'; "
+    "form-action 'self'; "
     "object-src 'none'; "
     "base-uri 'self';"
 )
