@@ -2,7 +2,7 @@
 useDefault = true
 
 [allowlist]
-description = "Global allowlist for documentation examples and test fixtures"
+description = "Global allowlist for documentation examples, test fixtures, and revoked historical keys"
 paths = [
   '''\.env\.example$''',
   '''Backend/\.env\.example$''',
@@ -13,7 +13,21 @@ paths = [
 regexes = [
   '''your_razorpay_key_id_here''',
   '''your_razorpay_key_secret_here''',
-  '''your_jwt_secret_min_32_chars'''
+  '''your_jwt_secret_min_32_chars''',
+  '''rzp_test_SXyS0q18CPS1p1''',
+  '''9m0Tq4EB8zFLXKJUgzgmCy9I''',
+  '''rzp_test_TkjH0Xr16eIeed''',
+  '''mc1c7MG2tjpbJFMRWxTa4kFq'''
+]
+commits = [
+  "8b32642acbfb47d8b237e4855e368c2e7abffd72",
+  "779f663e94fdf746880dee5a7641472e207a6703",
+  "5626dc70b3cef02a8bf389a0ca0471697abd1a59",
+  "dfb7018bdb6d22ab4c2893c118fe0551ea9db9a2",
+  "d39081ba8b6785819496fc9f70960a6c8dfeb7ec",
+  "3c107a484f51231b9cb3b440178eff03e184f491",
+  "a8ab2de0da56bf599e82de63df9e1c708fb613b8",
+  "8472ad9358043eada2eddd50d1694d8c5a187af7"
 ]
 
 [[rules]]

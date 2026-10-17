@@ -19,43 +19,49 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    existing_tables = inspector.get_table_names()
+
     # 1. fraud_runs table
-    op.create_table(
-        'fraud_runs',
-        sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
-        sa.Column('project_id', sa.String(), nullable=False),
-        sa.Column('started_at', sa.DateTime(), nullable=False),
-        sa.Column('finished_at', sa.DateTime(), nullable=True),
-        sa.Column('overall_status', sa.String(), nullable=False),
-        sa.Column('risk_index', sa.Float(), nullable=True),
-        sa.Column('model_version', sa.String(), server_default='v2.1', nullable=False),
-        sa.Column('trigger', sa.String(), server_default='submission', nullable=False),
-        sa.Column('explanation', sa.Text(), nullable=True),
-        sa.ForeignKeyConstraint(['project_id'], ['projects.project_id']),
-        sa.PrimaryKeyConstraint('id')
-    )
-    with op.batch_alter_table('fraud_runs', schema=None) as batch_op:
-        batch_op.create_index(batch_op.f('ix_fraud_runs_id'), ['id'], unique=False)
-        batch_op.create_index(batch_op.f('ix_fraud_runs_project_id'), ['project_id'], unique=False)
+    if 'fraud_runs' not in existing_tables:
+        op.create_table(
+            'fraud_runs',
+            sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
+            sa.Column('project_id', sa.String(), nullable=False),
+            sa.Column('started_at', sa.DateTime(), nullable=False),
+            sa.Column('finished_at', sa.DateTime(), nullable=True),
+            sa.Column('overall_status', sa.String(), nullable=False),
+            sa.Column('risk_index', sa.Float(), nullable=True),
+            sa.Column('model_version', sa.String(), server_default='v2.1', nullable=False),
+            sa.Column('trigger', sa.String(), server_default='submission', nullable=False),
+            sa.Column('explanation', sa.Text(), nullable=True),
+            sa.ForeignKeyConstraint(['project_id'], ['projects.project_id']),
+            sa.PrimaryKeyConstraint('id')
+        )
+        with op.batch_alter_table('fraud_runs', schema=None) as batch_op:
+            batch_op.create_index(batch_op.f('ix_fraud_runs_id'), ['id'], unique=False)
+            batch_op.create_index(batch_op.f('ix_fraud_runs_project_id'), ['project_id'], unique=False)
 
     # 2. fraud_checks table
-    op.create_table(
-        'fraud_checks',
-        sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
-        sa.Column('run_id', sa.Integer(), nullable=False),
-        sa.Column('validator', sa.String(), nullable=False),
-        sa.Column('status', sa.String(), nullable=False),
-        sa.Column('score', sa.Float(), nullable=True),
-        sa.Column('details', sa.Text(), nullable=True),
-        sa.Column('evidence_refs', sa.Text(), nullable=True),
-        sa.Column('reason', sa.Text(), nullable=True),
-        sa.ForeignKeyConstraint(['run_id'], ['fraud_runs.id'], ondelete='CASCADE'),
-        sa.PrimaryKeyConstraint('id')
-    )
-    with op.batch_alter_table('fraud_checks', schema=None) as batch_op:
-        batch_op.create_index(batch_op.f('ix_fraud_checks_id'), ['id'], unique=False)
-        batch_op.create_index(batch_op.f('ix_fraud_checks_run_id'), ['run_id'], unique=False)
-        batch_op.create_index(batch_op.f('ix_fraud_checks_validator'), ['validator'], unique=False)
+    if 'fraud_checks' not in existing_tables:
+        op.create_table(
+            'fraud_checks',
+            sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
+            sa.Column('run_id', sa.Integer(), nullable=False),
+            sa.Column('validator', sa.String(), nullable=False),
+            sa.Column('status', sa.String(), nullable=False),
+            sa.Column('score', sa.Float(), nullable=True),
+            sa.Column('details', sa.Text(), nullable=True),
+            sa.Column('evidence_refs', sa.Text(), nullable=True),
+            sa.Column('reason', sa.Text(), nullable=True),
+            sa.ForeignKeyConstraint(['run_id'], ['fraud_runs.id'], ondelete='CASCADE'),
+            sa.PrimaryKeyConstraint('id')
+        )
+        with op.batch_alter_table('fraud_checks', schema=None) as batch_op:
+            batch_op.create_index(batch_op.f('ix_fraud_checks_id'), ['id'], unique=False)
+            batch_op.create_index(batch_op.f('ix_fraud_checks_run_id'), ['run_id'], unique=False)
+            batch_op.create_index(batch_op.f('ix_fraud_checks_validator'), ['validator'], unique=False)
 
 
 def downgrade() -> None:

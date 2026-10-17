@@ -2,15 +2,18 @@ services:
   - type: web
     name: carbonvault-api
     runtime: python
+    region: virginia
     rootDir: Backend
-    buildCommand: pip install -r requirements.lock && (git rev-parse HEAD > COMMIT_HASH || true)
-    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    buildCommand: pip install -r requirements.lock
+    startCommand: alembic upgrade head && uvicorn main:app --host 0.0.0.0 --port $PORT
     plan: free
     autoDeploy: true
-    healthCheckPath: /ready
+    healthCheckPath: /health
     envVars:
       - key: DATABASE_URL
-        sync: false
+        fromDatabase:
+          name: carbonvault-postgres
+          property: connectionString
       - key: RAZORPAY_KEY_ID
         sync: false
       - key: RAZORPAY_KEY_SECRET
@@ -25,10 +28,13 @@ services:
         value: "False"
       - key: APP_MODE
         value: demo
+      - key: PAYMENT_MODE
+        value: test
 
   - type: cron
     name: carbonvault-worker
     runtime: python
+    region: virginia
     rootDir: Backend
     buildCommand: pip install -r requirements.lock
     schedule: "0 */6 * * *"
@@ -36,8 +42,17 @@ services:
     plan: free
     envVars:
       - key: DATABASE_URL
-        sync: false
+        fromDatabase:
+          name: carbonvault-postgres
+          property: connectionString
       - key: JWT_SECRET
         sync: false
       - key: APP_MODE
         value: demo
+
+databases:
+  - name: carbonvault-postgres
+    databaseName: carbonvault
+    user: carbonvault
+    plan: free
+    region: virginia

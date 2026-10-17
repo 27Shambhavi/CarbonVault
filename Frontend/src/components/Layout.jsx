@@ -16,6 +16,7 @@ const adminNav = [
   {id:'approvals',label:'Project Approvals',icon:FolderCheck},
   {id:'pricing',label:'Pricing Engine',icon:DollarSign},
   {id:'analytics',label:'Analytics',icon:BarChart3},
+  {id:'ml_models',label:'ML Models & Logs',icon:Activity},
 ];
 const ngoNav = [
   {id:'dashboard',      label:'Dashboard',        icon:LayoutDashboard},
@@ -39,10 +40,15 @@ const publicNav = [
   {id:'certificates', label:'Certificates',     icon:Award},
   {id:'audit',        label:'Audit Trail',      icon:FileSearch},
 ];
+const approverNav = [
+  {id:'dashboard', label:'Review Queue', icon:FolderCheck},
+  {id:'ml_models', label:'ML Screening', icon:Activity},
+];
 const verifierNav = [
   {id:'dashboard', label:'Audit Queue', icon:FolderCheck},
+  {id:'ml_models', label:'ML Inspector', icon:Activity},
 ];
-const navMap = {admin:adminNav, ngo:ngoNav, corporate:corporateNav, public:publicNav, verifier:verifierNav, approver:verifierNav};
+const navMap = {admin:adminNav, ngo:ngoNav, corporate:corporateNav, public:publicNav, verifier:verifierNav, approver:approverNav};
 
 const RC = {
   admin:     {color:T.goldL,    bg:'rgba(245,158,11,0.1)',   border:'rgba(251,191,36,0.22)',   label:'Administrator'},
@@ -50,7 +56,7 @@ const RC = {
   corporate: {color:T.violetLL, bg:'rgba(167,139,250,0.1)',  border:'rgba(167,139,250,0.22)',  label:'Corporate Buyer'},
   public:    {color:T.emeraldL, bg:'rgba(16,185,129,0.1)',   border:'rgba(16,185,129,0.22)',   label:'Public Transparency'},
   verifier:  {color:T.tealL,    bg:'rgba(45,212,191,0.1)',   border:'rgba(45,212,191,0.22)',   label:'Accredited Verifier'},
-  approver:  {color:T.tealL,    bg:'rgba(45,212,191,0.1)',   border:'rgba(45,212,191,0.22)',   label:'Accredited Verifier'},
+  approver:  {color:T.tealL,    bg:'rgba(45,212,191,0.1)',   border:'rgba(45,212,191,0.22)',   label:'Scientific Approver'},
 };
 
 export function Sidebar() {

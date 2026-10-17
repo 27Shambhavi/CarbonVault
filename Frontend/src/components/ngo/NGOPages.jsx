@@ -112,7 +112,7 @@ function generatePolygonWKT(lat, lng, areaHectares) {
 
 // ── NGO Dashboard ──────────────────────────────────────────────────────────────
 export function NGODashboard() {
-  const { refreshKey, user } = useApp();
+  const { refreshKey, user, navigateToProject } = useApp();
   const [data, setData] = useState(null);
   const [recentProjects, setRecentProjects] = useState([]);
   const [mapFeatures, setMapFeatures] = useState([]);
@@ -184,7 +184,11 @@ export function NGODashboard() {
             const statusColor = p.status === 'approved' ? T.emeraldL : p.status === 'rejected' ? T.roseL : T.goldL;
             const Icon = statusIcon;
             return (
-              <div key={p.project_id} style={{display:'flex',gap:12,alignItems:'center',padding:'12px 0',borderBottom:i<recentProjects.length-1?`1px solid rgba(255,255,255,0.04)`:'none'}}>
+              <div
+                key={p.project_id}
+                onClick={() => navigateToProject(p.project_id)}
+                style={{display:'flex',gap:12,alignItems:'center',padding:'12px 0',borderBottom:i<recentProjects.length-1?`1px solid rgba(255,255,255,0.04)`:'none',cursor:'pointer'}}
+              >
                 <div style={{background:`${statusColor}15`,borderRadius:8,padding:8,display:'flex',flexShrink:0}}><Icon size={14} color={statusColor}/></div>
                 <div style={{flex:1}}>
                   <div style={{fontSize:13,color:T.t1,fontWeight:600}}>{p.name}</div>
@@ -208,7 +212,7 @@ export function NGODashboard() {
 
 // ── My Projects ────────────────────────────────────────────────────────────────
 export function NGOProjects() {
-  const { refreshKey, triggerRefresh } = useApp();
+  const { refreshKey, triggerRefresh, setPage, navigateToProject } = useApp();
   const { showToast, ToastEl } = useToast();
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -317,7 +321,7 @@ export function NGOProjects() {
 
   return (
     <div style={{padding:28}}>
-      <SectionHeader title="My Projects" subtitle="All submitted and approved projects" action={<Btn><Plus size={13}/>New Project</Btn>}/>
+      <SectionHeader title="My Projects" subtitle="All submitted and approved projects" action={<Btn onClick={()=>setPage('new_project')}><Plus size={13}/>New Project</Btn>}/>
 
       {error && (
         <Card style={{marginBottom:16,padding:16,border:'1px solid rgba(244,63,94,0.25)'}}>
@@ -350,8 +354,12 @@ export function NGOProjects() {
           <Table
             headers={['Project ID','Name','Type','Area (ha)','Credits','Price/t','Status','Progress Tracking']}
             rows={filtered.map(p=>[
-              <span style={{color:T.teal,fontWeight:700,fontSize:12}}>{p.project_id}</span>,
-              <span style={{fontWeight:600,color:T.t1}}>{p.name}</span>,
+              <button onClick={()=>navigateToProject(p.project_id)} style={{background:'none',border:'none',color:T.teal,fontWeight:700,fontSize:12,cursor:'pointer',padding:0,textDecoration:'underline'}}>
+                {p.project_id}
+              </button>,
+              <button onClick={()=>navigateToProject(p.project_id)} style={{background:'none',border:'none',color:T.t1,fontWeight:600,fontSize:13,cursor:'pointer',padding:0,textAlign:'left'}}>
+                {p.name}
+              </button>,
               <Badge type={p.status==='approved'?'reforestation':p.status==='rejected'?'rejected':'pending'} label={p.plantation_type}/>,
               <span style={{color:T.t2}}>{p.area_hectares}</span>,
               <span style={{color:T.emeraldL,fontWeight:700}}>{(p.credits || 0).toLocaleString()}</span>,

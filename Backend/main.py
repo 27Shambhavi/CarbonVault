@@ -47,6 +47,7 @@ from routers.stats_router import router as stats_router
 from routers.config_router import router as config_router
 from routers.credit_integrity_router import router as credit_integrity_router
 from routers.onboarding_router import router as onboarding_router
+from routers.ml_models_router import router as ml_models_router
 
 
 def migrate_db():
@@ -71,6 +72,8 @@ def migrate_db():
         ("evidence_image", "TEXT"),
         ("evidence_images", "TEXT"),
         ("is_synthetic", "BOOLEAN DEFAULT 0"),
+        ("description", "TEXT"),
+        ("objectives", "TEXT"),
     ]
 
     for col_name, col_type in new_columns:
@@ -323,37 +326,6 @@ def migrate_db():
         cursor.execute("UPDATE audit_logs SET user = 'EcoGuard Brazil' WHERE name = 'PRJ-MAN-SUNDAR'")
     except Exception:
         pass
-
-    # Ensure fraud_runs and fraud_checks tables exist
-    try:
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS fraud_runs (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                project_id TEXT NOT NULL,
-                started_at DATETIME NOT NULL,
-                finished_at DATETIME,
-                overall_status TEXT NOT NULL,
-                risk_index REAL,
-                model_version TEXT DEFAULT 'v2.1',
-                trigger TEXT DEFAULT 'submission',
-                explanation TEXT
-            )
-        """)
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS fraud_checks (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                run_id INTEGER NOT NULL,
-                validator TEXT NOT NULL,
-                status TEXT NOT NULL,
-                score REAL,
-                details TEXT,
-                evidence_refs TEXT,
-                reason TEXT
-            )
-        """)
-        logger.info("Ensured fraud_runs and fraud_checks tables exist")
-    except Exception as e:
-        logger.warning("Error creating fraud tables: %s", e)
 
     conn.commit()
     conn.close()
@@ -1177,13 +1149,45 @@ def health():
     }
 
 
+def get_migration_status():
+    """Inspects Alembic migration state vs head."""
+    try:
+        from alembic.config import Config
+        from alembic.script import ScriptDirectory
+        from alembic.migration import MigrationContext
+        backend_dir = os.path.dirname(os.path.abspath(__file__))
+        alembic_cfg = Config(os.path.join(backend_dir, "alembic.ini"))
+        script = ScriptDirectory.from_config(alembic_cfg)
+        head_rev = script.get_current_head()
+
+        with engine.connect() as conn:
+            context = MigrationContext.configure(conn)
+            current_rev = context.get_current_revision()
+
+        schema_status = "ok" if (current_rev and head_rev and current_rev == head_rev) else "behind"
+        return {
+            "migration_current": current_rev or "none",
+            "migration_head": head_rev or "none",
+            "schema": schema_status
+        }
+    except Exception as e:
+        logger.warning("Error inspecting migration status: %s", e)
+        return {
+            "migration_current": "unknown",
+            "migration_head": "unknown",
+            "schema": "unknown",
+            "error": str(e)
+        }
+
+
 @app.get("/ready")
 def readiness():
     """
     Readiness probe:
     - Real database query: SELECT 1 (returns HTTP 503 if unreachable).
-    - Migration / schema version.
+    - Migration / schema version and parity (migration_current, migration_head, schema: ok | behind).
     - Scheduler status & heartbeat.
+    - Razorpay status & non-secret key hint.
     - Last success timestamps for MODIS NDVI, NASA POWER climate, and LLM explainer.
     """
     from fastapi.responses import JSONResponse
@@ -1244,21 +1248,31 @@ def readiness():
 
     sched_running = GLOBAL_SCHEDULER.running if (GLOBAL_SCHEDULER and hasattr(GLOBAL_SCHEDULER, "running")) else False
 
+    mig_info = get_migration_status()
+
     try:
-        from routers.payment_router import get_razorpay_status
+        from routers.payment_router import get_razorpay_status, get_razorpay_key_hint
         rp_status = get_razorpay_status()
+        rp_hint = get_razorpay_key_hint()
     except Exception:
         rp_status = "ok"
+        rp_hint = "none"
 
     return {
         "status": "ready",
         "commit": commit,
         "commit_hash": commit,
         "started_at": SERVER_STARTED_AT,
+        "migration_current": mig_info.get("migration_current"),
+        "migration_head": mig_info.get("migration_head"),
+        "schema": mig_info.get("schema"),
         "database": {
             "status": "ok",
             "dialect": "sqlite" if DATABASE_URL.startswith("sqlite") else "postgresql",
-            "migration_version": "v1.0-phase0"
+            "migration_current": mig_info.get("migration_current"),
+            "migration_head": mig_info.get("migration_head"),
+            "schema": mig_info.get("schema"),
+            "migration_version": mig_info.get("migration_current") or "v1.0-phase0"
         },
         "scheduler": {
             "status": "active" if sched_running else "idle",
@@ -1266,6 +1280,7 @@ def readiness():
         },
         "razorpay": rp_status,
         "razorpay_status": rp_status,
+        "razorpay_key_hint": rp_hint,
         "services": {
             "modis_ndvi": {
                 "last_success_at": last_modis
@@ -1301,6 +1316,8 @@ app.include_router(stats_router)
 app.include_router(config_router)
 app.include_router(credit_integrity_router, tags=["Credit Integrity"])
 app.include_router(onboarding_router)
+app.include_router(ml_models_router)
+app.include_router(ml_models_router, prefix="/api")
 
 
 if __name__ == "__main__":

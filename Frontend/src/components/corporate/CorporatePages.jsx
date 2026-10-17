@@ -22,7 +22,7 @@ import {
 const inp = { background:'var(--input-bg, rgba(255,255,255,0.04))', border:`1px solid ${T.border}`, borderRadius:9, padding:'10px 14px', color:T.t1, fontSize:14, outline:'none', width:'100%', fontFamily:'Plus Jakarta Sans, sans-serif' };
 
 export function CorporateDashboard() {
-  const { user, refreshKey } = useApp();
+  const { user, refreshKey, navigateToProject } = useApp();
   const corporateName = user?.name || 'Corporate Buyer';
   const [projects, setProjects] = useState([]);
   const [mapFeatures, setMapFeatures] = useState([]);
@@ -90,7 +90,9 @@ export function CorporateDashboard() {
             {projects.length > 0 ? (
               <Table headers={['Project','Type','Credits','Price/t','Total Value','Status']}
                 rows={projects.map(p=>[
-                  <span style={{color:T.t1,fontWeight:600,fontSize:13}}>{p.name}</span>,
+                  <button onClick={() => navigateToProject(p.project_id || p.id)} style={{background:'none',border:'none',color:T.teal,fontWeight:600,fontSize:13,cursor:'pointer',textAlign:'left',padding:0}}>
+                    {p.name}
+                  </button>,
                   <Badge type={p.plantation_type || 'other'} label={(p.plantation_type || 'other').replace('_',' ')}/>,
                   <span style={{color:T.teal,fontWeight:700}}>{(p.credits||0).toLocaleString()}</span>,
                   <span style={{color:T.goldL,fontWeight:600}}>{p.price_per_ton ? `$${p.price_per_ton}` : '—'}</span>,
@@ -110,7 +112,7 @@ export function CorporateDashboard() {
 }
 
 export function CorporateMarketplace() {
-  const { user, refreshKey, triggerRefresh } = useApp();
+  const { user, refreshKey, triggerRefresh, navigateToProject } = useApp();
   const corporateName = user?.name || 'Corporate Buyer';
   const [listings, setListings] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -568,9 +570,13 @@ export function CorporateMarketplace() {
                 >
                   <Scale size={12} /> {isSelected ? 'Selected' : 'Compare'}
                 </button>,
-                <span style={{color:T.teal,fontWeight:700,fontSize:12,fontFamily:'monospace'}}>{item.id}</span>,
+                <button onClick={() => navigateToProject(item.id)} style={{background:'none',border:'none',color:T.teal,fontWeight:700,fontSize:12,fontFamily:'monospace',cursor:'pointer',padding:0,textDecoration:'underline'}}>
+                  {item.id}
+                </button>,
                 <div style={{width:32,height:32,borderRadius:8,background:'rgba(16,185,129,0.1)',border:'1px solid rgba(52,211,153,0.2)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:15}}>🌱</div>,
-                <span style={{fontWeight:700,color:T.t1,fontSize:13}}>{item.name}</span>,
+                <button onClick={() => navigateToProject(item.id)} style={{background:'none',border:'none',fontWeight:700,color:T.t1,fontSize:13,cursor:'pointer',padding:0,textAlign:'left'}}>
+                  {item.name}
+                </button>,
                 <Badge type={item.type==='Reforestation'?'reforestation':item.type==='Mangrove'?'renewable':item.type==='Methane'?'methane':'carbon_capture'} label={item.type}/>,
                 <span style={{color:T.t3,fontSize:12,display:'flex',alignItems:'center',gap:4}}><MapPin size={10}/>{item.location}</span>,
                 <span style={{color:T.teal,fontWeight:700,fontSize:12}}>{item.mrv_score || item.verified || 85}/100</span>,

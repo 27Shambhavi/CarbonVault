@@ -14,15 +14,84 @@ export const demoAccounts = [
   { id: 5, name: 'Public Auditor', email: 'guest@carbonvault.com', role: 'public', org: 'Carbon Transparency Portal' },
 ];
 
+function parseUrl() {
+  if (typeof window === 'undefined') return { page: 'dashboard', params: {} };
+  const path = window.location.pathname.replace(/\/$/, '') || '/';
+  if (path === '/projects/new') {
+    return { page: 'new_project', params: {} };
+  }
+  const matchPrj = path.match(/^\/projects\/([^/]+)$/);
+  if (matchPrj && matchPrj[1] !== 'new') {
+    return { page: 'project_detail', params: { id: matchPrj[1] } };
+  }
+  if (path === '/ml-models') {
+    return { page: 'ml_models', params: {} };
+  }
+  if (path === '/settings') return { page: 'settings', params: {} };
+  if (path === '/profile') return { page: 'profile', params: {} };
+  if (path.length > 1) {
+    const p = path.slice(1);
+    return { page: p, params: {} };
+  }
+  return { page: 'dashboard', params: {} };
+}
+
+function urlForPage(page, params = {}) {
+  if (page === 'project_detail' && params.id) {
+    return `/projects/${params.id}`;
+  }
+  if (page === 'new_project') {
+    return '/projects/new';
+  }
+  if (page === 'ml_models') {
+    return '/ml-models';
+  }
+  if (page === 'dashboard' || !page) {
+    return '/';
+  }
+  return `/${page}`;
+}
+
 const AppContext = createContext(null);
 
 export function AppProvider({ children }) {
-  const [user, setUser]           = useState(null);
-  const [page, setPage]           = useState('dashboard');
-  const [notifOpen, setNotifOpen] = useState(false);
-  const [profileOpen, setProfileOpen] = useState(false);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [refreshKey, setRefreshKey] = useState(0);
+  const initialRoute = parseUrl();
+  const [user, setUser]                 = useState(null);
+  const [page, setPageState]            = useState(initialRoute.page);
+  const [pageParams, setPageParams]     = useState(initialRoute.params);
+  const [notifOpen, setNotifOpen]       = useState(false);
+  const [profileOpen, setProfileOpen]   = useState(false);
+  const [sidebarOpen, setSidebarOpen]   = useState(true);
+  const [refreshKey, setRefreshKey]     = useState(0);
+
+  const navigateTo = useCallback((targetPage, params = {}) => {
+    setPageState(targetPage);
+    setPageParams(params);
+    if (typeof window !== 'undefined') {
+      const nextUrl = urlForPage(targetPage, params);
+      if (window.location.pathname !== nextUrl) {
+        window.history.pushState({ page: targetPage, params }, '', nextUrl);
+      }
+    }
+  }, []);
+
+  const navigateToProject = useCallback((projectId) => {
+    navigateTo('project_detail', { id: projectId });
+  }, [navigateTo]);
+
+  const setPage = useCallback((targetPage, params = {}) => {
+    navigateTo(targetPage, params);
+  }, [navigateTo]);
+
+  useEffect(() => {
+    const onPopState = () => {
+      const parsed = parseUrl();
+      setPageState(parsed.page);
+      setPageParams(parsed.params);
+    };
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, []);
 
   // Dynamic notifications state
   const [notifications, setNotifications] = useState([]);
@@ -210,7 +279,7 @@ export function AppProvider({ children }) {
     if (userOrRole === 'public') {
       setUser({ role: 'public', name: 'Public Visitor', org: 'Carbon Transparency Portal', email: 'guest@carbonvault.com' });
       setApiAdminContext('', 'guest@carbonvault.com');
-      setPage('dashboard');
+      if (page === 'dashboard' || !page) setPage('dashboard');
       return;
     }
     // If passed a real user profile object from /auth/login
@@ -219,7 +288,7 @@ export function AppProvider({ children }) {
         setAuthToken(tokenOrCustomRole);
       }
       setUser(userOrRole);
-      setPage('dashboard');
+      if (page === 'dashboard' || !page) setPage('dashboard');
       return;
     }
     // Fallback for role identifier
@@ -234,7 +303,7 @@ export function AppProvider({ children }) {
     } else {
       setApiAdminContext('', account.email);
     }
-    setPage('dashboard');
+    if (page === 'dashboard' || !page) setPage('dashboard');
   };
 
   const logout = () => {
@@ -250,6 +319,9 @@ export function AppProvider({ children }) {
         user,
         page,
         setPage,
+        pageParams,
+        navigateTo,
+        navigateToProject,
         login,
         logout,
         notifOpen,

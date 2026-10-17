@@ -24,12 +24,23 @@ import { PublicDashboard, PublicLeaderboard, PublicAudit, PublicCertificates, Pu
 
 // Verifier / Approver
 import VerifierDashboard from './components/verifier/VerifierDashboard.jsx';
+import ApproverDashboard from './components/approver/ApproverDashboard.jsx';
+
+// Dynamic Project & ML screens (Tasks 4 & 5)
+import ProjectDetail from './components/projects/ProjectDetail.jsx';
+import ProjectWizard from './components/projects/ProjectWizard.jsx';
+import AdminMLModels from './components/admin/AdminMLModels.jsx';
 
 function PageRouter() {
   const { user, page } = useApp();
   if (!user) return null;
-  if (page === 'settings') return <SettingsPage />;
-  if (page === 'profile')  return <ProfilePage />;
+
+  // Universal top-level routes accessible across authenticated roles
+  if (page === 'settings')       return <SettingsPage />;
+  if (page === 'profile')        return <ProfilePage />;
+  if (page === 'project_detail') return <ProjectDetail />;
+  if (page === 'new_project')    return <ProjectWizard />;
+  if (page === 'ml_models')      return <AdminMLModels />;
 
   if (user.role === 'admin') {
     if (page === 'dashboard') return <AdminDashboard />;
@@ -37,13 +48,14 @@ function PageRouter() {
     if (page === 'approvals') return <AdminApprovals />;
     if (page === 'pricing')   return <AdminPricing />;
     if (page === 'analytics') return <AdminAnalytics />;
+    if (page === 'ml_models') return <AdminMLModels />;
     return <AdminDashboard />;
   }
 
   if (user.role === 'ngo') {
     if (page === 'dashboard')        return <NGODashboard />;
     if (page === 'projects')         return <NGOProjects />;
-    if (page === 'new_project')      return <NGONewProject />;
+    if (page === 'new_project')      return <ProjectWizard />;
     if (page === 'site_suitability') return <NGOSiteSuitability />;
     if (page === 'ngo_marketplace')  return <NGOMarketplace />;
     return <NGODashboard />;
@@ -68,7 +80,11 @@ function PageRouter() {
     return <PublicDashboard />;
   }
 
-  if (user.role === 'verifier' || user.role === 'approver') {
+  if (user.role === 'approver') {
+    return <ApproverDashboard />;
+  }
+
+  if (user.role === 'verifier') {
     return <VerifierDashboard />;
   }
 

@@ -40,6 +40,8 @@ class Project(Base):
     shadow_credits = Column(Float, nullable=True)    # 5-year shadow projection
     price = Column(Float, nullable=True)             # price per credit in USD
     created_at = Column(Date)
+    description = Column(Text, nullable=True)
+    objectives = Column(Text, nullable=True)
 
     # Synthetic data flag
     is_synthetic = Column(Boolean, default=False)
@@ -662,7 +664,7 @@ class FraudCheck(Base):
     __tablename__ = "fraud_checks"
 
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
-    run_id = Column(Integer, ForeignKey("fraud_runs.id"), index=True, nullable=False)
+    run_id = Column(Integer, ForeignKey("fraud_runs.id", ondelete="CASCADE"), index=True, nullable=False)
     validator = Column(String, index=True, nullable=False)  # 'geo_boundary', 'photo_gps_exif', 'perceptual_hash', 'satellite_ndvi', 'ecological_isolation'
     status = Column(String, nullable=False)  # 'pass', 'warn', 'fail', 'not_checked', 'error'
     score = Column(Float, nullable=True)  # 0.0 to 1.0 (or None if not_checked)
@@ -670,4 +672,46 @@ class FraudCheck(Base):
     evidence_refs = Column(Text, nullable=True)  # JSON-encoded array of file paths / references
     reason = Column(Text, nullable=True)  # explanatory message, mandatory if not_checked or error
 
-    run = relationship("FraudRun", back_populates="checks")
+    run = relationship("FraudRun", back_populates="checks")
+
+
+class PhotoAnalysis(Base):
+    __tablename__ = "photo_analyses"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    project_id = Column(String, ForeignKey("projects.project_id"), index=True, nullable=False)
+    filename = Column(String, nullable=False)
+    file_path = Column(String, nullable=False)
+    gps_lat = Column(Float, nullable=True)
+    gps_lon = Column(Float, nullable=True)
+    gps_distance_km = Column(Float, nullable=True)
+    capture_time = Column(DateTime, nullable=True)
+    camera_make = Column(String, nullable=True)
+    camera_model = Column(String, nullable=True)
+    vegetation_fraction = Column(Float, nullable=True)
+    sharpness = Column(Float, nullable=True)
+    resolution_width = Column(Integer, nullable=True)
+    resolution_height = Column(Integer, nullable=True)
+    is_screenshot = Column(Boolean, default=False)
+    is_duplicate = Column(Boolean, default=False)
+    duplicate_match = Column(Text, nullable=True)
+    analysis_status = Column(String, default="pass", nullable=False)
+    flags = Column(Text, nullable=True)
+    reason = Column(Text, nullable=True)
+    analyzed_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    project = relationship("Project")
+
+
+class MLInferenceLog(Base):
+    __tablename__ = "ml_inference_logs"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    model_name = Column(String, index=True, nullable=False)
+    model_version = Column(String, default="v1.0", nullable=False)
+    project_id = Column(String, index=True, nullable=True)
+    inputs_summary = Column(Text, nullable=True)
+    output_result = Column(Text, nullable=True)
+    latency_ms = Column(Float, nullable=True)
+    timestamp = Column(DateTime, default=datetime.utcnow, index=True, nullable=False)
+

@@ -185,9 +185,15 @@ export async function createProject(formData) {
 
 /** Fetch projects for a specific NGO */
 export async function fetchProjects(ngoId) {
-  const res = await request(`${API_BASE}/projects/projects?ngo_id=${ngoId}`);
+  const q = ngoId != null && ngoId !== '' ? `?ngo_id=${encodeURIComponent(ngoId)}` : '';
+  const res = await request(`${API_BASE}/projects/projects${q}`);
   if (res.error) return { data: [], error: res.error };
   return res;
+}
+
+/** Fetch complete project detail for 8-tab view */
+export async function fetchProject(projectId) {
+  return request(`${API_BASE}/projects/${projectId}`);
 }
 
 /** Fetch dashboard summary for an NGO */
@@ -898,3 +904,24 @@ export async function createPayout(ngoId, amountINR, bankLast4 = '9876', ifsc = 
 export function getPayoutsExportUrl() {
   return `${API_BASE}/payments/payouts/export-csv`;
 }
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ML MODELS & INFERENCES APIs (Task 5)
+// ══════════════════════════════════════════════════════════════════════════════
+
+export async function fetchMLModels() {
+  return request(`${API_BASE}/ml-models/`);
+}
+
+export async function runMLSample(modelKey, sampleInput = {}) {
+  return request(`${API_BASE}/ml-models/run-sample`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model_key: modelKey, input: sampleInput }),
+  });
+}
+
+export async function fetchMLInferences(limit = 20) {
+  return request(`${API_BASE}/ml-models/inferences?limit=${limit}`);
+}
+

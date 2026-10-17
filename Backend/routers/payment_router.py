@@ -63,18 +63,37 @@ except ImportError:
 # ── Razorpay Health Tracking (R2-4) ──────────────────────────────────────────
 _razorpay_status_cache = {"status": "ok", "checked_at": 0}
 
+def get_razorpay_key_hint() -> str:
+    """Returns a non-secret masked hint of the loaded key ID (e.g. rzp_test_••••abcd)."""
+    from core.config import RAZORPAY_KEY_ID
+    if not RAZORPAY_KEY_ID:
+        return "none"
+    clean_id = RAZORPAY_KEY_ID.strip()
+    if len(clean_id) <= 8:
+        return clean_id[:3] + "••••"
+    prefix = clean_id[:9]
+    suffix = clean_id[-4:]
+    return f"{prefix}••••{suffix}"
+
+
 def get_razorpay_status() -> str:
     """
     Checks Razorpay health with a cheap authenticated call (order count=1).
-    Cached for 15 minutes (900s). Returns: 'ok' | 'auth_failed' | 'unreachable'.
+    Cached for 15 minutes (900s). Returns: 'ok' | 'missing' | 'auth_failed' | 'unreachable'.
     """
     global _razorpay_status_cache
     now = datetime.utcnow().timestamp()
     if (now - _razorpay_status_cache["checked_at"] < 900) and _razorpay_status_cache["checked_at"] > 0:
         return _razorpay_status_cache["status"]
 
+    from core.config import RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET
+    if not RAZORPAY_KEY_ID or not RAZORPAY_KEY_SECRET:
+        status = "missing"
+        _razorpay_status_cache = {"status": status, "checked_at": now}
+        return status
+
     if not razorpay_client:
-        status = "ok" if not RAZORPAY_KEY_ID else "unreachable"
+        status = "unreachable"
         _razorpay_status_cache = {"status": status, "checked_at": now}
         return status
 
@@ -84,7 +103,7 @@ def get_razorpay_status() -> str:
         status = "ok"
     except Exception as e:
         err_str = str(e).lower()
-        if "auth" in err_str or "unauthorized" in err_str or "401" in err_str or "signature" in err_str:
+        if "auth" in err_str or "unauthorized" in err_str or "401" in err_str or "signature" in err_str or "key" in err_str:
             status = "auth_failed"
         else:
             status = "unreachable"

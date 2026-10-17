@@ -44,7 +44,7 @@ const getStageIndex = (status) => {
 };
 
 export default function AdminApprovals() {
-  const { refreshKey, triggerRefresh, user } = useApp();
+  const { refreshKey, triggerRefresh, user, navigateToProject } = useApp();
   const isApprover = user?.admin_role === 'approver';
   const adminActor = user?.name ? `${user.name} (${isApprover ? 'Project Approver' : 'Super Admin'})` : 'Alex Mercer (Admin)';
 
@@ -396,6 +396,24 @@ export default function AdminApprovals() {
                     <Badge type={sel.plantation_type || sel.type || 'other'} label={(sel.plantation_type || sel.type || 'other').replace('_', ' ')} />
                     <Badge type={sel.status} label={sel.status.replace('_', ' ')} />
                     <span style={{ fontSize: 12, color: T.t3 }}>📍 {sel.location}</span>
+                    <button
+                      onClick={() => navigateToProject(sel.project_id || sel.id)}
+                      style={{
+                        background: 'rgba(45,212,191,0.12)',
+                        border: `1px solid ${T.teal}`,
+                        color: T.teal,
+                        borderRadius: 7,
+                        padding: '3px 9px',
+                        fontSize: 11,
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 4
+                      }}
+                    >
+                      Inspect Full Page ↗
+                    </button>
                   </div>
                 </div>
                 <div style={{ textAlign: 'right' }}>
