@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useApp } from '../AppContext.jsx';
-import { fetchPublicStats, loginUser, registerUser, setAuthToken, fetchReady } from '../services/api.js';
+import { fetchPublicStats, loginUser, registerUser, setAuthToken, fetchReady, fetchDemoAccounts } from '../services/api.js';
 import { useBackendHealth } from '../services/health.js';
 import AppFooter from '../components/Footer.jsx';
 import { T, withAlpha } from '../components/UI.jsx';
@@ -24,8 +24,66 @@ function Particle({ x, y, size, opacity, duration }) {
   );
 }
 
+const defaultDemoRoles = [
+  {
+    role: 'admin',
+    label: 'Admin',
+    desc: 'Runs the platform: users, prices, payments, audit.',
+    tooltip: 'Runs the platform: platform health, KYC review, users, pricing, payments & reconciliation, ML retraining, audit.',
+    icon: ShieldCheck,
+    color: T.goldL,
+    email: 'admin@carbonvault.com',
+    pass: 'admin123',
+    name: 'Alex Mercer'
+  },
+  {
+    role: 'approver',
+    label: 'Approver',
+    desc: 'Reviews projects and makes the decision.',
+    tooltip: 'Primary decision-maker: decision queue, approve / reject / request data, SLA timer, risk assessment.',
+    icon: UserCheck,
+    color: T.skyL,
+    email: 'approver@carbonvault.com',
+    pass: 'approver123',
+    name: 'Dr. Sarah Jenkins'
+  },
+  {
+    role: 'verifier',
+    label: 'Verifier',
+    desc: 'Verifies sites in the field and signs off.',
+    tooltip: 'Field verification: inspect polygons, upload field evidence, sign off on verification.',
+    icon: Award,
+    color: T.tealL,
+    email: 'verifier@carbonvault.com',
+    pass: 'verifier123',
+    name: 'Marcus Vance'
+  },
+  {
+    role: 'ngo',
+    label: 'NGO',
+    desc: 'Registers projects and receives funding.',
+    tooltip: 'Project developer: registers projects, uploads MRV data, submits quarterly updates, receives funding.',
+    icon: TreePine,
+    color: T.emeraldL,
+    email: 'contact@ecoguard.org',
+    pass: 'ngo123',
+    name: 'EcoGuard Brazil'
+  },
+  {
+    role: 'corporate',
+    label: 'Corporate',
+    desc: 'Buys and retires credits.',
+    tooltip: 'Marketplace: buys and retires verified credits, downloads official retirement certificates.',
+    icon: Building2,
+    color: T.violetLL,
+    email: 'carbon@microsoft.com',
+    pass: 'corp123',
+    name: 'Microsoft Sustainability'
+  },
+];
+
 export default function LoginPage() {
-  const { login, theme, toggleTheme } = useApp();
+  const { login, theme, toggleTheme, addToast } = useApp();
   const [tab, setTab] = useState('signin'); // 'signin' | 'register'
 
   // Sign In State
@@ -35,6 +93,10 @@ export default function LoginPage() {
   const [showPass, setShowPass] = useState(false);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [loginError, setLoginError] = useState(null);
+
+  // Demo tiles state (404 in production mode hides tiles)
+  const [demoMode, setDemoMode] = useState(true);
+  const [roleTiles, setRoleTiles] = useState(defaultDemoRoles);
 
   // Register State
   const [regRole, setRegRole] = useState('ngo'); // 'ngo' | 'corporate'
@@ -59,6 +121,34 @@ export default function LoginPage() {
   const [publicStats, setPublicStats] = useState(null);
   const [statsLoading, setStatsLoading] = useState(true);
 
+  // Load demo accounts from server (404 in production mode)
+  useEffect(() => {
+    fetchDemoAccounts()
+      .then((res) => {
+        if (res.error && (res.status === 404 || res.error.includes('404') || res.error.includes('Production'))) {
+          setDemoMode(false);
+          return;
+        }
+        if (res.data && Array.isArray(res.data.accounts)) {
+          const map = {};
+          res.data.accounts.forEach((acc) => {
+            map[acc.role] = acc;
+          });
+          setRoleTiles((prev) =>
+            prev.map((r) => {
+              const matched = map[r.role];
+              return matched
+                ? { ...r, email: matched.email || r.email, pass: matched.password || r.pass, name: matched.name || r.name }
+                : r;
+            })
+          );
+        }
+      })
+      .catch(() => {
+        // Keep default client demo tiles
+      });
+  }, []);
+
   // Fetch public platform stats whenever backend is online
   useEffect(() => {
     setTimeout(() => setLoaded(true), 80);
@@ -73,19 +163,10 @@ export default function LoginPage() {
     };
 
     loadStats();
-    // Re-fetch when transitioning to Online
     if (health.status === 'Online') {
       loadStats();
     }
   }, [health.status]);
-
-  const roles = [
-    { role: 'admin', label: 'Admin', desc: 'Platform HQ', icon: ShieldCheck, color: T.goldL, email: 'admin@carbonvault.com', pass: 'admin123' },
-    { role: 'approver', label: 'Approver', desc: 'Project Approver', icon: UserCheck, color: T.skyL, email: 'approver@carbonvault.com', pass: 'approver123' },
-    { role: 'ngo', label: 'NGO', desc: 'Project Developer', icon: TreePine, color: T.emeraldL, email: 'contact@ecoguard.org', pass: 'ngo123' },
-    { role: 'corporate', label: 'Corporate', desc: 'Carbon Buyer', icon: Building2, color: T.violetLL, email: 'carbon@microsoft.com', pass: 'corp123' },
-    { role: 'public', label: 'Public', desc: 'Registry Auditor', icon: Globe, color: T.tealL, email: 'guest@carbonvault.com', pass: 'guest123' },
-  ];
 
   const particles = Array.from({ length: 18 }, (_, i) => ({
     id: i, x: Math.random() * 100, y: Math.random() * 100,
@@ -127,7 +208,20 @@ export default function LoginPage() {
       const res = await loginUser(targetEmail, password, 10000);
       if (res.data && res.data.access_token) {
         setAuthToken(res.data.access_token);
-        login(res.data.user, res.data.access_token);
+        const serverUser = res.data.user || {};
+        const serverRole = serverUser.role || 'public';
+        const serverRoleDisplay = serverRole.charAt(0).toUpperCase() + serverRole.slice(1);
+
+        // Server authoritative role feedback: if tile clicked and account role disagree
+        if (activeRole && activeRole !== serverRole && addToast) {
+          addToast({
+            type: 'info',
+            title: 'Signed in as ' + serverRoleDisplay,
+            message: `Server authenticated your account as ${serverRoleDisplay} (${serverUser.email})`,
+          });
+        }
+
+        login(serverUser, res.data.access_token);
         return;
       }
       if (res.error) {
@@ -385,32 +479,37 @@ export default function LoginPage() {
                 <div style={{ fontSize: 12.5, color: T.t3, marginTop: 3 }}>Quick demo accounts or enter your registered credentials</div>
               </div>
 
-              {/* Demo Quick-Fill Shortcut Tiles */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(85px, 1fr))', gap: 6, marginBottom: 18 }}>
-                {roles.map(({ role, label, desc, icon: Icon, color, email: roleEmail, pass }) => {
-                  const active = activeRole === role;
-                  return (
-                    <button
-                      key={role}
-                      type="button"
-                      onClick={() => { setActiveRole(role); setEmail(roleEmail); setPassword(pass); setLoginError(null); }}
-                      style={{
-                        background: active ? `color-mix(in srgb, ${color} 14%, transparent)` : 'var(--glass, rgba(255,255,255,0.025))',
-                        border: `1px solid ${active ? color : T.border}`,
-                        borderRadius: 10, padding: '10px 8px', cursor: 'pointer', textAlign: 'left',
-                        transition: 'all 0.18s', position: 'relative', overflow: 'hidden'
-                      }}
-                    >
-                      {active && <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 2, background: `linear-gradient(90deg,transparent,${color},transparent)` }} />}
-                      <div style={{ width: 24, height: 24, borderRadius: 6, background: `color-mix(in srgb, ${color} 18%, transparent)`, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 5 }}>
-                        <Icon size={12} color={color} />
-                      </div>
-                      <div style={{ fontSize: 11.5, fontWeight: 700, color: active ? T.t1 : T.t2 }}>{label}</div>
-                      <div style={{ fontSize: 9.5, color: active ? T.t2 : T.t3, marginTop: 1 }}>{desc}</div>
-                    </button>
-                  );
-                })}
-              </div>
+              {/* Demo Quick-Fill Shortcut Tiles (Demo Mode Only: 404 in production hides tiles) */}
+              {demoMode && (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 6, marginBottom: 18 }}>
+                  {roleTiles.map(({ role, label, desc, tooltip, icon: Icon, color, email: roleEmail, pass }) => {
+                    const active = activeRole === role;
+                    return (
+                      <button
+                        key={role}
+                        type="button"
+                        data-testid={`demo-tile-${role}`}
+                        title={`${label} — ${tooltip}`}
+                        onClick={() => { setActiveRole(role); setEmail(roleEmail); setPassword(pass); setLoginError(null); }}
+                        style={{
+                          background: active ? `color-mix(in srgb, ${color} 14%, transparent)` : 'var(--glass, rgba(255,255,255,0.025))',
+                          border: `1px solid ${active ? color : T.border}`,
+                          borderRadius: 10, padding: '10px 6px', cursor: 'pointer', textAlign: 'left',
+                          transition: 'all 0.18s', position: 'relative', overflow: 'hidden',
+                          display: 'flex', flexDirection: 'column'
+                        }}
+                      >
+                        {active && <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 2, background: `linear-gradient(90deg,transparent,${color},transparent)` }} />}
+                        <div style={{ width: 24, height: 24, borderRadius: 6, background: `color-mix(in srgb, ${color} 18%, transparent)`, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 5 }}>
+                          <Icon size={12} color={color} />
+                        </div>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: active ? T.t1 : T.t2, whiteSpace: 'nowrap' }}>{label}</div>
+                        <div style={{ fontSize: 8.5, color: active ? T.t2 : T.t3, marginTop: 2, lineHeight: 1.25, height: 28, overflow: 'hidden' }}>{desc}</div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
 
               {loginError && (
                 <div style={{ background: 'rgba(244,63,94,0.12)', border: `1px solid ${T.rose}`, borderRadius: 8, padding: '10px 14px', color: T.roseL, fontSize: 12, marginBottom: 14, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
@@ -626,18 +725,19 @@ export default function LoginPage() {
             </div>
           )}
 
-          {/* Public Visitor Link */}
+          {/* Public Registry Access (No Login Required) */}
           <div style={{ marginTop: 18, textAlign: 'center' }}>
             <button
+              data-testid="explore-public-registry"
               onClick={() => login('public')}
               style={{
                 background: 'transparent', border: `1px solid ${T.border}`, borderRadius: 9,
-                padding: '9px 12px', color: T.teal, fontSize: 12.5, fontWeight: 600,
+                padding: '10px 14px', color: T.teal, fontSize: 13, fontWeight: 600,
                 cursor: 'pointer', width: '100%', display: 'flex', alignItems: 'center',
-                justifyContent: 'center', gap: 6, transition: 'all 0.15s'
+                justifyContent: 'center', gap: 8, transition: 'all 0.15s'
               }}
             >
-              <Globe size={13} color={T.teal} /> Explore Public Transparency Registry (No Login Required)
+              <Globe size={14} color={T.teal} /> Explore the public registry (no login)
             </button>
           </div>
         </div>

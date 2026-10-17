@@ -8,10 +8,10 @@ import { LiveToastContainer } from './components/LiveToast.jsx';
 
 export const demoAccounts = [
   { id: 1, name: 'Alex Mercer', email: 'admin@carbonvault.com', role: 'admin', admin_role: 'super_admin', org: 'Platform HQ' },
-  { id: 2, name: 'Sarah Jenkins', email: 'approver@carbonvault.com', role: 'admin', admin_role: 'approver', org: 'CarbonVault Auditing' },
-  { id: 3, name: 'EcoGuard Brazil', email: 'contact@ecoguard.org', role: 'ngo', org: 'EcoGuard Brazil' },
-  { id: 4, name: 'Microsoft Sustainability', email: 'carbon@microsoft.com', role: 'corporate', org: 'Microsoft Sustainability' },
-  { id: 5, name: 'Public Auditor', email: 'guest@carbonvault.com', role: 'public', org: 'Carbon Transparency Portal' },
+  { id: 2, name: 'Dr. Sarah Jenkins', email: 'approver@carbonvault.com', role: 'approver', admin_role: 'approver', org: 'CarbonVault Auditing' },
+  { id: 3, name: 'Marcus Vance', email: 'verifier@carbonvault.com', role: 'verifier', org: 'Global Carbon Verifiers' },
+  { id: 4, name: 'EcoGuard Brazil', email: 'contact@ecoguard.org', role: 'ngo', org: 'EcoGuard Brazil' },
+  { id: 5, name: 'Microsoft Sustainability', email: 'carbon@microsoft.com', role: 'corporate', org: 'Microsoft Sustainability' },
 ];
 
 function parseUrl() {

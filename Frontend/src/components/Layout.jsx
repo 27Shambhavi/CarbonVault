@@ -7,56 +7,75 @@ import {
   LayoutDashboard, Users, FolderCheck, DollarSign, BarChart3,
   Map, Upload, ShieldCheck, TreePine, ShoppingCart,
   Wallet, FileText, Star, Globe, Trophy, FileSearch, Award, Plus,
-  Activity, TrendingUp, Layers, Sun, Moon, Calculator
+  Activity, TrendingUp, Layers, Sun, Moon, Calculator, Building2
 } from 'lucide-react';
 
 const adminNav = [
-  {id:'dashboard',label:'Dashboard',icon:LayoutDashboard},
-  {id:'users',label:'User Management',icon:Users},
-  {id:'approvals',label:'Project Approvals',icon:FolderCheck},
-  {id:'pricing',label:'Pricing Engine',icon:DollarSign},
-  {id:'analytics',label:'Analytics',icon:BarChart3},
-  {id:'ml_models',label:'ML Models & Logs',icon:Activity},
+  { id: 'dashboard', label: 'Home', icon: LayoutDashboard },
+  { id: 'approvals', label: 'Review Queue (oversight)', icon: FolderCheck },
+  { id: 'organisations', label: 'Organisations', icon: Building2 },
+  { id: 'users', label: 'Users', icon: Users },
+  { id: 'pricing', label: 'Pricing', icon: DollarSign },
+  { id: 'payments_payouts', label: 'Payments and Payouts', icon: Wallet },
+  { id: 'ml_models', label: 'ML Models', icon: Activity },
+  { id: 'audit', label: 'Audit', icon: FileSearch },
+  { id: 'settings', label: 'Settings', icon: Settings },
 ];
-const ngoNav = [
-  {id:'dashboard',      label:'Dashboard',        icon:LayoutDashboard},
-  {id:'projects',       label:'My Projects',      icon:TreePine},
-  {id:'new_project',    label:'New Project',       icon:Plus},
-  {id:'site_suitability',label:'Site Suitability', icon:Map},
-  {id:'ngo_marketplace',label:'Marketplace',       icon:ShoppingCart},
-];
-const corporateNav = [
-  {id:'dashboard',   label:'Dashboard',   icon:LayoutDashboard},
-  {id:'marketplace', label:'Marketplace', icon:ShoppingCart},
-  {id:'wallet',      label:'My Wallet',   icon:Wallet},
-  {id:'esg',         label:'ESG Reports', icon:FileText},
-  {id:'calculator',  label:'Footprint Calculator', icon:Calculator},
-];
-const publicNav = [
-  {id:'dashboard',    label:'Impact Stats',     icon:LayoutDashboard},
-  {id:'leaderboard',  label:'Leaderboard',      icon:Trophy},
-  {id:'projects',     label:'Marketplace View', icon:ShoppingCart},
-  {id:'climate',      label:'Climate Insights', icon:Globe},
-  {id:'certificates', label:'Certificates',     icon:Award},
-  {id:'audit',        label:'Audit Trail',      icon:FileSearch},
-];
+
 const approverNav = [
-  {id:'dashboard', label:'Review Queue', icon:FolderCheck},
-  {id:'ml_models', label:'ML Screening', icon:Activity},
+  { id: 'dashboard', label: 'Home', icon: LayoutDashboard },
+  { id: 'decision_queue', label: 'Decision Queue', icon: FolderCheck },
+  { id: 'decided', label: 'Decided', icon: Award },
+  { id: 'my_audit', label: 'My Audit', icon: FileSearch },
 ];
+
 const verifierNav = [
-  {id:'dashboard', label:'Audit Queue', icon:FolderCheck},
-  {id:'ml_models', label:'ML Inspector', icon:Activity},
+  { id: 'dashboard', label: 'Home', icon: LayoutDashboard },
+  { id: 'field_queue', label: 'Field Queue', icon: FolderCheck },
+  { id: 'my_audit', label: 'My Audit', icon: FileSearch },
 ];
-const navMap = {admin:adminNav, ngo:ngoNav, corporate:corporateNav, public:publicNav, verifier:verifierNav, approver:approverNav};
+
+const ngoNav = [
+  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { id: 'projects', label: 'My Projects', icon: TreePine },
+  { id: 'new_project', label: 'New Project', icon: Plus },
+  { id: 'site_suitability', label: 'Site Suitability', icon: Map },
+  { id: 'ngo_marketplace', label: 'Marketplace', icon: ShoppingCart },
+];
+
+const corporateNav = [
+  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { id: 'marketplace', label: 'Marketplace', icon: ShoppingCart },
+  { id: 'wallet', label: 'My Wallet', icon: Wallet },
+  { id: 'esg', label: 'ESG Reports', icon: FileText },
+  { id: 'calculator', label: 'Footprint Calculator', icon: Calculator },
+];
+
+const publicNav = [
+  { id: 'dashboard', label: 'Impact Stats', icon: LayoutDashboard },
+  { id: 'leaderboard', label: 'Leaderboard', icon: Trophy },
+  { id: 'projects', label: 'Marketplace View', icon: ShoppingCart },
+  { id: 'climate', label: 'Climate Insights', icon: Globe },
+  { id: 'certificates', label: 'Certificates', icon: Award },
+  { id: 'audit', label: 'Audit Trail', icon: FileSearch },
+];
+
+const navMap = {
+  admin: adminNav,
+  approver: approverNav,
+  verifier: verifierNav,
+  ngo: ngoNav,
+  corporate: corporateNav,
+  public: publicNav,
+};
 
 const RC = {
-  admin:     {color:T.goldL,    bg:'rgba(245,158,11,0.1)',   border:'rgba(251,191,36,0.22)',   label:'Administrator'},
-  ngo:       {color:T.skyL,     bg:'rgba(56,189,248,0.1)',   border:'rgba(56,189,248,0.22)',   label:'NGO Organization'},
-  corporate: {color:T.violetLL, bg:'rgba(167,139,250,0.1)',  border:'rgba(167,139,250,0.22)',  label:'Corporate Buyer'},
-  public:    {color:T.emeraldL, bg:'rgba(16,185,129,0.1)',   border:'rgba(16,185,129,0.22)',   label:'Public Transparency'},
-  verifier:  {color:T.tealL,    bg:'rgba(45,212,191,0.1)',   border:'rgba(45,212,191,0.22)',   label:'Accredited Verifier'},
-  approver:  {color:T.tealL,    bg:'rgba(45,212,191,0.1)',   border:'rgba(45,212,191,0.22)',   label:'Scientific Approver'},
+  admin:     { color: T.goldL,    bg: 'rgba(245,158,11,0.1)',   border: 'rgba(251,191,36,0.25)',   label: 'Platform Operator',  badge: 'Admin' },
+  approver:  { color: T.skyL,     bg: 'rgba(56,189,248,0.1)',   border: 'rgba(56,189,248,0.25)',   label: 'Project Reviewer',   badge: 'Approver' },
+  verifier:  { color: T.tealL,    bg: 'rgba(45,212,191,0.1)',   border: 'rgba(45,212,191,0.25)',   label: 'Accredited Verifier', badge: 'Verifier' },
+  ngo:       { color: T.emeraldL, bg: 'rgba(16,185,129,0.1)',   border: 'rgba(16,185,129,0.25)',   label: 'Project Developer',  badge: 'NGO' },
+  corporate: { color: T.violetLL, bg: 'rgba(167,139,250,0.1)',  border: 'rgba(167,139,250,0.25)',  label: 'Corporate Buyer',    badge: 'Corporate' },
+  public:    { color: T.tealL,    bg: 'rgba(45,212,191,0.1)',   border: 'rgba(45,212,191,0.25)',   label: 'Public Transparency', badge: 'Public' },
 };
 
 export function Sidebar() {
@@ -98,8 +117,11 @@ export function Sidebar() {
       {/* Role pill */}
       <div style={{padding:'13px 14px',borderBottom:`1px solid var(--border)`}}>
         <div style={{background:rc.bg,border:`1px solid ${rc.border}`,borderRadius:10,padding:'9px 13px'}}>
-          <div style={{fontSize:9,color:`${rc.color}99`,fontWeight:800,letterSpacing:'1px',textTransform:'uppercase'}}>{rc.label}</div>
-          <div style={{fontSize:13,color:T.t1,fontWeight:600,marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{user.org}</div>
+            <div style={{fontSize:9,color:rc.color,fontWeight:800,letterSpacing:'1px',textTransform:'uppercase',display:'flex',alignItems:'center',gap:5}}>
+              <span style={{width:5,height:5,borderRadius:'50%',background:rc.color}}/>
+              <span>{rc.badge} · {rc.label}</span>
+            </div>
+          <div style={{fontSize:13,color:T.t1,fontWeight:600,marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{user.org || rc.label}</div>
         </div>
       </div>
 
@@ -138,8 +160,9 @@ export function Sidebar() {
           <div style={{flex:1,minWidth:0}}>
             <div style={{fontSize:12,fontWeight:600,color:T.t1,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{user.name}</div>
             <div style={{fontSize:10,color:T.t3,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{user.email}</div>
-            {user.role === 'admin' && (
-              <div style={{
+            <div
+              data-testid="sidebar-role-tag"
+              style={{
                 marginTop: 4,
                 display: 'inline-block',
                 fontSize: 9,
@@ -148,13 +171,13 @@ export function Sidebar() {
                 letterSpacing: '0.6px',
                 padding: '2px 6px',
                 borderRadius: 4,
-                background: user.admin_role === 'approver' ? 'rgba(56,189,248,0.15)' : 'rgba(217,119,6,0.15)',
-                color: user.admin_role === 'approver' ? T.skyL : T.goldL,
-                border: `1px solid ${user.admin_role === 'approver' ? 'rgba(56,189,248,0.3)' : 'rgba(217,119,6,0.3)'}`
-              }}>
-                {user.admin_role === 'approver' ? 'Project Approver' : 'Super Admin'}
-              </div>
-            )}
+                background: rc.bg,
+                color: rc.color,
+                border: `1px solid ${rc.border}`
+              }}
+            >
+              {rc.badge}
+            </div>
           </div>
         </div>
       </div>
@@ -191,27 +214,26 @@ export function Navbar() {
         </div>
       </div>
 
-      {/* Read-Only Admin Role Badge (R2-6) */}
-      {user.role === 'admin' && (
-        <div
-          data-testid="admin-role-badge"
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            background: user.admin_role === 'approver' ? 'rgba(56,189,248,0.1)' : 'rgba(217,119,6,0.1)',
-            border: `1px solid ${user.admin_role === 'approver' ? 'rgba(56,189,248,0.3)' : 'rgba(217,119,6,0.3)'}`,
-            borderRadius: 20,
-            padding: '3px 10px',
-            gap: 6,
-            fontSize: 11,
-            fontWeight: 700,
-            color: user.admin_role === 'approver' ? T.skyL : T.goldL,
-          }}
-        >
-          <span>{user.admin_role === 'approver' ? '🔍' : '🛡️'}</span>
-          <span>{user.admin_role === 'approver' ? 'Project Approver' : 'Super Admin'}</span>
-        </div>
-      )}
+      {/* Role Badge in Header (color matches tile, strictly no role switcher) */}
+      <div
+        data-testid="role-badge"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          background: rc.bg,
+          border: `1px solid ${rc.border}`,
+          borderRadius: 20,
+          padding: '4px 12px',
+          gap: 6,
+          fontSize: 11.5,
+          fontWeight: 700,
+          color: rc.color,
+          letterSpacing: '0.4px',
+        }}
+      >
+        <span style={{ width: 6, height: 6, borderRadius: '50%', background: rc.color }} />
+        <span>{rc.badge}</span>
+      </div>
 
       {/* Theme Toggle (Dark / Light) */}
       {iconBtn(

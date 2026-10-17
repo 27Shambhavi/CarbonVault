@@ -64,7 +64,7 @@ def check_admin_permission(
     authorization: Optional[str] = None
 ):
     """
-    Enforces admin RBAC strictly from server-verified database records or JWT claims.
+    Enforces admin & approver RBAC strictly from server-verified database records or JWT claims.
     A tampered client header or localStorage edit cannot elevate privileges.
     """
     # 1. Check verified JWT if present
@@ -74,11 +74,16 @@ def check_admin_permission(
         claims = decode_access_token(token)
         token_role = claims.get("role")
         token_admin_role = claims.get("admin_role")
-        if token_role != "admin":
-            raise HTTPException(status_code=403, detail="Forbidden: Admin access required.")
-        if required_role == "super_admin" and token_admin_role == "approver":
+        if token_role == "admin":
+            role = token_admin_role or "super_admin"
+        elif token_role == "approver":
+            role = "approver"
+        else:
+            raise HTTPException(status_code=403, detail="Forbidden: Admin or Approver access required.")
+
+        if required_role in ("super_admin", "admin") and role == "approver":
             raise HTTPException(status_code=403, detail="Super Admin privilege required. Action forbidden for Project Approver.")
-        return token_admin_role or "super_admin"
+        return role
 
     # 2. Check verified DB user by email
     if x_admin_email:
@@ -86,11 +91,11 @@ def check_admin_permission(
         if db:
             u = db.query(User).filter(User.email.ilike(email_clean)).first()
             if u:
-                if u.role != "admin":
-                    raise HTTPException(status_code=403, detail="Forbidden: Admin access required.")
-                role = u.admin_role or "super_admin"
+                if u.role not in ("admin", "approver"):
+                    raise HTTPException(status_code=403, detail="Forbidden: Admin or Approver access required.")
+                role = "approver" if u.role == "approver" or u.admin_role == "approver" else "super_admin"
             else:
-                raise HTTPException(status_code=403, detail="Forbidden: Admin account not found.")
+                raise HTTPException(status_code=403, detail="Forbidden: Account not found.")
         elif "approver" in email_clean:
             role = "approver"
         else:
@@ -104,7 +109,7 @@ def check_admin_permission(
             detail="Forbidden: Authentication or admin credentials required."
         )
 
-    if required_role == "super_admin" and role == "approver":
+    if required_role in ("super_admin", "admin") and role == "approver":
         raise HTTPException(
             status_code=403,
             detail="Super Admin privilege required. Action forbidden for Project Approver."
@@ -2025,6 +2030,98 @@ class ProjectStatusUpdate(BaseModel):
     status: Optional[str] = None
     comment: Optional[str] = None
     changed_by: Optional[str] = "Alex Mercer (Admin)"
+    override: Optional[bool] = False
+    is_override: Optional[bool] = False
+    override_reason: Optional[str] = None
+    override_confirmed: Optional[bool] = False
+
+
+class ReassignRequest(BaseModel):
+    assignee_role: str = "approver"  # 'approver' | 'verifier'
+    assignee_email: str
+    reason: Optional[str] = None
+
+
+class SuspendRequest(BaseModel):
+    reason: str
+
+
+@router.post("/{project_id}/reassign")
+@router.post("/projects/{project_id}/reassign")
+def reassign_project(
+    project_id: str,
+    req: ReassignRequest,
+    authorization: Optional[str] = Header(None),
+    x_admin_role: Optional[str] = Header(None),
+    x_admin_email: Optional[str] = Header(None)
+):
+    """Admin-only: reassign project to another approver or verifier."""
+    db = SessionLocal()
+    try:
+        check_admin_permission(x_admin_role, x_admin_email, required_role="super_admin", db=db, authorization=authorization)
+        project = db.query(Project).filter(
+            (Project.project_id == project_id) | (Project.id == project_id if str(project_id).isdigit() else False)
+        ).first()
+        if not project:
+            raise HTTPException(status_code=404, detail="Project not found")
+
+        log_audit_event(
+            action="project_reassigned",
+            name=project.project_id,
+            detail=f"Project reassigned to {req.assignee_role} ({req.assignee_email}). Reason: {req.reason or 'Administrative reassignment'}",
+            user=x_admin_email or "Alex Mercer (super_admin)",
+            db=db
+        )
+        return {
+            "status": "ok",
+            "message": f"Project {project.project_id} successfully reassigned to {req.assignee_email}.",
+            "project_id": project.project_id,
+            "assigned_to": req.assignee_email,
+            "assignee_role": req.assignee_role
+        }
+    finally:
+        db.close()
+
+
+@router.post("/{project_id}/suspend")
+@router.post("/projects/{project_id}/suspend")
+def suspend_project(
+    project_id: str,
+    req: SuspendRequest,
+    authorization: Optional[str] = Header(None),
+    x_admin_role: Optional[str] = Header(None),
+    x_admin_email: Optional[str] = Header(None)
+):
+    """Admin-only: suspend a live project."""
+    db = SessionLocal()
+    try:
+        check_admin_permission(x_admin_role, x_admin_email, required_role="super_admin", db=db, authorization=authorization)
+        project = db.query(Project).filter(
+            (Project.project_id == project_id) | (Project.id == project_id if str(project_id).isdigit() else False)
+        ).first()
+        if not project:
+            raise HTTPException(status_code=404, detail="Project not found")
+
+        old_status = project.status
+        project.status = "suspended"
+        db.commit()
+
+        log_audit_event(
+            action="project_suspended",
+            name=project.project_id,
+            detail=f"Live project suspended by platform admin. Reason: {req.reason}",
+            user=x_admin_email or "Alex Mercer (super_admin)",
+            db=db
+        )
+        return {
+            "status": "ok",
+            "message": f"Project {project.project_id} has been suspended.",
+            "project_id": project.project_id,
+            "status": "suspended",
+            "reason": req.reason
+        }
+    finally:
+        db.close()
 
 
 @router.patch("/{project_id}/status")
@@ -2041,24 +2138,78 @@ def update_project_status(
 ):
     db = SessionLocal()
     try:
-        check_admin_permission(x_admin_role, x_admin_email, required_role="approver", db=db, authorization=authorization)
+        caller_role = check_admin_permission(x_admin_role, x_admin_email, required_role="approver", db=db, authorization=authorization)
         project = db.query(Project).filter(
             (Project.project_id == project_id) | (Project.id == project_id if str(project_id).isdigit() else False)
         ).first()
         if not project:
             raise HTTPException(status_code=404, detail="Project not found")
 
+        # Determine caller email
+        caller_email = x_admin_email or ""
+        if authorization and "bearer " in authorization.lower():
+            try:
+                from routers.auth_router import decode_access_token
+                claims = decode_access_token(authorization.split(" ")[-1])
+                caller_email = claims.get("email") or ""
+            except Exception:
+                pass
+
         target_status = (payload.status if payload and payload.status else None) or status
         target_comment = (payload.comment if payload and payload.comment else None) or comment
-        target_user = (payload.changed_by if payload and payload.changed_by else None) or changed_by or "Alex Mercer (Admin)"
+        target_user = (payload.changed_by if payload and payload.changed_by else None) or changed_by or ("Alex Mercer (Admin)" if caller_role == "super_admin" else "Dr. Sarah Jenkins (Approver)")
 
         if not target_status:
             raise HTTPException(status_code=400, detail="Status is required")
 
         old_status = project.status or "draft"
 
-        # Phase 6 Guard: Independent Verifier sign-off required before admin approval
-        if target_status == "approved":
+        # Suspend check: only super_admin
+        if target_status == "suspended" and caller_role != "super_admin":
+            raise HTTPException(
+                status_code=403,
+                detail="Forbidden: Only platform administrators can suspend live projects."
+            )
+
+        # Approver checks (Four-eyes authorization must precede business data validation)
+        if caller_role == "approver":
+            # Four-eyes 1: cannot approve project belonging to affiliated organization
+            if project.ngo_id and caller_email:
+                ngo_rec = db.query(NGO).filter(NGO.id == project.ngo_id).first()
+                if ngo_rec and (
+                    ngo_rec.email.lower() == caller_email.lower() or
+                    (ngo_rec.name and caller_email.split('@')[0] in ngo_rec.name.lower())
+                ):
+                    raise HTTPException(
+                        status_code=403,
+                        detail="Four-eyes violation: Approver cannot approve a project belonging to an affiliated organization."
+                    )
+
+            # Four-eyes 2: cannot be the verifier of the same project
+            if caller_email:
+                verifier_rec = db.query(FieldVerification).filter(FieldVerification.project_id == project.project_id).first()
+                if verifier_rec and (
+                    verifier_rec.verifier_email == caller_email or
+                    verifier_rec.verifier_name == target_user
+                ):
+                    raise HTTPException(
+                        status_code=403,
+                        detail="Four-eyes violation: Approver cannot also be the verifier for the same project."
+                    )
+
+            # Rejection requires reason
+            if target_status == "rejected" and (not target_comment or len(str(target_comment).strip()) < 5):
+                raise HTTPException(
+                    status_code=400,
+                    detail="Rejection blocked: A mandatory reason (minimum 5 characters) is required to reject a project submission."
+                )
+
+        # Independent Verifier sign-off required before project approval (unless explicit override)
+        is_override = bool(payload and (payload.override or payload.is_override))
+        override_reason = (payload.override_reason if payload else None) or ""
+        override_confirmed = bool(payload and payload.override_confirmed)
+
+        if target_status == "approved" and not (is_override and len(override_reason) >= 10):
             has_verified_signoff = db.query(FieldVerification).filter(
                 FieldVerification.project_id == project.project_id,
                 FieldVerification.decision == "verified"
@@ -2069,7 +2220,20 @@ def update_project_status(
                     detail="Approval blocked: Field verification sign-off with 'verified' decision from an independent verifier is required before project approval."
                 )
 
-        # Phase 6 Guard: All 4 project documents required to leave draft
+        # Admin override validation
+        if caller_role == "super_admin" and target_status in ("approved", "rejected"):
+            effective_reason = override_reason or target_comment or ""
+            is_silent = not effective_reason or len(effective_reason.strip()) < 10 or effective_reason.lower() == "silent admin approval"
+            if is_silent:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Admin override required: An administrator cannot decide a project without override=True, override_confirmed=True, and a mandatory override_reason (minimum 10 characters)."
+                )
+            is_override = True
+            if not override_reason:
+                override_reason = effective_reason
+
+        # All 4 project documents required to leave draft
         if target_status in ["submitted", "under_review"] and old_status == "draft":
             uploaded_docs = db.query(ProjectDocument).filter(
                 ProjectDocument.project_id == project.project_id
@@ -2092,8 +2256,8 @@ def update_project_status(
                 project_id=project.project_id,
                 from_status=old_status,
                 to_status=target_status,
-                changed_by=target_user,
-                comment=target_comment or f"Project transitioned from {old_status} to {target_status}",
+                changed_by=f"{target_user} ({caller_role})",
+                comment=f"[OVERRIDE: {override_reason}] {target_comment or ''}".strip() if is_override else (target_comment or f"Project transitioned from {old_status} to {target_status}"),
                 timestamp=datetime.utcnow()
             )
             db.add(hist_entry)
@@ -2126,12 +2290,18 @@ def update_project_status(
         credits_entry = db.query(ProjectCredits).filter(ProjectCredits.project_id == project.project_id).first()
         funding_entry = db.query(FundingDetails).filter(FundingDetails.project_id == project.project_id).first()
 
-        # Log to immutable audit trail
+        # Log to immutable audit trail (storing actor and role)
+        audit_action = "admin_project_override" if is_override else target_status
+        audit_detail = (
+            f"[ADMIN OVERRIDE: {override_reason}] Project '{project.name}' status changed from '{old_status}' to '{target_status}' by {target_user} (Role: {caller_role})."
+            if is_override else
+            f"Project '{project.name}' status changed from '{old_status}' to '{target_status}' by {target_user} (Role: {caller_role}). {target_comment or ''}".strip()
+        )
         log_audit_event(
-            action=target_status,
+            action=audit_action,
             name=project.project_id,
-            detail=f"Project '{project.name}' status changed from '{old_status}' to '{target_status}' by {target_user}. {target_comment or ''}".strip(),
-            user=target_user,
+            detail=audit_detail,
+            user=f"{target_user} ({caller_role})",
             db=db
         )
 

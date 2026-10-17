@@ -171,6 +171,11 @@ export async function fetchCurrentUserProfile() {
   return request(`${API_BASE}/auth/me`, { timeout: 8000 }, 0);
 }
 
+/** Fetch demo accounts for login screen quick-fill tiles (404 in production) */
+export async function fetchDemoAccounts() {
+  return request(`${API_BASE}/auth/demo-accounts`, { timeout: 8000 }, 0);
+}
+
 // ══════════════════════════════════════════════════════════════════════════════
 // PROJECT APIs
 // ══════════════════════════════════════════════════════════════════════════════
@@ -248,15 +253,41 @@ export async function fetchAllProjects() {
   return res;
 }
 
-/** Update project status (admin multi-stage lifecycle with comment) */
-export async function updateProjectStatus(projectId, status, comment = null, changedBy = null) {
+/** Update project status (admin / approver lifecycle with comment and optional override) */
+export async function updateProjectStatus(projectId, status, comment = null, changedBy = null, overrideReason = null, overrideConfirmed = false) {
   return request(`${API_BASE}/projects/${projectId}/status`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       status,
       comment,
-      changed_by: changedBy || 'Alex Mercer (Admin)',
+      changed_by: changedBy || 'Reviewer',
+      override_reason: overrideReason,
+      override_confirmed: Boolean(overrideConfirmed),
+    }),
+  });
+}
+
+/** Reassign project approver or verifier (Admin only) */
+export async function reassignProject(projectId, { newApproverId = null, newVerifierId = null, comment = null } = {}) {
+  return request(`${API_BASE}/projects/${projectId}/reassign`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      new_approver_id: newApproverId,
+      new_verifier_id: newVerifierId,
+      comment,
+    }),
+  });
+}
+
+/** Suspend project from public registry (Admin only) */
+export async function suspendProject(projectId, reason) {
+  return request(`${API_BASE}/projects/${projectId}/suspend`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      reason,
     }),
   });
 }

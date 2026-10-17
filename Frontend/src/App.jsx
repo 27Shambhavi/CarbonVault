@@ -39,17 +39,47 @@ function PageRouter() {
   if (page === 'settings')       return <SettingsPage />;
   if (page === 'profile')        return <ProfilePage />;
   if (page === 'project_detail') return <ProjectDetail />;
-  if (page === 'new_project')    return <ProjectWizard />;
-  if (page === 'ml_models')      return <AdminMLModels />;
+  if (page === 'new_project' && (user.role === 'ngo' || user.role === 'admin')) return <ProjectWizard />;
 
   if (user.role === 'admin') {
-    if (page === 'dashboard') return <AdminDashboard />;
-    if (page === 'users')     return <AdminUsers />;
-    if (page === 'approvals') return <AdminApprovals />;
-    if (page === 'pricing')   return <AdminPricing />;
-    if (page === 'analytics') return <AdminAnalytics />;
-    if (page === 'ml_models') return <AdminMLModels />;
+    if (page === 'dashboard')        return <AdminDashboard />;
+    if (page === 'approvals')        return <AdminApprovals />;
+    if (page === 'organisations')    return <AdminUsers initialTab="organizations" />;
+    if (page === 'users')            return <AdminUsers />;
+    if (page === 'pricing')          return <AdminPricing />;
+    if (page === 'payments_payouts' || page === 'analytics') return <AdminAnalytics />;
+    if (page === 'ml_models')        return <AdminMLModels />;
+    if (page === 'audit')            return <PublicAudit />;
     return <AdminDashboard />;
+  }
+
+  if (user.role === 'approver') {
+    // Strictly forbid admin features (pricing, users, payouts, orgs, ml_models)
+    if (['pricing', 'users', 'organisations', 'payments_payouts', 'analytics', 'ml_models'].includes(page)) {
+      return (
+        <div style={{ padding: 48, textAlign: 'center' }}>
+          <div style={{ background: 'rgba(244,63,94,0.08)', border: '1px solid rgba(244,63,94,0.3)', borderRadius: 14, padding: 36, maxWidth: 520, margin: '0 auto' }}>
+            <div style={{ fontSize: 22, fontWeight: 800, color: T.roseL, marginBottom: 8, fontFamily: 'Fraunces, serif' }}>
+              403 — Administrative Function Forbidden
+            </div>
+            <div style={{ fontSize: 13, color: T.t2, lineHeight: 1.6, marginBottom: 20 }}>
+              Separation of Duties Policy: Approver roles review ecological fidelity and decide project admission, but cannot access administrative operations, pricing, user roles, or financial payouts.
+            </div>
+            <button
+              onClick={() => window.location.href = '/'}
+              style={{ background: `linear-gradient(135deg, ${T.teal}, ${T.tealD})`, color: '#021a17', border: 'none', borderRadius: 8, padding: '10px 20px', fontWeight: 800, cursor: 'pointer' }}
+            >
+              Return to Decision Desk
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return <ApproverDashboard />;
+  }
+
+  if (user.role === 'verifier') {
+    return <VerifierDashboard />;
   }
 
   if (user.role === 'ngo') {
@@ -78,14 +108,6 @@ function PageRouter() {
     if (page === 'climate')      return <PublicClimate />;
     if (page === 'projects')     return <CorporateMarketplace />;
     return <PublicDashboard />;
-  }
-
-  if (user.role === 'approver') {
-    return <ApproverDashboard />;
-  }
-
-  if (user.role === 'verifier') {
-    return <VerifierDashboard />;
   }
 
   return (

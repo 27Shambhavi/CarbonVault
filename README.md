@@ -80,14 +80,16 @@ Think of it as an **online shop for carbon credits, with a lie detector and a pu
 
 ---
 
-## 3. 👥 Who uses it
+## 3. 👥 Who uses it (Separation of Duties & RBAC)
 
-| Role | Who they are | What they do on the platform |
-|------|--------------|------------------------------|
-| 🌳 **NGO** | Organisations that plant trees | Register projects, upload evidence, track approval, accept buyer offers, get paid |
-| 🛡️ **Admin** | The platform team | Review projects, read fraud and quality scores, approve or reject, set prices, manage users |
-| 🏢 **Corporate** | Companies that want to offset emissions | Browse the marketplace, buy credits, hold them in a wallet, download certificates and ESG reports |
-| 🌐 **Public** | Anyone (no login) | Read the leaderboard, impact numbers, certificates and audit trail |
+| Role | Who they are | What they do on the platform | Server-Enforced Invariants |
+|------|--------------|------------------------------|----------------------------|
+| 🛡️ **Admin (Platform Operator)** | Platform engineering & operations HQ | Platform health (`/ready`), KYC review, user management & role invitations, pricing & buffer thresholds, payouts & financial reconciliation, ML retraining, and platform-wide audit | Oversees all projects; cannot silently approve projects (requires audited override reason & second confirmation); manages take-down suspension & reassignments |
+| 🔍 **Approver (Project Reviewer)** | Accredited ecological & scientific reviewers | Operates the **Decision Desk**: review queue sorted by risk & age with 72h SLA timer, inspects 8-tab dossier, 5-check screening traffic lights, requests data, rejects with mandatory reason, and approves projects | **Primary decision-maker** for project admission; four-eyes rule strictly enforced (cannot approve affiliated NGO or verify own project); zero access to pricing, payouts, users, or ML configuration |
+| 📋 **Verifier** | Independent field auditors | Field verification queue: inspects GIS polygons, uploads physical field ground-truth photos & Laplacian sharpness analysis, signs off on verification | Signs off field verification only; cannot approve project into registry |
+| 🌳 **NGO** | Forest developers & planters | Registers projects, uploads MRV & photographic evidence, submits quarterly progress updates, responds to reviewer clarifications, receives funding disbursements | Drafts and submits own projects; cannot review or approve projects |
+| 🏢 **Corporate** | Sustainability & ESG buyers | Marketplace: browses verified projects, purchases credits via Razorpay checkout, manages digital wallet, downloads official retirement certificates and ESG audit reports | Purchases and retires credits; cannot access developer or review controls |
+| 🌐 **Public** | General public & independent auditors | Transparency registry: verifies retirement certificates, inspects live geospatial project map, views impact leaderboard and immutable public audit trail | Read-only public view; never signs in (no credentials required) |
 
 ---
 

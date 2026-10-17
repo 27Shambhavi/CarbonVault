@@ -4,7 +4,7 @@ import {
   fetchProject, fetchProjectNdvi, updateProjectStatus,
   createOrder, buyCredits, loadRazorpayScript,
   submitProgressUpdate, fetchLiveFxRate, fetchPublicConfig,
-  fetchReady, getImageUrl
+  fetchReady, getImageUrl, reassignProject, suspendProject, downloadPlatformPDF
 } from '../../services/api.js';
 import {
   Card, SectionHeader, Table, Badge, MRVScore, KPICard, Modal, Btn, T, gc
@@ -18,7 +18,8 @@ import {
   TreePine, Layers, ShoppingCart, MapPin, Upload, CheckCircle,
   Clock, TrendingUp, AlertCircle, X, Leaf, DollarSign, Camera,
   ShieldCheck, Eye, Calendar, FileText, Download, Award, ArrowLeft,
-  ExternalLink, CheckCircle2, XCircle, HelpCircle, RefreshCw, Bookmark
+  ExternalLink, CheckCircle2, XCircle, HelpCircle, RefreshCw, Bookmark,
+  Building2, UserCheck, Send, AlertOctagon, MessageSquare, CheckSquare
 } from 'lucide-react';
 import { ProjectDocumentGate } from './ProjectDocumentGate.jsx';
 import CertificateModal from '../CertificateModal.jsx';
@@ -65,6 +66,23 @@ export default function ProjectDetail({ projectId: propProjectId }) {
 
   // Lightbox
   const [lightboxImg, setLightboxImg] = useState(null);
+
+  // Admin & Approver action bar modal states
+  const [overrideModal, setOverrideModal] = useState(false);
+  const [overrideReason, setOverrideReason] = useState('');
+  const [overrideConfirmed, setOverrideConfirmed] = useState(false);
+  const [overrideTargetStatus, setOverrideTargetStatus] = useState('approved');
+
+  const [suspendModal, setSuspendModal] = useState(false);
+  const [suspendReason, setSuspendReason] = useState('');
+
+  const [reassignModal, setReassignModal] = useState(false);
+  const [reassignApproverId, setReassignApproverId] = useState('');
+  const [reassignVerifierId, setReassignVerifierId] = useState('');
+  const [reassignNotes, setReassignNotes] = useState('');
+
+  const [commentModal, setCommentModal] = useState(false);
+  const [commentText, setCommentText] = useState('');
 
   const loadProjectData = useCallback(async () => {
     if (!projectId) {
@@ -116,7 +134,7 @@ export default function ProjectDetail({ projectId: propProjectId }) {
     fetchReady().then((r) => { if (r.data?.razorpay) setRazorpayHealth(r.data.razorpay); }).catch(() => {});
   }, []);
 
-  // Approver / Admin actions
+  // Approver / Review actions
   const handleReviewAction = async (decision) => {
     setActionSubmitting(true);
     try {
@@ -133,6 +151,133 @@ export default function ProjectDetail({ projectId: propProjectId }) {
         triggerRefresh();
       } else {
         addToast({ type: 'error', title: 'Action Failed', message: res.error });
+      }
+    } catch (err) {
+      addToast({ type: 'error', title: 'Error', message: err.message });
+    } finally {
+      setActionSubmitting(false);
+    }
+  };
+
+  // Admin Flagged Override Workflow
+  const handleAdminOverride = async () => {
+    if (!overrideReason || overrideReason.trim().length < 10) {
+      addToast({ type: 'warning', title: 'Reason Required', message: 'Administrative overrides require an audited reason of at least 10 characters.' });
+      return;
+    }
+    if (!overrideConfirmed) {
+      addToast({ type: 'warning', title: 'Confirmation Required', message: 'Please confirm that you understand this decision will be flagged in the platform audit trail.' });
+      return;
+    }
+
+    setActionSubmitting(true);
+    try {
+      const res = await updateProjectStatus(
+        projectId,
+        overrideTargetStatus,
+        `Admin override: ${overrideReason}`,
+        user?.name || 'Alex Mercer (Admin)',
+        overrideReason,
+        true
+      );
+      if (!res.error) {
+        addToast({
+          type: 'success',
+          title: 'Override Recorded',
+          message: `Project ${projectId} status set to ${overrideTargetStatus} via flagged admin override.`
+        });
+        setOverrideModal(false);
+        setOverrideReason('');
+        setOverrideConfirmed(false);
+        loadProjectData();
+        triggerRefresh();
+      } else {
+        addToast({ type: 'error', title: 'Override Failed', message: res.error });
+      }
+    } catch (err) {
+      addToast({ type: 'error', title: 'Error', message: err.message });
+    } finally {
+      setActionSubmitting(false);
+    }
+  };
+
+  // Admin Suspend Project
+  const handleSuspendProject = async () => {
+    if (!suspendReason || suspendReason.trim().length < 5) {
+      addToast({ type: 'warning', title: 'Reason Required', message: 'Please specify reason for suspension (min 5 chars).' });
+      return;
+    }
+    setActionSubmitting(true);
+    try {
+      const res = await suspendProject(projectId, suspendReason);
+      if (!res.error) {
+        addToast({
+          type: 'warning',
+          title: 'Project Suspended',
+          message: `${project.name} has been suspended from the public registry.`
+        });
+        setSuspendModal(false);
+        setSuspendReason('');
+        loadProjectData();
+        triggerRefresh();
+      } else {
+        addToast({ type: 'error', title: 'Suspension Failed', message: res.error });
+      }
+    } catch (err) {
+      addToast({ type: 'error', title: 'Error', message: err.message });
+    } finally {
+      setActionSubmitting(false);
+    }
+  };
+
+  // Admin Reassign Project
+  const handleReassignProject = async () => {
+    setActionSubmitting(true);
+    try {
+      const res = await reassignProject(projectId, {
+        newApproverId: reassignApproverId ? parseInt(reassignApproverId, 10) : null,
+        newVerifierId: reassignVerifierId ? parseInt(reassignVerifierId, 10) : null,
+        comment: reassignNotes || 'Reassigned via Admin Operations Console',
+      });
+      if (!res.error) {
+        addToast({
+          type: 'success',
+          title: 'Project Reassigned',
+          message: `Review assignments updated for ${project.name}.`
+        });
+        setReassignModal(false);
+        setReassignNotes('');
+        loadProjectData();
+        triggerRefresh();
+      } else {
+        addToast({ type: 'error', title: 'Reassignment Failed', message: res.error });
+      }
+    } catch (err) {
+      addToast({ type: 'error', title: 'Error', message: err.message });
+    } finally {
+      setActionSubmitting(false);
+    }
+  };
+
+  // Add Audited Comment
+  const handleAddComment = async () => {
+    if (!commentText.trim()) return;
+    setActionSubmitting(true);
+    try {
+      const res = await updateProjectStatus(
+        projectId,
+        project.status,
+        commentText.trim(),
+        user?.name || user?.email
+      );
+      if (!res.error) {
+        addToast({ type: 'success', title: 'Comment Added', message: 'Comment appended to immutable audit log.' });
+        setCommentModal(false);
+        setCommentText('');
+        loadProjectData();
+        triggerRefresh();
+      } else {
+        addToast({ type: 'error', title: 'Comment Failed', message: res.error });
       }
     } catch (err) {
       addToast({ type: 'error', title: 'Error', message: err.message });
@@ -335,31 +480,37 @@ export default function ProjectDetail({ projectId: propProjectId }) {
             </div>
           </div>
 
-          {/* Role Action Bar */}
+          {/* Role-Specific Action Bar (Addendum Section 2) */}
           <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-            {/* NGO Actions */}
-            {role === 'ngo' && (
-              <>
-                <Btn variant="secondary" onClick={() => setActionModal('upload_evidence')}>
-                  <Camera size={14} /> Upload New Evidence
-                </Btn>
-                {project.status !== 'approved' && (
-                  <Btn variant="secondary" onClick={() => setActionModal('request_info')}>
-                    <RefreshCw size={14} /> Request Re-Review
-                  </Btn>
-                )}
-              </>
-            )}
-
-            {/* Approver & Admin Actions */}
-            {(role === 'admin' || role === 'approver') && (
+            {/* 1. APPROVER ACTIONS: Request data · Approve · Reject · Add comment */}
+            {role === 'approver' && (
               <>
                 <Btn
-                  style={{ background: 'rgba(16,185,129,0.15)', border: `1px solid ${T.emeraldL}`, color: T.emeraldL }}
-                  onClick={() => setActionModal('approve')}
+                  variant="secondary"
+                  onClick={() => setActionModal('request_data')}
+                  style={{ borderColor: 'rgba(56,189,248,0.4)', color: T.skyL }}
                 >
-                  <CheckCircle2 size={14} /> Approve Project
+                  <HelpCircle size={14} /> Request data
                 </Btn>
+                {(() => {
+                  const hasSignoff = Boolean(project.verifier_signed_off || project.verifier_id || (project.mrvScore && project.mrvScore > 80));
+                  return (
+                    <span title={!hasSignoff ? "Approval disabled: Awaiting verifier field sign-off and complete legal documents" : "Approve and admit into public registry"}>
+                      <Btn
+                        disabled={!hasSignoff}
+                        style={{
+                          background: hasSignoff ? 'rgba(16,185,129,0.15)' : 'rgba(255,255,255,0.03)',
+                          border: `1px solid ${hasSignoff ? T.emeraldL : T.border}`,
+                          color: hasSignoff ? T.emeraldL : T.t4,
+                          cursor: hasSignoff ? 'pointer' : 'not-allowed'
+                        }}
+                        onClick={() => handleReviewAction('approved')}
+                      >
+                        <CheckCircle2 size={14} /> Approve
+                      </Btn>
+                    </span>
+                  );
+                })()}
                 <Btn
                   variant="secondary"
                   style={{ borderColor: 'rgba(244,63,94,0.35)', color: T.roseL }}
@@ -367,13 +518,78 @@ export default function ProjectDetail({ projectId: propProjectId }) {
                 >
                   <XCircle size={14} /> Reject
                 </Btn>
-                <Btn variant="secondary" onClick={() => setActionModal('request_info')}>
-                  <HelpCircle size={14} /> Request Info
+                <Btn variant="secondary" onClick={() => setCommentModal(true)}>
+                  <MessageSquare size={14} /> Add comment
                 </Btn>
               </>
             )}
 
-            {/* Corporate Actions */}
+            {/* 2. ADMIN ACTIONS: Reassign · Suspend · Override decision · Open organisation · Add comment */}
+            {role === 'admin' && (
+              <>
+                <Btn variant="secondary" onClick={() => setReassignModal(true)}>
+                  <UserCheck size={14} /> Reassign
+                </Btn>
+                <Btn
+                  variant="secondary"
+                  style={{ borderColor: 'rgba(244,63,94,0.4)', color: T.roseL }}
+                  onClick={() => setSuspendModal(true)}
+                >
+                  <AlertOctagon size={14} /> Suspend
+                </Btn>
+                <Btn
+                  style={{ background: 'rgba(245,158,11,0.15)', border: `1px solid ${T.goldL}`, color: T.goldL }}
+                  onClick={() => setOverrideModal(true)}
+                >
+                  <ShieldCheck size={14} /> Override decision (reason + confirm)
+                </Btn>
+                <Btn variant="secondary" onClick={() => setPage('organisations')}>
+                  <Building2 size={14} /> Open organisation
+                </Btn>
+                <Btn variant="secondary" onClick={() => setCommentModal(true)}>
+                  <MessageSquare size={14} /> Add comment
+                </Btn>
+              </>
+            )}
+
+            {/* 3. VERIFIER ACTIONS: Sign off · Request re-upload */}
+            {role === 'verifier' && (
+              <>
+                <Btn
+                  style={{ background: 'rgba(16,185,129,0.15)', border: `1px solid ${T.emeraldL}`, color: T.emeraldL }}
+                  onClick={() => handleReviewAction('verified')}
+                >
+                  <CheckCircle2 size={14} /> Sign off
+                </Btn>
+                <Btn variant="secondary" onClick={() => setActionModal('request_reupload')}>
+                  <Camera size={14} /> Request re-upload
+                </Btn>
+              </>
+            )}
+
+            {/* 4. NGO ACTIONS: Edit draft · Submit · Upload · Respond */}
+            {role === 'ngo' && (
+              <>
+                {project.status === 'draft' && (
+                  <Btn variant="secondary" onClick={() => setPage('new_project')}>
+                    <FileText size={14} /> Edit draft
+                  </Btn>
+                )}
+                {project.status === 'draft' && (
+                  <Btn style={{ background: `linear-gradient(135deg, ${T.teal}, ${T.tealD})`, color: '#021a17' }} onClick={() => handleReviewAction('pending')}>
+                    <Send size={14} /> Submit
+                  </Btn>
+                )}
+                <Btn variant="secondary" onClick={() => setActionModal('upload_evidence')}>
+                  <Upload size={14} /> Upload
+                </Btn>
+                <Btn variant="secondary" onClick={() => setActionModal('respond')}>
+                  <MessageSquare size={14} /> Respond
+                </Btn>
+              </>
+            )}
+
+            {/* 5. CORPORATE ACTIONS: Buy · Compare · Fact-sheet PDF */}
             {role === 'corporate' && (
               <>
                 <Btn
@@ -381,19 +597,22 @@ export default function ProjectDetail({ projectId: propProjectId }) {
                   onClick={() => setBuyModal(true)}
                   disabled={project.status !== 'approved' || tradableCredits <= 0}
                 >
-                  <ShoppingCart size={14} /> Buy Credits (${price}/t)
+                  <ShoppingCart size={14} /> Buy
                 </Btn>
-                <Btn variant="secondary" onClick={() => addToast({ type: 'success', title: 'Watchlist', message: `Added ${project.name} to portfolio watchlist.` })}>
-                  <Bookmark size={14} /> Watchlist
+                <Btn variant="secondary" onClick={() => addToast({ type: 'info', title: 'Compare Projects', message: `Added ${project.name} to portfolio comparison view.` })}>
+                  <Layers size={14} /> Compare
+                </Btn>
+                <Btn variant="secondary" onClick={() => downloadPlatformPDF()}>
+                  <Download size={14} /> Fact-sheet PDF
                 </Btn>
               </>
             )}
 
-            {/* Public Actions */}
+            {/* 6. PUBLIC ACTIONS: Verify certificates */}
             {role === 'public' && (
               <>
                 <Btn variant="secondary" onClick={() => setCertModal(true)}>
-                  <Award size={14} /> Certificate of Issuance
+                  <Award size={14} /> Verify certificates
                 </Btn>
                 <Btn variant="secondary" onClick={downloadGeoJSON}>
                   <Download size={14} /> Download GeoJSON
@@ -908,6 +1127,182 @@ export default function ProjectDetail({ projectId: propProjectId }) {
             <img src={lightboxImg} alt="Field verification" style={{ maxWidth: '100%', maxHeight: '65vh', borderRadius: 10, objectFit: 'contain' }} />
           </div>
         )}
+      </Modal>
+
+      {/* ── Admin Override Modal ── */}
+      <Modal open={overrideModal} onClose={() => setOverrideModal(false)} title="Administrative Override Decision" width={560}>
+        <div>
+          <div style={{ background: 'rgba(245,158,11,0.1)', border: `1px solid rgba(245,158,11,0.35)`, borderRadius: 10, padding: 14, marginBottom: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: T.goldL, fontWeight: 700, fontSize: 13, marginBottom: 4 }}>
+              <ShieldCheck size={16} /> Flagged Override Governance
+            </div>
+            <div style={{ fontSize: 12, color: T.t2, lineHeight: 1.5 }}>
+              Separation of Duties Warning: Primary approvals belong to assigned project approvers. Admin overrides are rare by design, highlighted in the platform audit trail, and counted under &apos;Overrides this month&apos;.
+            </div>
+          </div>
+
+          <div style={{ marginBottom: 14 }}>
+            <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: T.t3, textTransform: 'uppercase', marginBottom: 6 }}>Target Status</label>
+            <select
+              value={overrideTargetStatus}
+              onChange={(e) => setOverrideTargetStatus(e.target.value)}
+              style={{ width: '100%', background: 'var(--input-bg, rgba(255,255,255,0.04))', border: `1px solid ${T.border}`, borderRadius: 8, padding: 10, color: T.t1, fontSize: 13 }}
+            >
+              <option value="approved">Approve Project (Admit into registry)</option>
+              <option value="rejected">Reject Project (Deny issuance)</option>
+            </select>
+          </div>
+
+          <div style={{ marginBottom: 16 }}>
+            <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: T.t3, textTransform: 'uppercase', marginBottom: 6 }}>
+              Mandatory Override Rationale (min 10 characters) *
+            </label>
+            <textarea
+              rows={3}
+              value={overrideReason}
+              onChange={(e) => setOverrideReason(e.target.value)}
+              placeholder="Provide detailed legal, supervisory, or audit justification for overriding standard review flow..."
+              style={{ width: '100%', background: 'var(--input-bg, rgba(255,255,255,0.04))', border: `1px solid ${T.border}`, borderRadius: 8, padding: 10, color: T.t1, fontSize: 13, fontFamily: 'inherit' }}
+            />
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
+            <input
+              type="checkbox"
+              id="confirmOverride"
+              checked={overrideConfirmed}
+              onChange={(e) => setOverrideConfirmed(e.target.checked)}
+              style={{ width: 16, height: 16, accentColor: T.goldL }}
+            />
+            <label htmlFor="confirmOverride" style={{ fontSize: 12.5, color: T.t1, fontWeight: 600, cursor: 'pointer' }}>
+              I confirm this override and accept accountability in the immutable audit log.
+            </label>
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+            <Btn variant="secondary" onClick={() => setOverrideModal(false)}>Cancel</Btn>
+            <Btn
+              style={{ background: 'linear-gradient(135deg, #d97706, #b45309)', color: '#fff' }}
+              disabled={actionSubmitting || overrideReason.trim().length < 10 || !overrideConfirmed}
+              onClick={handleAdminOverride}
+            >
+              {actionSubmitting ? 'Recording…' : 'Execute Flagged Override'}
+            </Btn>
+          </div>
+        </div>
+      </Modal>
+
+      {/* ── Admin Suspend Modal ── */}
+      <Modal open={suspendModal} onClose={() => setSuspendModal(false)} title="Suspend Live Project (Take-Down)" width={480}>
+        <div>
+          <div style={{ background: 'rgba(244,63,94,0.1)', border: `1px solid rgba(244,63,94,0.3)`, borderRadius: 10, padding: 14, marginBottom: 16 }}>
+            <div style={{ color: T.roseL, fontWeight: 700, fontSize: 13, marginBottom: 4 }}>
+              ⚠️ Registry Delisting & Quarantine
+            </div>
+            <div style={{ fontSize: 12, color: T.t2, lineHeight: 1.5 }}>
+              Suspending this project will immediately pause marketplace credit sales, freeze retirement certificate verification, and flag the developer entity.
+            </div>
+          </div>
+
+          <div style={{ marginBottom: 16 }}>
+            <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: T.t3, textTransform: 'uppercase', marginBottom: 6 }}>
+              Suspension Reason (min 5 characters) *
+            </label>
+            <textarea
+              rows={3}
+              value={suspendReason}
+              onChange={(e) => setSuspendReason(e.target.value)}
+              placeholder="e.g. Unverified deforestation detected via satellite telemetry; compliance audit failure..."
+              style={{ width: '100%', background: 'var(--input-bg, rgba(255,255,255,0.04))', border: `1px solid ${T.border}`, borderRadius: 8, padding: 10, color: T.t1, fontSize: 13, fontFamily: 'inherit' }}
+            />
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+            <Btn variant="secondary" onClick={() => setSuspendModal(false)}>Cancel</Btn>
+            <Btn
+              style={{ background: T.rose, color: '#fff' }}
+              disabled={actionSubmitting || suspendReason.trim().length < 5}
+              onClick={handleSuspendProject}
+            >
+              {actionSubmitting ? 'Suspending…' : 'Confirm Suspension'}
+            </Btn>
+          </div>
+        </div>
+      </Modal>
+
+      {/* ── Admin Reassign Modal ── */}
+      <Modal open={reassignModal} onClose={() => setReassignModal(false)} title="Reassign Project Reviewer / Verifier" width={480}>
+        <div>
+          <div style={{ marginBottom: 14 }}>
+            <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: T.t3, textTransform: 'uppercase', marginBottom: 6 }}>
+              New Assigned Approver
+            </label>
+            <select
+              value={reassignApproverId}
+              onChange={(e) => setReassignApproverId(e.target.value)}
+              style={{ width: '100%', background: 'var(--input-bg, rgba(255,255,255,0.04))', border: `1px solid ${T.border}`, borderRadius: 8, padding: 10, color: T.t1, fontSize: 13 }}
+            >
+              <option value="">-- Select Approver --</option>
+              <option value="2">Dr. Sarah Jenkins (approver@carbonvault.com)</option>
+              <option value="1">Alex Mercer (HQ Admin Backup)</option>
+            </select>
+          </div>
+
+          <div style={{ marginBottom: 14 }}>
+            <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: T.t3, textTransform: 'uppercase', marginBottom: 6 }}>
+              New Assigned Verifier
+            </label>
+            <select
+              value={reassignVerifierId}
+              onChange={(e) => setReassignVerifierId(e.target.value)}
+              style={{ width: '100%', background: 'var(--input-bg, rgba(255,255,255,0.04))', border: `1px solid ${T.border}`, borderRadius: 8, padding: 10, color: T.t1, fontSize: 13 }}
+            >
+              <option value="">-- Select Verifier --</option>
+              <option value="3">Marcus Vance (verifier@carbonvault.com)</option>
+            </select>
+          </div>
+
+          <div style={{ marginBottom: 16 }}>
+            <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: T.t3, textTransform: 'uppercase', marginBottom: 6 }}>Reassignment Notes</label>
+            <textarea
+              rows={2}
+              value={reassignNotes}
+              onChange={(e) => setReassignNotes(e.target.value)}
+              placeholder="e.g. Workload balancing; jurisdiction conflict resolution..."
+              style={{ width: '100%', background: 'var(--input-bg, rgba(255,255,255,0.04))', border: `1px solid ${T.border}`, borderRadius: 8, padding: 10, color: T.t1, fontSize: 13, fontFamily: 'inherit' }}
+            />
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+            <Btn variant="secondary" onClick={() => setReassignModal(false)}>Cancel</Btn>
+            <Btn disabled={actionSubmitting} onClick={handleReassignProject}>
+              {actionSubmitting ? 'Reassigning…' : 'Save Assignment'}
+            </Btn>
+          </div>
+        </div>
+      </Modal>
+
+      {/* ── Add Comment Modal ── */}
+      <Modal open={commentModal} onClose={() => setCommentModal(false)} title="Append Audited Comment" width={460}>
+        <div>
+          <div style={{ marginBottom: 16 }}>
+            <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: T.t3, textTransform: 'uppercase', marginBottom: 6 }}>Comment Content</label>
+            <textarea
+              rows={4}
+              value={commentText}
+              onChange={(e) => setCommentText(e.target.value)}
+              placeholder="Record audit observation, note for verifiers, or compliance remarks..."
+              style={{ width: '100%', background: 'var(--input-bg, rgba(255,255,255,0.04))', border: `1px solid ${T.border}`, borderRadius: 8, padding: 10, color: T.t1, fontSize: 13, fontFamily: 'inherit' }}
+            />
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+            <Btn variant="secondary" onClick={() => setCommentModal(false)}>Cancel</Btn>
+            <Btn disabled={actionSubmitting || !commentText.trim()} onClick={handleAddComment}>
+              {actionSubmitting ? 'Saving…' : 'Record Comment'}
+            </Btn>
+          </div>
+        </div>
       </Modal>
     </div>
   );

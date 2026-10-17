@@ -373,7 +373,7 @@ def seed_initial_data():
         if not db.query(User).first():
             default_users = [
                 User(name="Alex Mercer", email="admin@carbonvault.com", password_hash=hash_password("admin123"), role="admin", admin_role="super_admin", projects=0, credits=0, joined="2023-01-01", status="active"),
-                User(name="Sarah Jenkins", email="approver@carbonvault.com", password_hash=hash_password("approver123"), role="admin", admin_role="approver", projects=0, credits=0, joined="2023-08-15", status="active"),
+                User(name="Dr. Sarah Jenkins", email="approver@carbonvault.com", password_hash=hash_password("approver123"), role="approver", admin_role="approver", projects=0, credits=0, joined="2023-08-15", status="active"),
                 User(name="EcoGuard Brazil", email="contact@ecoguard.org", password_hash=hash_password("ngo123"), role="ngo", projects=3, credits=34600, joined="2023-06-12", status="active"),
                 User(name="Microsoft Sustainability", email="carbon@microsoft.com", password_hash=hash_password("corp123"), role="corporate", projects=0, credits=15200, joined="2023-09-01", status="active"),
                 User(name="Google Carbon Team", email="sustainability@google.com", password_hash=hash_password("corp123"), role="buyer", projects=0, credits=28000, joined="2023-07-14", status="active"),
@@ -382,27 +382,31 @@ def seed_initial_data():
                 User(name="Borneo Earth", email="team@borneoearth.org", password_hash=hash_password("ngo123"), role="ngo", projects=1, credits=0, joined="2024-03-08", status="suspended"),
                 User(name="HSBC Green Finance", email="carbon@hsbc.com", password_hash=hash_password("corp123"), role="buyer", projects=0, credits=9800, joined="2024-02-17", status="active"),
                 User(name="CongoCare", email="ops@congocare.org", password_hash=hash_password("ngo123"), role="ngo", projects=2, credits=22000, joined="2023-11-30", status="active"),
-                User(name="TUV Rheinland Verifier", email="verifier@carbonvault.com", password_hash=hash_password("verifier123"), role="verifier", admin_role=None, projects=0, credits=0, joined="2024-01-01", status="active"),
+                User(name="Marcus Vance", email="verifier@carbonvault.com", password_hash=hash_password("verifier123"), role="verifier", admin_role=None, projects=0, credits=0, joined="2024-01-01", status="active"),
                 User(name="Public Auditor", email="guest@carbonvault.com", password_hash=hash_password("guest123"), role="public", admin_role=None, projects=0, credits=0, joined="2024-01-01", status="active"),
             ]
             db.add_all(default_users)
             db.commit()
         else:
-            # Backfill password hashes for demo accounts if missing
+            # Backfill password hashes and synchronize roles for demo accounts
             users_to_fix = {
                 "admin@carbonvault.com": ("admin123", "Alex Mercer", "admin", "super_admin"),
-                "approver@carbonvault.com": ("approver123", "Sarah Jenkins", "admin", "approver"),
+                "approver@carbonvault.com": ("approver123", "Dr. Sarah Jenkins", "approver", "approver"),
                 "contact@ecoguard.org": ("ngo123", "EcoGuard Brazil", "ngo", None),
                 "carbon@microsoft.com": ("corp123", "Microsoft Sustainability", "corporate", None),
-                "verifier@carbonvault.com": ("verifier123", "TUV Rheinland Verifier", "verifier", None),
+                "verifier@carbonvault.com": ("verifier123", "Marcus Vance", "verifier", None),
                 "guest@carbonvault.com": ("guest123", "Public Auditor", "public", None),
             }
             for em, (pw, nm, rl, arl) in users_to_fix.items():
                 u = db.query(User).filter(User.email == em).first()
                 if not u:
                     db.add(User(name=nm, email=em, password_hash=hash_password(pw), role=rl, admin_role=arl, status="active"))
-                elif not u.password_hash:
-                    u.password_hash = hash_password(pw)
+                else:
+                    u.role = rl
+                    u.admin_role = arl
+                    u.name = nm
+                    if not u.password_hash:
+                        u.password_hash = hash_password(pw)
             db.commit()
 
         # Seed Pricing Config if empty

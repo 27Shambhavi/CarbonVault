@@ -27,9 +27,10 @@ from sqlalchemy import func
 from credit_calculation.credits_module.db import get_db
 from credit_calculation.credits_module.db_models import User, NGO, Wallet, AuditLog, Notification
 try:
-    from core.config import JWT_SECRET
+    from core.config import JWT_SECRET, APP_MODE
 except Exception:
     JWT_SECRET = os.getenv("JWT_SECRET", "carbonvault-jwt-secret-2026")
+    APP_MODE = os.getenv("APP_MODE", "demo")
 
 logger = logging.getLogger("carbonvault.auth")
 router = APIRouter(prefix="/auth", tags=["Authentication"])
@@ -263,6 +264,69 @@ def login(req: LoginRequest, request: Request, db: Session = Depends(get_db)):
             "credits": user.credits or 0.0,
             "status": user.status or "active"
         }
+    }
+
+
+@router.get("/demo-accounts")
+def get_demo_accounts():
+    """
+    Returns public demo accounts for 1-click test fill in development / demo mode.
+    Returns 404 in production mode.
+    """
+    if str(APP_MODE).strip().lower() == "production":
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Demo accounts endpoint is disabled in production mode."
+        )
+    return {
+        "status": "ok",
+        "demo_accounts": [
+            {
+                "role": "admin",
+                "label": "Admin",
+                "name": "Alex Mercer",
+                "email": "admin@carbonvault.com",
+                "password": "admin123",
+                "description": "Runs the platform: users, prices, payments, audit.",
+                "permissions": "Platform operations, user management, pricing config, payments, reconciliation, override authority."
+            },
+            {
+                "role": "approver",
+                "label": "Approver",
+                "name": "Dr. Sarah Jenkins",
+                "email": "approver@carbonvault.com",
+                "password": "approver123",
+                "description": "Reviews projects and makes the decision.",
+                "permissions": "Scientific MRV review, project approvals/rejections, requesting data, photo diagnostics."
+            },
+            {
+                "role": "verifier",
+                "label": "Verifier",
+                "name": "Marcus Vance",
+                "email": "verifier@carbonvault.com",
+                "password": "verifier123",
+                "description": "Verifies sites in the field and signs off.",
+                "permissions": "On-site field verification, ISO 14064-3 determination, ground truth photo sign-off."
+            },
+            {
+                "role": "ngo",
+                "label": "NGO",
+                "name": "EcoGuard Brazil",
+                "email": "contact@ecoguard.org",
+                "password": "ngo123",
+                "description": "Registers projects and receives funding.",
+                "permissions": "Project registration wizard, evidence upload, telemetry tracking, developer payouts."
+            },
+            {
+                "role": "corporate",
+                "label": "Corporate",
+                "name": "Microsoft Sustainability",
+                "email": "carbon@microsoft.com",
+                "password": "corp123",
+                "description": "Buys and retires credits.",
+                "permissions": "Carbon credit marketplace, live FX quotes, Razorpay checkout, retirement certificates."
+            }
+        ]
     }
 
 
