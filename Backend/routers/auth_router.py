@@ -162,14 +162,16 @@ def require_role(allowed_roles: List[str]):
         token = credentials.credentials
         claims = decode_access_token(token)
         user_role = claims.get("role", "public")
-        user_admin_role = claims.get("admin_role") if user_role == "admin" else None
+        effective_role = "admin" if user_role in ("admin", "super_admin", "approver") else user_role
 
         # Check if user role matches allowed roles
         has_role = (
             user_role in allowed_roles
-            or user_admin_role in allowed_roles
+            or effective_role in allowed_roles
+            or (effective_role == "admin" and ("super_admin" in allowed_roles or "admin" in allowed_roles))
             or "any" in allowed_roles
-            or (user_role == "buyer" and "corporate" in allowed_roles)
+            or (effective_role == "buyer" and "corporate" in allowed_roles)
+            or (effective_role == "corporate" and "buyer" in allowed_roles)
         )
         if not has_role:
             raise HTTPException(
@@ -287,17 +289,8 @@ def get_demo_accounts():
                 "name": "Alex Mercer",
                 "email": "admin@carbonvault.com",
                 "password": "admin123",
-                "description": "Runs the platform: users, prices, payments, audit.",
-                "permissions": "Platform operations, user management, pricing config, payments, reconciliation, override authority."
-            },
-            {
-                "role": "approver",
-                "label": "Approver",
-                "name": "Dr. Sarah Jenkins",
-                "email": "approver@carbonvault.com",
-                "password": "approver123",
-                "description": "Reviews projects and makes the decision.",
-                "permissions": "Scientific MRV review, project approvals/rejections, requesting data, photo diagnostics."
+                "description": "Runs the platform and makes project review decisions with verifier sign-off.",
+                "permissions": "Platform health, KYC review, users, pricing, payments & reconciliation, Review Queue oversight & project decisions, ML retraining, audit."
             },
             {
                 "role": "verifier",
@@ -363,7 +356,6 @@ def register(req: RegisterRequest, request: Request, db: Session = Depends(get_d
         email=email_clean,
         password_hash=hash_password(req.password),
         role=role_clean,
-        admin_role=None,
         projects=0,
         credits=0.0,
         status="active",

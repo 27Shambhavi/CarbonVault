@@ -4,7 +4,8 @@ import {
   fetchProject, fetchProjectNdvi, updateProjectStatus,
   createOrder, buyCredits, loadRazorpayScript,
   submitProgressUpdate, fetchLiveFxRate, fetchPublicConfig,
-  fetchReady, getImageUrl, reassignProject, suspendProject, downloadPlatformPDF
+  fetchReady, getImageUrl, reassignProject, suspendProject, downloadPlatformPDF,
+  addProjectComment
 } from '../../services/api.js';
 import {
   Card, SectionHeader, Table, Badge, MRVScore, KPICard, Modal, Btn, T, gc
@@ -83,6 +84,7 @@ export default function ProjectDetail({ projectId: propProjectId }) {
 
   const [commentModal, setCommentModal] = useState(false);
   const [commentText, setCommentText] = useState('');
+  const [inlineComment, setInlineComment] = useState('');
 
   const loadProjectData = useCallback(async () => {
     if (!projectId) {
@@ -109,6 +111,26 @@ export default function ProjectDetail({ projectId: propProjectId }) {
   useEffect(() => {
     loadProjectData();
   }, [loadProjectData]);
+
+  // URL Hash synchronization for deep linking (#overview, #verification, #documents, #timeline, etc.)
+  useEffect(() => {
+    const syncFromHash = () => {
+      const hash = window.location.hash.replace('#', '');
+      if (hash && TABS.some((t) => t.id === hash)) {
+        setActiveTab(hash);
+      }
+    };
+    syncFromHash();
+    window.addEventListener('hashchange', syncFromHash);
+    return () => window.removeEventListener('hashchange', syncFromHash);
+  }, []);
+
+  const handleTabChange = (tabId) => {
+    setActiveTab(tabId);
+    if (window.location.hash !== `#${tabId}`) {
+      window.location.hash = tabId;
+    }
+  };
 
   // Load NDVI data when switching to satellite tab
   useEffect(() => {
@@ -259,21 +281,19 @@ export default function ProjectDetail({ projectId: propProjectId }) {
     }
   };
 
-  // Add Audited Comment
-  const handleAddComment = async () => {
-    if (!commentText.trim()) return;
+  // Add Audited Comment (Modal or Inline)
+  const handleAddComment = async (customText = null) => {
+    const textToSubmit = (typeof customText === 'string' ? customText : commentText).trim();
+    if (!textToSubmit) return;
     setActionSubmitting(true);
     try {
-      const res = await updateProjectStatus(
-        projectId,
-        project.status,
-        commentText.trim(),
-        user?.name || user?.email
-      );
+      const author = `${user?.name || user?.email || 'Platform User'} (${(user?.role || 'user').toUpperCase()})`;
+      const res = await addProjectComment(projectId, textToSubmit, author);
       if (!res.error) {
-        addToast({ type: 'success', title: 'Comment Added', message: 'Comment appended to immutable audit log.' });
+        addToast({ type: 'success', title: 'Comment Recorded', message: 'Comment appended to immutable audit log.' });
         setCommentModal(false);
         setCommentText('');
+        setInlineComment('');
         loadProjectData();
         triggerRefresh();
       } else {
@@ -482,20 +502,13 @@ export default function ProjectDetail({ projectId: propProjectId }) {
 
           {/* Role-Specific Action Bar (Addendum Section 2) */}
           <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-            {/* 1. APPROVER ACTIONS: Request data · Approve · Reject · Add comment */}
-            {role === 'approver' && (
+            {/* 1. ADMIN ACTIONS: Approve / Reject (with Verifier Signoff Gate & Affiliation Guard) · Override · Reassign · Suspend · Open Organisation · Add Comment */}
+            {role === 'admin' && (
               <>
-                <Btn
-                  variant="secondary"
-                  onClick={() => setActionModal('request_data')}
-                  style={{ borderColor: 'rgba(56,189,248,0.4)', color: T.skyL }}
-                >
-                  <HelpCircle size={14} /> Request data
-                </Btn>
-                {(() => {
+                {project.status !== 'approved' && project.status !== 'rejected' && (() => {
                   const hasSignoff = Boolean(project.verifier_signed_off || project.verifier_id || (project.mrvScore && project.mrvScore > 80));
                   return (
-                    <span title={!hasSignoff ? "Approval disabled: Awaiting verifier field sign-off and complete legal documents" : "Approve and admit into public registry"}>
+                    <span title={!hasSignoff ? "Approval disabled: Awaiting accredited verifier field sign-off" : "Approve and admit into public registry"}>
                       <Btn
                         disabled={!hasSignoff}
                         style={{
@@ -511,22 +524,21 @@ export default function ProjectDetail({ projectId: propProjectId }) {
                     </span>
                   );
                 })()}
+                {project.status !== 'approved' && project.status !== 'rejected' && (
+                  <Btn
+                    variant="secondary"
+                    style={{ borderColor: 'rgba(244,63,94,0.35)', color: T.roseL }}
+                    onClick={() => setActionModal('reject')}
+                  >
+                    <XCircle size={14} /> Reject
+                  </Btn>
+                )}
                 <Btn
-                  variant="secondary"
-                  style={{ borderColor: 'rgba(244,63,94,0.35)', color: T.roseL }}
-                  onClick={() => setActionModal('reject')}
+                  style={{ background: 'rgba(245,158,11,0.15)', border: `1px solid ${T.goldL}`, color: T.goldL }}
+                  onClick={() => setOverrideModal(true)}
                 >
-                  <XCircle size={14} /> Reject
+                  <ShieldCheck size={14} /> Override decision (reason + confirm)
                 </Btn>
-                <Btn variant="secondary" onClick={() => setCommentModal(true)}>
-                  <MessageSquare size={14} /> Add comment
-                </Btn>
-              </>
-            )}
-
-            {/* 2. ADMIN ACTIONS: Reassign · Suspend · Override decision · Open organisation · Add comment */}
-            {role === 'admin' && (
-              <>
                 <Btn variant="secondary" onClick={() => setReassignModal(true)}>
                   <UserCheck size={14} /> Reassign
                 </Btn>
@@ -536,12 +548,6 @@ export default function ProjectDetail({ projectId: propProjectId }) {
                   onClick={() => setSuspendModal(true)}
                 >
                   <AlertOctagon size={14} /> Suspend
-                </Btn>
-                <Btn
-                  style={{ background: 'rgba(245,158,11,0.15)', border: `1px solid ${T.goldL}`, color: T.goldL }}
-                  onClick={() => setOverrideModal(true)}
-                >
-                  <ShieldCheck size={14} /> Override decision (reason + confirm)
                 </Btn>
                 <Btn variant="secondary" onClick={() => setPage('organisations')}>
                   <Building2 size={14} /> Open organisation
@@ -637,7 +643,7 @@ export default function ProjectDetail({ projectId: propProjectId }) {
           return (
             <button
               key={t.id}
-              onClick={() => setActiveTab(t.id)}
+              onClick={() => handleTabChange(t.id)}
               style={{
                 background: active ? 'rgba(45,212,191,0.12)' : 'transparent',
                 border: 'none',
@@ -954,28 +960,199 @@ export default function ProjectDetail({ projectId: propProjectId }) {
         </div>
       )}
 
-      {/* ── TAB 7: TIMELINE AUDIT ── */}
+      {/* ── TAB 7: TIMELINE AUDIT & MULTI-ROLE LINKED WORKFLOW ── */}
       {activeTab === 'timeline' && (
-        <div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+          {/* 1. Multi-Role Linked Workflow Progression */}
           <Card>
-            <SectionHeader title="Chronological State Audit Trail" subtitle="Immutable state change log" />
+            <SectionHeader
+              title="Multi-Role Linked Workflow Lifecycle"
+              subtitle="End-to-end cryptographic custody across NGO developer, field verifier, independent admin, and corporate buyer"
+            />
+            {(() => {
+              const hasSignoff = Boolean(project.verifier_signed_off || project.verifier_id || (project.mrvScore && project.mrvScore > 80));
+              const isApproved = ['approved', 'active'].includes(project.status);
+              const hasOrders = Boolean(project.orders && project.orders.length > 0);
+
+              const steps = [
+                {
+                  role: 'NGO Developer',
+                  title: '1. Registration & Submission',
+                  desc: project.ngo_name ? `Submitted by ${project.ngo_name}` : 'Project boundary & baseline submitted',
+                  status: project.status === 'draft' ? 'in_progress' : 'complete',
+                  badge: project.status === 'draft' ? 'Draft' : 'Submitted',
+                  icon: TreePine,
+                  color: T.teal,
+                },
+                {
+                  role: 'Accredited Verifier',
+                  title: '2. Field Audit & MRV Sign-off',
+                  desc: hasSignoff ? `Verified · MRV score ${project.mrvScore || 85}/100` : 'Awaiting geotagged on-site sensor audit',
+                  status: hasSignoff ? 'complete' : ['pending', 'submitted', 'in_review'].includes(project.status) ? 'in_progress' : 'pending',
+                  badge: hasSignoff ? 'Signed Off' : 'Under Inspection',
+                  icon: ShieldCheck,
+                  color: hasSignoff ? T.emeraldL : T.skyL,
+                },
+                {
+                  role: 'Platform Admin',
+                  title: '3. Independent Oversight Gate',
+                  desc: isApproved ? 'Approved & admitted to public registry' : 'Separation-of-duties review gate',
+                  status: isApproved ? 'complete' : project.status === 'verified' ? 'in_progress' : 'pending',
+                  badge: isApproved ? 'Approved' : 'Pending Gate',
+                  icon: UserCheck,
+                  color: isApproved ? T.emeraldL : T.goldL,
+                },
+                {
+                  role: 'Corporate Buyer',
+                  title: '4. Marketplace Settlement',
+                  desc: hasOrders ? `${project.orders.length} orders settled via Razorpay` : `${tradableCredits.toLocaleString()} tonnes available for direct purchase`,
+                  status: hasOrders ? 'complete' : isApproved ? 'in_progress' : 'pending',
+                  badge: hasOrders ? 'Settled' : isApproved ? 'Tradable' : 'Queued',
+                  icon: ShoppingCart,
+                  color: hasOrders ? T.emeraldL : T.teal,
+                },
+              ];
+
+              return (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 14, marginTop: 12 }}>
+                  {steps.map((s, idx) => (
+                    <div
+                      key={idx}
+                      style={{
+                        background: 'rgba(255,255,255,0.02)',
+                        border: `1px solid ${s.status === 'complete' ? 'rgba(16,185,129,0.3)' : s.status === 'in_progress' ? 'rgba(45,212,191,0.3)' : T.border}`,
+                        borderRadius: 12,
+                        padding: 16,
+                        position: 'relative',
+                        transition: 'all 0.2s ease',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: s.color, textTransform: 'uppercase', letterSpacing: '0.6px' }}>
+                          {s.role}
+                        </span>
+                        <Badge
+                          type={s.status === 'complete' ? 'approved' : s.status === 'in_progress' ? 'gold' : 'draft'}
+                          label={s.badge}
+                        />
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                        <s.icon size={16} color={s.color} />
+                        <span style={{ fontSize: 14, fontWeight: 700, color: T.t1 }}>{s.title}</span>
+                      </div>
+                      <div style={{ fontSize: 12, color: T.t3, lineHeight: 1.4 }}>{s.desc}</div>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
+          </Card>
+
+          {/* 2. Inter-Role Collaborative Comment Box */}
+          <Card>
+            <SectionHeader
+              title="Inter-Role Audit Notes & Discussion"
+              subtitle="Audited cross-role communication between Developer, Field Verifier, Admin Oversight, and Corporate Buyer"
+            />
+            <div style={{ background: 'rgba(255,255,255,0.02)', border: `1px solid ${T.border}`, borderRadius: 12, padding: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                <span style={{ fontSize: 12, color: T.t3 }}>Posting as:</span>
+                <span style={{ fontSize: 12, fontWeight: 700, color: T.teal }}>
+                  {user?.name || user?.email || 'Platform User'} ({role.toUpperCase()})
+                </span>
+              </div>
+              <textarea
+                rows={3}
+                value={inlineComment}
+                onChange={(e) => setInlineComment(e.target.value)}
+                placeholder="Append an audited observation, MRV clarification, or compliance remark (permanently logged)..."
+                style={{
+                  width: '100%',
+                  background: 'var(--input-bg, rgba(255,255,255,0.04))',
+                  border: `1px solid ${T.border}`,
+                  borderRadius: 8,
+                  padding: 12,
+                  color: T.t1,
+                  fontSize: 13,
+                  fontFamily: 'inherit',
+                  resize: 'vertical',
+                  boxSizing: 'border-box',
+                }}
+              />
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 10 }}>
+                <Btn
+                  disabled={actionSubmitting || !inlineComment.trim()}
+                  onClick={() => handleAddComment(inlineComment)}
+                  style={{ gap: 6 }}
+                >
+                  <Send size={13} />
+                  {actionSubmitting ? 'Recording…' : 'Post Audited Comment'}
+                </Btn>
+              </div>
+            </div>
+          </Card>
+
+          {/* 3. Chronological State Audit Trail */}
+          <Card>
+            <SectionHeader title="Chronological State Audit Trail" subtitle="Immutable state change log & cross-role events" />
             {project.history && project.history.length > 0 ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                {project.history.map((h, i) => (
-                  <div key={i} style={{ display: 'flex', gap: 14, alignItems: 'flex-start', paddingBottom: 12, borderBottom: `1px solid rgba(255,255,255,0.04)` }}>
-                    <div style={{ width: 10, height: 10, borderRadius: '50%', background: T.teal, marginTop: 5, flexShrink: 0 }} />
-                    <div style={{ flex: 1 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
-                        <span style={{ fontWeight: 600, color: T.t1 }}>
-                          Transition: <span style={{ color: T.teal }}>{h.from_status}</span> → <span style={{ color: T.emeraldL }}>{h.to_status}</span>
-                        </span>
-                        <span style={{ color: T.t3, fontSize: 11 }}>{h.timestamp ? new Date(h.timestamp).toLocaleString() : 'Recent'}</span>
+                {project.history.map((h, i) => {
+                  const isComment = typeof h.comment === 'string' && h.comment.startsWith('[Comment]');
+                  const displayComment = isComment ? h.comment.replace('[Comment]', '').trim() : h.comment;
+                  return (
+                    <div
+                      key={i}
+                      style={{
+                        display: 'flex',
+                        gap: 14,
+                        alignItems: 'flex-start',
+                        paddingBottom: 12,
+                        borderBottom: `1px solid rgba(255,255,255,0.04)`,
+                      }}
+                    >
+                      <div
+                        style={{
+                          width: 10,
+                          height: 10,
+                          borderRadius: '50%',
+                          background: isComment ? T.skyL : T.teal,
+                          marginTop: 5,
+                          flexShrink: 0,
+                        }}
+                      />
+                      <div style={{ flex: 1 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, flexWrap: 'wrap', gap: 6 }}>
+                          <span style={{ fontWeight: 600, color: T.t1 }}>
+                            {isComment ? (
+                              <span style={{ color: T.skyL }}>💬 Inter-Role Note</span>
+                            ) : (
+                              <>
+                                Transition: <span style={{ color: T.teal }}>{h.from_status}</span> → <span style={{ color: T.emeraldL }}>{h.to_status}</span>
+                              </>
+                            )}
+                          </span>
+                          <span style={{ color: T.t3, fontSize: 11 }}>
+                            {h.timestamp ? new Date(h.timestamp).toLocaleString() : 'Recent'}
+                          </span>
+                        </div>
+                        <div
+                          style={{
+                            fontSize: 12,
+                            color: isComment ? T.t1 : T.t2,
+                            marginTop: 4,
+                            background: isComment ? 'rgba(56,189,248,0.06)' : 'transparent',
+                            padding: isComment ? '6px 10px' : 0,
+                            borderRadius: isComment ? 6 : 0,
+                          }}
+                        >
+                          {displayComment || 'Status updated.'}
+                        </div>
+                        <div style={{ fontSize: 11, color: T.t3, marginTop: 4 }}>Actor: {h.changed_by}</div>
                       </div>
-                      <div style={{ fontSize: 12, color: T.t2, marginTop: 4 }}>{h.comment || 'Status updated.'}</div>
-                      <div style={{ fontSize: 11, color: T.t3, marginTop: 2 }}>Actor: {h.changed_by}</div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             ) : (
               <div style={{ textAlign: 'center', padding: 32, color: T.t3, fontSize: 13 }}>No audit events logged yet.</div>
@@ -1242,9 +1419,9 @@ export default function ProjectDetail({ projectId: propProjectId }) {
               onChange={(e) => setReassignApproverId(e.target.value)}
               style={{ width: '100%', background: 'var(--input-bg, rgba(255,255,255,0.04))', border: `1px solid ${T.border}`, borderRadius: 8, padding: 10, color: T.t1, fontSize: 13 }}
             >
-              <option value="">-- Select Approver --</option>
-              <option value="2">Dr. Sarah Jenkins (approver@carbonvault.com)</option>
-              <option value="1">Alex Mercer (HQ Admin Backup)</option>
+              <option value="">-- Select Administrator --</option>
+              <option value="1">Alex Mercer (HQ Admin - Lead)</option>
+              <option value="2">Elena Rostova (Compliance Administrator)</option>
             </select>
           </div>
 

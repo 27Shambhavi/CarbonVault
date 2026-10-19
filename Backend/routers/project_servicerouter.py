@@ -64,7 +64,8 @@ def check_admin_permission(
     authorization: Optional[str] = None
 ):
     """
-    Enforces admin & approver RBAC strictly from server-verified database records or JWT claims.
+    Enforces admin RBAC strictly from server-verified database records or JWT claims.
+    ONE Admin role architecture (Approver consolidated into Admin).
     A tampered client header or localStorage edit cannot elevate privileges.
     """
     # 1. Check verified JWT if present
@@ -73,17 +74,10 @@ def check_admin_permission(
         from routers.auth_router import decode_access_token
         claims = decode_access_token(token)
         token_role = claims.get("role")
-        token_admin_role = claims.get("admin_role")
-        if token_role == "admin":
-            role = token_admin_role or "super_admin"
-        elif token_role == "approver":
-            role = "approver"
+        if token_role in ("admin", "super_admin", "approver"):
+            return "admin"
         else:
-            raise HTTPException(status_code=403, detail="Forbidden: Admin or Approver access required.")
-
-        if required_role in ("super_admin", "admin") and role == "approver":
-            raise HTTPException(status_code=403, detail="Super Admin privilege required. Action forbidden for Project Approver.")
-        return role
+            raise HTTPException(status_code=403, detail="Super Admin privilege required. Action forbidden for non-admin.")
 
     # 2. Check verified DB user by email
     if x_admin_email:
@@ -91,17 +85,21 @@ def check_admin_permission(
         if db:
             u = db.query(User).filter(User.email.ilike(email_clean)).first()
             if u:
-                if u.role not in ("admin", "approver"):
-                    raise HTTPException(status_code=403, detail="Forbidden: Admin or Approver access required.")
-                role = "approver" if u.role == "approver" or u.admin_role == "approver" else "super_admin"
+                if u.role not in ("admin", "approver", "super_admin"):
+                    raise HTTPException(status_code=403, detail="Super Admin privilege required. Action forbidden for non-admin.")
+                return "admin"
             else:
                 raise HTTPException(status_code=403, detail="Forbidden: Account not found.")
-        elif "approver" in email_clean:
-            role = "approver"
+        elif "admin" in email_clean:
+            return "admin"
         else:
-            role = "super_admin"
+            raise HTTPException(status_code=403, detail="Super Admin privilege required. Action forbidden for non-admin.")
     elif x_admin_role:
         role = x_admin_role.lower().strip()
+        if role in ("admin", "super_admin"):
+            return "admin"
+        else:
+            raise HTTPException(status_code=403, detail="Super Admin privilege required. Action forbidden for non-admin.")
     else:
         # No credentials provided at all -> strictly forbidden!
         raise HTTPException(
@@ -109,12 +107,7 @@ def check_admin_permission(
             detail="Forbidden: Authentication or admin credentials required."
         )
 
-    if required_role in ("super_admin", "admin") and role == "approver":
-        raise HTTPException(
-            status_code=403,
-            detail="Super Admin privilege required. Action forbidden for Project Approver."
-        )
-    return role
+    return "admin"
 
 # Credit calculator instance
 credit_calculator = CreditCalculator()
@@ -1861,7 +1854,7 @@ def get_users():
                 "name": u.name,
                 "email": u.email,
                 "role": u.role,
-                "admin_role": u.admin_role or ("super_admin" if u.role == "admin" else None),
+                "admin_role": "admin" if u.role == "admin" else None,
                 "projects": u.projects,
                 "credits": u.credits,
                 "joined": u.joined,
@@ -1879,7 +1872,7 @@ def invite_user(
     x_admin_email: Optional[str] = Header(None),
     authorization: Optional[str] = Header(None)
 ):
-    """Invite and register a new user in the database. Super Admin only."""
+    """Invite and register a new user in the database. Admin only."""
     db = SessionLocal()
     try:
         check_admin_permission(x_admin_role, x_admin_email, required_role="super_admin", db=db, authorization=authorization)
@@ -1896,7 +1889,7 @@ def invite_user(
         db.commit()
         db.refresh(new_user)
 
-        admin_actor = x_admin_email or "Alex Mercer (Super Admin)"
+        admin_actor = x_admin_email or "Alex Mercer (Admin)"
         log_audit_event(
             action="create",
             name=f"USER-{new_user.id}",
@@ -1912,7 +1905,7 @@ def invite_user(
                 "name": new_user.name,
                 "email": new_user.email,
                 "role": new_user.role,
-                "admin_role": new_user.admin_role,
+                "admin_role": "admin" if new_user.role == "admin" else None,
                 "projects": new_user.projects,
                 "credits": new_user.credits,
                 "joined": new_user.joined,
@@ -2157,81 +2150,73 @@ def update_project_status(
 
         target_status = (payload.status if payload and payload.status else None) or status
         target_comment = (payload.comment if payload and payload.comment else None) or comment
-        target_user = (payload.changed_by if payload and payload.changed_by else None) or changed_by or ("Alex Mercer (Admin)" if caller_role == "super_admin" else "Dr. Sarah Jenkins (Approver)")
+        target_user = (payload.changed_by if payload and payload.changed_by else None) or changed_by or "Alex Mercer (Admin)"
 
         if not target_status:
             raise HTTPException(status_code=400, detail="Status is required")
 
         old_status = project.status or "draft"
 
-        # Suspend check: only super_admin
-        if target_status == "suspended" and caller_role != "super_admin":
+        # Suspend check: only admin
+        if target_status == "suspended" and caller_role != "admin":
             raise HTTPException(
                 status_code=403,
                 detail="Forbidden: Only platform administrators can suspend live projects."
             )
 
-        # Approver checks (Four-eyes authorization must precede business data validation)
-        if caller_role == "approver":
-            # Four-eyes 1: cannot approve project belonging to affiliated organization
-            if project.ngo_id and caller_email:
-                ngo_rec = db.query(NGO).filter(NGO.id == project.ngo_id).first()
-                if ngo_rec and (
-                    ngo_rec.email.lower() == caller_email.lower() or
-                    (ngo_rec.name and caller_email.split('@')[0] in ngo_rec.name.lower())
-                ):
-                    raise HTTPException(
-                        status_code=403,
-                        detail="Four-eyes violation: Approver cannot approve a project belonging to an affiliated organization."
-                    )
-
-            # Four-eyes 2: cannot be the verifier of the same project
-            if caller_email:
-                verifier_rec = db.query(FieldVerification).filter(FieldVerification.project_id == project.project_id).first()
-                if verifier_rec and (
-                    verifier_rec.verifier_email == caller_email or
-                    verifier_rec.verifier_name == target_user
-                ):
-                    raise HTTPException(
-                        status_code=403,
-                        detail="Four-eyes violation: Approver cannot also be the verifier for the same project."
-                    )
-
-            # Rejection requires reason
-            if target_status == "rejected" and (not target_comment or len(str(target_comment).strip()) < 5):
+        # Separation of duties (Four-eyes) authorization checks
+        # 1. Cannot approve project belonging to affiliated organization
+        if project.ngo_id and caller_email:
+            ngo_rec = db.query(NGO).filter(NGO.id == project.ngo_id).first()
+            if ngo_rec and (
+                ngo_rec.email.lower() == caller_email.lower() or
+                (ngo_rec.name and caller_email.split('@')[0] in ngo_rec.name.lower())
+            ):
                 raise HTTPException(
-                    status_code=400,
-                    detail="Rejection blocked: A mandatory reason (minimum 5 characters) is required to reject a project submission."
+                    status_code=403,
+                    detail="Four-eyes violation: Admin cannot approve a project belonging to an affiliated organization."
                 )
+
+        # 2. Cannot be the verifier of the same project
+        if caller_email:
+            verifier_rec = db.query(FieldVerification).filter(FieldVerification.project_id == project.project_id).first()
+            if verifier_rec:
+                v_email = getattr(verifier_rec.verifier, "email", None) if getattr(verifier_rec, "verifier", None) else getattr(verifier_rec, "verifier_email", None)
+                if (v_email and v_email.lower() == caller_email.lower()) or verifier_rec.verifier_name == target_user:
+                    raise HTTPException(
+                        status_code=403,
+                        detail="Four-eyes violation: Admin cannot also be the verifier for the same project."
+                    )
+
+        # Rejection requires reason
+        if target_status == "rejected" and (not target_comment or len(str(target_comment).strip()) < 5):
+            raise HTTPException(
+                status_code=400,
+                detail="Rejection blocked: A mandatory reason (minimum 5 characters) is required to reject a project submission."
+            )
 
         # Independent Verifier sign-off required before project approval (unless explicit override)
         is_override = bool(payload and (payload.override or payload.is_override))
         override_reason = (payload.override_reason if payload else None) or ""
         override_confirmed = bool(payload and payload.override_confirmed)
 
-        if target_status == "approved" and not (is_override and len(override_reason) >= 10):
-            has_verified_signoff = db.query(FieldVerification).filter(
-                FieldVerification.project_id == project.project_id,
-                FieldVerification.decision == "verified"
-            ).first()
-            if not has_verified_signoff:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Approval blocked: Field verification sign-off with 'verified' decision from an independent verifier is required before project approval."
-                )
-
-        # Admin override validation
-        if caller_role == "super_admin" and target_status in ("approved", "rejected"):
-            effective_reason = override_reason or target_comment or ""
-            is_silent = not effective_reason or len(effective_reason.strip()) < 10 or effective_reason.lower() == "silent admin approval"
-            if is_silent:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Admin override required: An administrator cannot decide a project without override=True, override_confirmed=True, and a mandatory override_reason (minimum 10 characters)."
-                )
-            is_override = True
-            if not override_reason:
-                override_reason = effective_reason
+        if target_status == "approved":
+            if is_override:
+                if not override_reason or len(override_reason.strip()) < 10:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Admin override required: An administrator cannot decide a project without override=True, override_confirmed=True, and a mandatory override_reason (minimum 10 characters)."
+                    )
+            else:
+                has_verified_signoff = db.query(FieldVerification).filter(
+                    FieldVerification.project_id == project.project_id,
+                    FieldVerification.decision == "verified"
+                ).first()
+                if not has_verified_signoff:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Approval blocked: Field verification sign-off with 'verified' decision from an independent verifier is required before project approval."
+                    )
 
         # All 4 project documents required to leave draft
         if target_status in ["submitted", "under_review"] and old_status == "draft":
@@ -2401,6 +2386,54 @@ def get_project_history(project_id: str):
         ]
     finally:
         db.close()
+
+
+class ProjectCommentPayload(BaseModel):
+    comment: str
+    author: Optional[str] = None
+
+
+@router.post("/{project_id}/comments")
+@router.post("/projects/{project_id}/comments")
+def add_project_comment(
+    project_id: str,
+    payload: ProjectCommentPayload,
+    authorization: Optional[str] = Header(None)
+):
+    """Post an inter-role comment to the project's immutable timeline."""
+    db = SessionLocal()
+    try:
+        from datetime import datetime
+        project = db.query(Project).filter(
+            (Project.project_id == project_id) | (Project.id == project_id if str(project_id).isdigit() else False)
+        ).first()
+        if not project:
+            raise HTTPException(status_code=404, detail="Project not found")
+
+        author = payload.author or "Contributor"
+        if authorization and "bearer " in authorization.lower():
+            try:
+                from routers.auth_router import decode_access_token
+                claims = decode_access_token(authorization.split(" ")[-1])
+                author = f"{claims.get('name', author)} ({claims.get('role', 'user').upper()})"
+            except Exception:
+                pass
+
+        hist = ProjectStatusHistory(
+            project_id=project.project_id,
+            from_status=project.status or "active",
+            to_status=project.status or "active",
+            changed_by=author,
+            comment=f"[Comment] {payload.comment.strip()}",
+            timestamp=datetime.utcnow()
+        )
+        db.add(hist)
+        db.commit()
+        db.refresh(hist)
+        return {"status": "ok", "id": hist.id, "comment": hist.comment, "changed_by": hist.changed_by}
+    finally:
+        db.close()
+
 
 
 # -------------------------
@@ -3080,6 +3113,95 @@ def get_project_by_id(project_id: str):
         }
     finally:
         db.close()
+
+
+class ProjectCommentPayload(BaseModel):
+    comment: str
+    author: Optional[str] = None
+
+
+@router.post("/{project_id}/comments")
+@router.post("/projects/{project_id}/comments")
+def add_project_comment(
+    project_id: str,
+    payload: ProjectCommentPayload,
+    authorization: Optional[str] = Header(None),
+    x_user_email: Optional[str] = Header(None)
+):
+    """
+    Append an audited inter-role comment to the project's immutable chronological timeline.
+    Accessible to all platform participants across roles (NGO, Verifier, Admin, Corporate).
+    """
+    if not payload.comment or not payload.comment.strip():
+        raise HTTPException(status_code=400, detail="Comment text cannot be empty.")
+
+    db = SessionLocal()
+    try:
+        p = db.query(Project).filter(Project.project_id == project_id).first()
+        if not p:
+            raise HTTPException(status_code=404, detail="Project not found")
+
+        author_name = (payload.author or "").strip()
+        if not author_name and authorization and "bearer " in authorization.lower():
+            try:
+                from routers.auth_router import decode_access_token
+                token = authorization.split(" ")[-1]
+                claims = decode_access_token(token)
+                author_name = claims.get("name") or claims.get("sub") or claims.get("email")
+            except Exception:
+                pass
+        if not author_name and x_user_email:
+            author_name = x_user_email.strip()
+        if not author_name:
+            author_name = "Platform Participant"
+
+        clean_comment = payload.comment.strip()
+        hist = ProjectStatusHistory(
+            project_id=p.project_id,
+            from_status=p.status,
+            to_status=p.status,
+            changed_by=author_name,
+            comment=f"[Comment] {clean_comment}",
+            timestamp=datetime.utcnow()
+        )
+        db.add(hist)
+        db.commit()
+
+        # Log audit trail event
+        log_audit_event(
+            action="comment",
+            name=p.project_id,
+            detail=f"Audited comment added by {author_name}: {clean_comment[:120]}",
+            user=author_name,
+            db=db
+        )
+
+        # Dispatch real-time SSE event
+        try:
+            from core.events import publish
+            publish(
+                "project.comment",
+                {
+                    "project_id": p.project_id,
+                    "author": author_name,
+                    "comment": clean_comment,
+                    "timestamp": hist.timestamp.isoformat()
+                }
+            )
+        except Exception as se:
+            logger.warning("Failed to publish SSE comment event: %s", se)
+
+        return {
+            "status": "ok",
+            "message": "Comment recorded in chronological audit trail.",
+            "project_id": p.project_id,
+            "comment": clean_comment,
+            "author": author_name,
+            "timestamp": hist.timestamp.isoformat()
+        }
+    finally:
+        db.close()
+
 
 
 

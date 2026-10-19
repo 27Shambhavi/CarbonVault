@@ -158,7 +158,14 @@ export function NGODashboard() {
     >
       {data && (
         <div style={{padding:28}}>
-      <SectionHeader title="NGO Dashboard" subtitle={`${ngoName} — project overview and performance`}/>
+          <div style={{ marginBottom: 22 }}>
+            <h1 style={{ fontSize: 24, fontWeight: 900, color: T.t1, fontFamily: 'Fraunces, serif', margin: 0 }}>
+              NGO Project Workspace
+            </h1>
+            <div style={{ fontSize: 13, color: T.t3, marginTop: 4 }}>
+              {ngoName} — project overview and performance
+            </div>
+          </div>
 
       <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:15,marginBottom:24}}>
         <KPICard icon={TreePine}   label="Active Projects"    value={data.active_projects}              sub={`${data.total_projects} total submitted`} trend="up"   color={T.teal}/>
@@ -321,7 +328,17 @@ export function NGOProjects() {
 
   return (
     <div style={{padding:28}}>
-      <SectionHeader title="My Projects" subtitle="All submitted and approved projects" action={<Btn onClick={()=>setPage('new_project')}><Plus size={13}/>New Project</Btn>}/>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 22 }}>
+        <div>
+          <h1 style={{ fontSize: 24, fontWeight: 900, color: T.t1, fontFamily: 'Fraunces, serif', margin: 0 }}>
+            My Projects
+          </h1>
+          <div style={{ fontSize: 13, color: T.t3, marginTop: 4 }}>
+            All submitted, in-review, and approved ecological restoration projects
+          </div>
+        </div>
+        <Btn onClick={() => setPage('new_project')}><Plus size={13}/>New Project</Btn>
+      </div>
 
       {error && (
         <Card style={{marginBottom:16,padding:16,border:'1px solid rgba(244,63,94,0.25)'}}>
@@ -1025,7 +1042,14 @@ export function NGOSiteSuitability() {
 
   return (
     <div style={{padding:28}}>
-      <SectionHeader title="Site Suitability Engine" subtitle="Check if a location is suitable for carbon plantation"/>
+      <div style={{ marginBottom: 22 }}>
+        <h1 style={{ fontSize: 24, fontWeight: 900, color: T.t1, fontFamily: 'Fraunces, serif', margin: 0 }}>
+          Site Suitability Assessment
+        </h1>
+        <div style={{ fontSize: 13, color: T.t3, marginTop: 4 }}>
+          Bio-climatic remote sensing, soil suitability analysis, and carbon sequestration potential
+        </div>
+      </div>
 
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:20}}>
         <div>
@@ -1283,7 +1307,14 @@ export function NGOMarketplace() {
       loadingMessage="Loading marketplace…"
     >
       <div style={{padding:28}}>
-        <SectionHeader title="Marketplace" subtitle="Corporate buy requests — accept and receive payment via Razorpay"/>
+        <div style={{ marginBottom: 22 }}>
+          <h1 style={{ fontSize: 24, fontWeight: 900, color: T.t1, fontFamily: 'Fraunces, serif', margin: 0 }}>
+            Carbon Credit Marketplace
+          </h1>
+          <div style={{ fontSize: 13, color: T.t3, marginTop: 4 }}>
+            Corporate buy requests — accept and receive settlement via Razorpay payment gateway
+          </div>
+        </div>
 
       {/* Stats */}
       <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:14,marginBottom:22}}>

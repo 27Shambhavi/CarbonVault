@@ -7,11 +7,10 @@ import { useLiveStream } from './hooks/useLiveStream.js';
 import { LiveToastContainer } from './components/LiveToast.jsx';
 
 export const demoAccounts = [
-  { id: 1, name: 'Alex Mercer', email: 'admin@carbonvault.com', role: 'admin', admin_role: 'super_admin', org: 'Platform HQ' },
-  { id: 2, name: 'Dr. Sarah Jenkins', email: 'approver@carbonvault.com', role: 'approver', admin_role: 'approver', org: 'CarbonVault Auditing' },
-  { id: 3, name: 'Marcus Vance', email: 'verifier@carbonvault.com', role: 'verifier', org: 'Global Carbon Verifiers' },
-  { id: 4, name: 'EcoGuard Brazil', email: 'contact@ecoguard.org', role: 'ngo', org: 'EcoGuard Brazil' },
-  { id: 5, name: 'Microsoft Sustainability', email: 'carbon@microsoft.com', role: 'corporate', org: 'Microsoft Sustainability' },
+  { id: 1, name: 'Alex Mercer', email: 'admin@carbonvault.com', role: 'admin', org: 'Platform HQ' },
+  { id: 2, name: 'Marcus Vance', email: 'verifier@carbonvault.com', role: 'verifier', org: 'Global Carbon Verifiers' },
+  { id: 3, name: 'EcoGuard Brazil', email: 'contact@ecoguard.org', role: 'ngo', org: 'EcoGuard Brazil' },
+  { id: 4, name: 'Microsoft Sustainability', email: 'carbon@microsoft.com', role: 'corporate', org: 'Microsoft Sustainability' },
 ];
 
 function parseUrl() {
@@ -242,6 +241,14 @@ export function AppProvider({ children }) {
   }, [refreshNotifications, refreshKey]);
 
 
+  const normalizeUser = (u) => {
+    if (!u) return null;
+    if (u.role === 'approver') {
+      return { ...u, role: 'admin' };
+    }
+    return u;
+  };
+
   // Session restoration on page mount (Task 2.5)
   useEffect(() => {
     const token = getAuthToken();
@@ -249,7 +256,7 @@ export function AppProvider({ children }) {
       fetchCurrentUserProfile()
         .then((res) => {
           if (res.data && res.data.authenticated) {
-            setUser(res.data);
+            setUser(normalizeUser(res.data));
           } else {
             setAuthToken(null);
           }
@@ -287,22 +294,18 @@ export function AppProvider({ children }) {
       if (tokenOrCustomRole && typeof tokenOrCustomRole === 'string') {
         setAuthToken(tokenOrCustomRole);
       }
-      setUser(userOrRole);
+      setUser(normalizeUser(userOrRole));
       if (page === 'dashboard' || !page) setPage('dashboard');
       return;
     }
     // Fallback for role identifier
-    const role = userOrRole;
+    const role = userOrRole === 'approver' ? 'admin' : userOrRole;
     const account =
-      demoAccounts.find((a) => a.role === role && (!tokenOrCustomRole || a.admin_role === tokenOrCustomRole)) ||
-      demoAccounts.find((a) => a.role === role);
+      demoAccounts.find((a) => a.role === role) ||
+      demoAccounts.find((a) => a.role === 'admin');
     if (!account) return;
-    setUser(account);
-    if (account.role === 'admin') {
-      setApiAdminContext(account.admin_role || 'super_admin', account.email);
-    } else {
-      setApiAdminContext('', account.email);
-    }
+    setUser(normalizeUser(account));
+    setApiAdminContext('', account.email);
     if (page === 'dashboard' || !page) setPage('dashboard');
   };
 

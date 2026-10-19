@@ -93,12 +93,22 @@ export default function AdminApprovals() {
     loadMapFeatures();
     fetchAllProjects()
       .then(res => {
-        if (!res.error && Array.isArray(res.data)) {
-          setProjects(res.data);
-          if (res.data.length > 0 && !selId) {
-            setSelId(res.data[0].project_id || res.data[0].id);
+        const raw = res.data;
+        const list = Array.isArray(raw)
+          ? raw
+          : (Array.isArray(raw?.items) ? raw.items : (Array.isArray(raw?.projects) ? raw.projects : []));
+        setProjects(list);
+        if (list.length > 0) {
+          if (!selId || !list.some(p => (p.project_id || p.id) === selId)) {
+            setSelId(list[0].project_id || list[0].id);
           }
+        } else {
+          setSelId(null);
         }
+      })
+      .catch(() => {
+        setProjects([]);
+        setSelId(null);
       })
       .finally(() => setLoading(false));
   };
@@ -276,6 +286,15 @@ export default function AdminApprovals() {
 
   return (
     <div style={{ padding: 28 }}>
+      <div style={{ marginBottom: 22 }}>
+        <h1 style={{ fontSize: 24, fontWeight: 900, color: T.t1, fontFamily: 'Fraunces, serif', margin: 0 }}>
+          Review Queue (oversight)
+        </h1>
+        <div style={{ fontSize: 13, color: T.t3, marginTop: 4 }}>
+          Project evaluation, verifier audit oversight, and administrative approval gate
+        </div>
+      </div>
+
       {/* Top Level Approvals & KYC Tab Switcher */}
       <div style={{ display: 'flex', gap: 10, marginBottom: 20 }}>
         <button
@@ -1077,6 +1096,21 @@ export default function AdminApprovals() {
                     </div>
                   )}
                 </div>
+              </div>
+            </Card>
+          </div>
+        )}
+        {!sel && (
+          <div style={{ flex: 1 }}>
+            <Card style={{ textAlign: 'center', padding: '60px 24px', color: T.t3 }}>
+              <FolderCheck size={40} color={T.teal} style={{ margin: '0 auto 14px', opacity: 0.8 }} />
+              <div style={{ fontSize: 18, fontWeight: 800, color: T.t1, fontFamily: 'Fraunces, serif' }}>
+                Review Queue (oversight)
+              </div>
+              <div style={{ fontSize: 13, color: T.t3, marginTop: 6, maxWidth: 440, margin: '6px auto 0' }}>
+                {projects.length === 0
+                  ? 'No projects in registry. When NGOs submit projects, they will arrive here for integrity screening and approval.'
+                  : 'No project selected. Select a project from the left queue to review its status and documents.'}
               </div>
             </Card>
           </div>

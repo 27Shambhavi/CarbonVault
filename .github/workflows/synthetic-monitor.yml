@@ -1,0 +1,54 @@
+name: CarbonVault Synthetic Monitor
+
+on:
+  schedule:
+    # Run every 4 hours (synthetic probe, decoupled from 10-minute keepalive)
+    - cron: '0 */4 * * *'
+  workflow_dispatch:
+
+jobs:
+  synthetic-probe:
+    name: Probe Production Services & APIs
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: github.repository == '27Shambhavi/CarbonVault'
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Verify Frontend Availability
+        run: |
+          echo "Checking Frontend at https://final-carbon-vault.vercel.app..."
+          FE_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 60 --retry 2 https://final-carbon-vault.vercel.app || echo "000")
+          echo "Frontend HTTP Status: $FE_STATUS"
+          if [ "$FE_STATUS" -ne 200 ]; then
+            echo "::error ::Frontend is unreachable or returning status $FE_STATUS"
+            exit 1
+          fi
+
+      - name: Verify Backend Health & Database Readiness
+        run: |
+          echo "Checking Backend Readiness at https://carbonvault-api.onrender.com/ready..."
+          READY_RES=$(curl -s --max-time 120 --retry 3 --retry-delay 5 https://carbonvault-api.onrender.com/ready || echo '{"status":"error"}')
+          echo "Readiness response: $READY_RES"
+
+          STATUS_VAL=$(echo "$READY_RES" | grep -o '"status":"[^"]*"' | head -1 | cut -d'"' -f4)
+          if [ "$STATUS_VAL" != "ready" ]; then
+            echo "::warning ::Backend readiness probe returned status '$STATUS_VAL' instead of 'ready'"
+          else
+            echo "Backend database and core services are READY."
+          fi
+
+      - name: Verify Realtime Stream Health
+        run: |
+          echo "Checking Realtime Status at https://carbonvault-api.onrender.com/realtime/status..."
+          RT_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 60 --retry 2 https://carbonvault-api.onrender.com/realtime/status || echo "000")
+          echo "Realtime Status HTTP: $RT_STATUS"
+          if [ "$RT_STATUS" -ne 200 ]; then
+            echo "::warning ::Realtime stream endpoint returned HTTP $RT_STATUS"
+          fi

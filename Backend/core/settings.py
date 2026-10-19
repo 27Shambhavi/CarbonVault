@@ -123,7 +123,10 @@ class Settings(BaseSettings):
     def strip_env_strings(cls, v: Optional[str]) -> str:
         if v is None:
             return ""
-        return str(v).strip()
+        s = str(v).strip()
+        if (s.startswith('"') and s.endswith('"')) or (s.startswith("'") and s.endswith("'")):
+            s = s[1:-1].strip()
+        return s
 
     @model_validator(mode="after")
     def validate_production_and_payment_invariants(self) -> "Settings":

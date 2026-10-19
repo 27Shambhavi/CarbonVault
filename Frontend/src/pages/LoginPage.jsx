@@ -28,8 +28,8 @@ const defaultDemoRoles = [
   {
     role: 'admin',
     label: 'Admin',
-    desc: 'Runs the platform: users, prices, payments, audit.',
-    tooltip: 'Runs the platform: platform health, KYC review, users, pricing, payments & reconciliation, ML retraining, audit.',
+    desc: 'Runs platform & approves with verifier sign-off.',
+    tooltip: 'Platform operations: health, KYC review, users, pricing, payments & reconciliation, Review Queue oversight & project decisions, ML retraining, audit.',
     icon: ShieldCheck,
     color: T.goldL,
     email: 'admin@carbonvault.com',
@@ -37,20 +37,9 @@ const defaultDemoRoles = [
     name: 'Alex Mercer'
   },
   {
-    role: 'approver',
-    label: 'Approver',
-    desc: 'Reviews projects and makes the decision.',
-    tooltip: 'Primary decision-maker: decision queue, approve / reject / request data, SLA timer, risk assessment.',
-    icon: UserCheck,
-    color: T.skyL,
-    email: 'approver@carbonvault.com',
-    pass: 'approver123',
-    name: 'Dr. Sarah Jenkins'
-  },
-  {
     role: 'verifier',
     label: 'Verifier',
-    desc: 'Verifies sites in the field and signs off.',
+    desc: 'Verifies sites in field & signs off.',
     tooltip: 'Field verification: inspect polygons, upload field evidence, sign off on verification.',
     icon: Award,
     color: T.tealL,
@@ -61,7 +50,7 @@ const defaultDemoRoles = [
   {
     role: 'ngo',
     label: 'NGO',
-    desc: 'Registers projects and receives funding.',
+    desc: 'Registers projects & receives funding.',
     tooltip: 'Project developer: registers projects, uploads MRV data, submits quarterly updates, receives funding.',
     icon: TreePine,
     color: T.emeraldL,
@@ -72,7 +61,7 @@ const defaultDemoRoles = [
   {
     role: 'corporate',
     label: 'Corporate',
-    desc: 'Buys and retires credits.',
+    desc: 'Buys & retires credits.',
     tooltip: 'Marketplace: buys and retires verified credits, downloads official retirement certificates.',
     icon: Building2,
     color: T.violetLL,
@@ -481,7 +470,7 @@ export default function LoginPage() {
 
               {/* Demo Quick-Fill Shortcut Tiles (Demo Mode Only: 404 in production hides tiles) */}
               {demoMode && (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 6, marginBottom: 18 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6, marginBottom: 18 }}>
                   {roleTiles.map(({ role, label, desc, tooltip, icon: Icon, color, email: roleEmail, pass }) => {
                     const active = activeRole === role;
                     return (

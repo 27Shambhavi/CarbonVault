@@ -22,12 +22,6 @@ const adminNav = [
   { id: 'settings', label: 'Settings', icon: Settings },
 ];
 
-const approverNav = [
-  { id: 'dashboard', label: 'Home', icon: LayoutDashboard },
-  { id: 'decision_queue', label: 'Decision Queue', icon: FolderCheck },
-  { id: 'decided', label: 'Decided', icon: Award },
-  { id: 'my_audit', label: 'My Audit', icon: FileSearch },
-];
 
 const verifierNav = [
   { id: 'dashboard', label: 'Home', icon: LayoutDashboard },
@@ -62,7 +56,6 @@ const publicNav = [
 
 const navMap = {
   admin: adminNav,
-  approver: approverNav,
   verifier: verifierNav,
   ngo: ngoNav,
   corporate: corporateNav,
@@ -71,7 +64,6 @@ const navMap = {
 
 const RC = {
   admin:     { color: T.goldL,    bg: 'rgba(245,158,11,0.1)',   border: 'rgba(251,191,36,0.25)',   label: 'Platform Operator',  badge: 'Admin' },
-  approver:  { color: T.skyL,     bg: 'rgba(56,189,248,0.1)',   border: 'rgba(56,189,248,0.25)',   label: 'Project Reviewer',   badge: 'Approver' },
   verifier:  { color: T.tealL,    bg: 'rgba(45,212,191,0.1)',   border: 'rgba(45,212,191,0.25)',   label: 'Accredited Verifier', badge: 'Verifier' },
   ngo:       { color: T.emeraldL, bg: 'rgba(16,185,129,0.1)',   border: 'rgba(16,185,129,0.25)',   label: 'Project Developer',  badge: 'NGO' },
   corporate: { color: T.violetLL, bg: 'rgba(167,139,250,0.1)',  border: 'rgba(167,139,250,0.25)',  label: 'Corporate Buyer',    badge: 'Corporate' },

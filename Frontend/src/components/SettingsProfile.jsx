@@ -85,7 +85,14 @@ export function SettingsPage() {
 
   return (
     <div style={{ padding:28 }}>
-      <SectionHeader title="Settings" subtitle="Manage your account, organisation compliance, and privacy preferences" />
+      <div style={{ marginBottom: 22 }}>
+        <h1 style={{ fontSize: 24, fontWeight: 900, color: T.t1, fontFamily: 'Fraunces, serif', margin: 0 }}>
+          Account & Organisation Settings
+        </h1>
+        <div style={{ fontSize: 13, color: T.t3, marginTop: 4 }}>
+          Manage your account, organisation compliance, and privacy preferences
+        </div>
+      </div>
 
       {msg && (
         <div style={{
@@ -310,7 +317,14 @@ export function ProfilePage() {
 
   return (
     <div style={{ padding:28 }}>
-      <SectionHeader title="Profile & Entity Identity" />
+      <div style={{ marginBottom: 22 }}>
+        <h1 style={{ fontSize: 24, fontWeight: 900, color: T.t1, fontFamily: 'Fraunces, serif', margin: 0 }}>
+          {user?.role === 'verifier' ? 'Verifier Accreditation Profile' : 'Profile & Entity Identity'}
+        </h1>
+        <div style={{ fontSize: 13, color: T.t3, marginTop: 4 }}>
+          {user?.role === 'verifier' ? 'ISO 14064-3 Accreditation credentials and auditor authorization' : 'Personal account details and organization affiliation'}
+        </div>
+      </div>
       <div style={{ display:'grid', gridTemplateColumns:'280px 1fr', gap:20 }}>
         <Card style={{ textAlign:'center', position:'relative', overflow:'hidden' }}>
           <div style={{ position:'absolute', top:0, left:0, right:0, height:2, background:`linear-gradient(90deg, transparent, ${rc}, transparent)` }} />

@@ -162,6 +162,7 @@ export function useLiveStream(user = null) {
 
       es.onopen = () => {
         setStatus('connected');
+        setLastEventAt(new Date());
         setLastError(null);
         backoffRef.current = 1000;
         failCountRef.current = 0;
@@ -170,8 +171,8 @@ export function useLiveStream(user = null) {
 
       // Heartbeat comment or custom event handling
       es.onmessage = (e) => {
+        setLastEventAt(new Date());
         if (!e.data || e.data.trim() === 'heartbeat' || e.data.trim() === 'connected') {
-          setLastEventAt(new Date());
           return;
         }
         try {
@@ -183,9 +184,19 @@ export function useLiveStream(user = null) {
             timestamp: new Date().toISOString(),
           });
         } catch {
-          setLastEventAt(new Date());
+          // Keep lastEventAt updated
         }
       };
+
+      const handleHeartbeatEvent = () => {
+        setLastEventAt(new Date());
+        setStatus('connected');
+        setLastError(null);
+      };
+
+      es.addEventListener('connected', handleHeartbeatEvent);
+      es.addEventListener('heartbeat', handleHeartbeatEvent);
+      es.addEventListener('ping', handleHeartbeatEvent);
 
       // Register standard platform event listeners
       const eventTypes = [

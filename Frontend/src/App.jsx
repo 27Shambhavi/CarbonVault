@@ -1,35 +1,36 @@
 import { AppProvider, useApp } from './AppContext.jsx';
 import LoginPage from './pages/LoginPage.jsx';
 import { ErrorBoundary } from './components/ErrorBoundary.jsx';
-import { Sidebar, Navbar, NotificationCenter } from './components/Layout.jsx';
-import AppFooter from './components/Footer.jsx';
 import { SettingsPage, ProfilePage } from './components/SettingsProfile.jsx';
 import { T } from './components/UI.jsx';
 
-// Admin
+// Role Shells
+import { AdminShell, VerifierShell, NgoShell, CorporateShell, PublicShell } from './components/shells/index.js';
+
+// Admin Views
 import AdminDashboard from './components/admin/AdminDashboard.jsx';
 import AdminUsers from './components/admin/AdminUsers.jsx';
 import AdminApprovals from './components/admin/AdminApprovals.jsx';
 import { AdminPricing, AdminAnalytics } from './components/admin/AdminPricingAnalytics.jsx';
+import { AdminRefundPayouts } from './components/admin/AdminRefundPayouts.jsx';
+import AdminMLModels from './components/admin/AdminMLModels.jsx';
 
-// NGO
+// NGO Views
 import { NGODashboard, NGOProjects, NGONewProject, NGOSiteSuitability, NGOMarketplace } from './components/ngo/NGOPages.jsx';
 
-// Corporate
+// Corporate Views
 import { CorporateDashboard, CorporateMarketplace, CorporateWallet, CorporateESG } from './components/corporate/CorporatePages.jsx';
 import CorporateCalculator from './components/corporate/CorporateCalculator.jsx';
 
-// Public
+// Public Views
 import { PublicDashboard, PublicLeaderboard, PublicAudit, PublicCertificates, PublicClimate } from './components/public/PublicPages.jsx';
 
-// Verifier / Approver
+// Verifier View
 import VerifierDashboard from './components/verifier/VerifierDashboard.jsx';
-import ApproverDashboard from './components/approver/ApproverDashboard.jsx';
 
-// Dynamic Project & ML screens (Tasks 4 & 5)
+// Dynamic Project Screens
 import ProjectDetail from './components/projects/ProjectDetail.jsx';
 import ProjectWizard from './components/projects/ProjectWizard.jsx';
-import AdminMLModels from './components/admin/AdminMLModels.jsx';
 
 function PageRouter() {
   const { user, page } = useApp();
@@ -47,35 +48,11 @@ function PageRouter() {
     if (page === 'organisations')    return <AdminUsers initialTab="organizations" />;
     if (page === 'users')            return <AdminUsers />;
     if (page === 'pricing')          return <AdminPricing />;
-    if (page === 'payments_payouts' || page === 'analytics') return <AdminAnalytics />;
+    if (page === 'payments_payouts') return <AdminRefundPayouts />;
+    if (page === 'analytics')        return <AdminAnalytics />;
     if (page === 'ml_models')        return <AdminMLModels />;
     if (page === 'audit')            return <PublicAudit />;
     return <AdminDashboard />;
-  }
-
-  if (user.role === 'approver') {
-    // Strictly forbid admin features (pricing, users, payouts, orgs, ml_models)
-    if (['pricing', 'users', 'organisations', 'payments_payouts', 'analytics', 'ml_models'].includes(page)) {
-      return (
-        <div style={{ padding: 48, textAlign: 'center' }}>
-          <div style={{ background: 'rgba(244,63,94,0.08)', border: '1px solid rgba(244,63,94,0.3)', borderRadius: 14, padding: 36, maxWidth: 520, margin: '0 auto' }}>
-            <div style={{ fontSize: 22, fontWeight: 800, color: T.roseL, marginBottom: 8, fontFamily: 'Fraunces, serif' }}>
-              403 — Administrative Function Forbidden
-            </div>
-            <div style={{ fontSize: 13, color: T.t2, lineHeight: 1.6, marginBottom: 20 }}>
-              Separation of Duties Policy: Approver roles review ecological fidelity and decide project admission, but cannot access administrative operations, pricing, user roles, or financial payouts.
-            </div>
-            <button
-              onClick={() => window.location.href = '/'}
-              style={{ background: `linear-gradient(135deg, ${T.teal}, ${T.tealD})`, color: '#021a17', border: 'none', borderRadius: 8, padding: '10px 20px', fontWeight: 800, cursor: 'pointer' }}
-            >
-              Return to Decision Desk
-            </button>
-          </div>
-        </div>
-      );
-    }
-    return <ApproverDashboard />;
   }
 
   if (user.role === 'verifier') {
@@ -112,28 +89,30 @@ function PageRouter() {
 
   return (
     <div style={{ padding: 28, color: T.t2, fontSize: 14 }}>
-      No dashboard for role &quot;{String(user.role)}&quot;. Use Admin, NGO, Corporate, or Public Explorer on the login screen.
+      No dashboard for role &quot;{String(user.role)}&quot;. Use Admin, Verifier, NGO, Corporate, or Public Explorer on the login screen.
     </div>
   );
+}
+
+function RoleShell({ children }) {
+  const { user } = useApp();
+  const role = user?.role || 'public';
+  if (role === 'admin')     return <AdminShell>{children}</AdminShell>;
+  if (role === 'verifier')  return <VerifierShell>{children}</VerifierShell>;
+  if (role === 'ngo')       return <NgoShell>{children}</NgoShell>;
+  if (role === 'corporate') return <CorporateShell>{children}</CorporateShell>;
+  return <PublicShell>{children}</PublicShell>;
 }
 
 function AppShell() {
   const { user, page } = useApp();
   if (!user) return <LoginPage />;
   return (
-    <div style={{ display:'flex', minHeight:'100vh', background: T.bg0 }}>
-      <Sidebar />
-      <div style={{ flex:1, display:'flex', flexDirection:'column', minWidth:0 }}>
-        <Navbar />
-        <main style={{ flex:1, overflowY:'auto' }}>
-          <ErrorBoundary key={`${user?.role}-${page}`} resetKey={`${user?.role}-${page}`}>
-            <PageRouter />
-          </ErrorBoundary>
-        </main>
-        <AppFooter />
-      </div>
-      <NotificationCenter />
-    </div>
+    <RoleShell>
+      <ErrorBoundary key={`${user?.role}-${page}`} resetKey={`${user?.role}-${page}`}>
+        <PageRouter />
+      </ErrorBoundary>
+    </RoleShell>
   );
 }
 

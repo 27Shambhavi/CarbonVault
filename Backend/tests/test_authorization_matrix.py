@@ -1,6 +1,7 @@
 """
 CarbonVault Phase 3: Authorization Matrix Test Suite.
 Validates the authorization matrix: (role x endpoint -> 200/401/403/422).
+Consolidated ONE Admin role model (Approver merged into Admin; 4 sign-in roles: Admin, Verifier, NGO, Corporate).
 Verifies that:
   - Unauthenticated anonymous requests to protected routes are rejected with 401 Unauthorized.
   - Authenticated users with insufficient privileges receive 403 Forbidden.
@@ -27,17 +28,16 @@ client = TestClient(app)
 
 @pytest.fixture(scope="module")
 def auth_tokens():
-    """Create and seed test users for all RBAC roles."""
+    """Create and seed test users for all 4 RBAC roles."""
     db = SessionLocal()
     try:
-        def get_or_create_user(email, name, role, admin_role=None):
+        def get_or_create_user(email, name, role):
             u = db.query(User).filter(User.email == email).first()
             if not u:
                 u = User(
                     name=name,
                     email=email,
                     role=role,
-                    admin_role=admin_role,
                     password_hash="$2b$12$D25z1bWd7d/U30Xv4e5Z4.4K9q8G1B5/L8L1N3R9f6F8B0W5Z8D1m",
                     status="active",
                     joined="2026-01-01"
@@ -47,20 +47,17 @@ def auth_tokens():
                 db.refresh(u)
             else:
                 u.role = role
-                u.admin_role = admin_role
                 db.commit()
             return u
 
-        admin_u = get_or_create_user("matrix.admin@carbonvault.com", "Matrix Admin", "admin", "super_admin")
-        approver_u = get_or_create_user("matrix.approver@carbonvault.com", "Matrix Approver", "approver", "approver")
-        verifier_u = get_or_create_user("matrix.verifier@carbonvault.com", "Matrix Verifier", "verifier", None)
-        ngo_u = get_or_create_user("matrix.ngo@ecoguard.org", "Matrix NGO", "ngo", None)
-        corp_u = get_or_create_user("matrix.corp@microsoft.com", "Matrix Corp", "buyer", None)
+        admin_u = get_or_create_user("matrix.admin@carbonvault.com", "Matrix Admin", "admin")
+        verifier_u = get_or_create_user("matrix.verifier@carbonvault.com", "Matrix Verifier", "verifier")
+        ngo_u = get_or_create_user("matrix.ngo@ecoguard.org", "Matrix NGO", "ngo")
+        corp_u = get_or_create_user("matrix.corp@microsoft.com", "Matrix Corp", "corporate")
 
         return {
             "anonymous": {},
             "admin": {"Authorization": f"Bearer {create_access_token(admin_u)}"},
-            "approver": {"Authorization": f"Bearer {create_access_token(approver_u)}"},
             "verifier": {"Authorization": f"Bearer {create_access_token(verifier_u)}"},
             "ngo": {"Authorization": f"Bearer {create_access_token(ngo_u)}"},
             "corporate": {"Authorization": f"Bearer {create_access_token(corp_u)}"},
@@ -84,11 +81,6 @@ def test_auth_me_matrix(auth_tokens):
     res_corp = client.get("/auth/me", headers=auth_tokens["corporate"])
     assert res_corp.status_code == 200
     assert res_corp.json()["user"]["role"] in ("buyer", "corporate")
-
-    # Approver -> 200
-    res_app = client.get("/auth/me", headers=auth_tokens["approver"])
-    assert res_app.status_code == 200
-    assert res_app.json()["user"]["role"] == "approver"
 
     # Verifier -> 200
     res_ver = client.get("/auth/me", headers=auth_tokens["verifier"])
@@ -117,22 +109,18 @@ def test_config_set_matrix(auth_tokens):
     res_corp = client.post("/config/set", json=payload, headers=auth_tokens["corporate"])
     assert res_corp.status_code == 403
 
-    # Approver (non-super-admin) -> 403
-    res_app = client.post("/config/set", json=payload, headers=auth_tokens["approver"])
-    assert res_app.status_code == 403
-
     # Verifier -> 403
     res_ver = client.post("/config/set", json=payload, headers=auth_tokens["verifier"])
     assert res_ver.status_code == 403
 
-    # Super Admin -> 200
+    # Admin -> 200
     res_admin = client.post("/config/set", json=payload, headers=auth_tokens["admin"])
     assert res_admin.status_code == 200
     assert res_admin.json()["status"] == "ok"
 
 
 def test_pricing_update_matrix(auth_tokens):
-    """POST /pricing requires super_admin privilege."""
+    """POST /pricing requires admin privilege."""
     payload = {
         "base": 28.5,
         "demand": 1.12,
@@ -153,73 +141,91 @@ def test_pricing_update_matrix(auth_tokens):
     res_corp = client.post("/pricing", json=payload, headers=auth_tokens["corporate"])
     assert res_corp.status_code == 403
 
-    # Approver -> 403 (cannot modify pricing)
-    res_app = client.post("/pricing", json=payload, headers=auth_tokens["approver"])
-    assert res_app.status_code == 403
-
     # Verifier -> 403
     res_ver = client.post("/pricing", json=payload, headers=auth_tokens["verifier"])
     assert res_ver.status_code == 403
 
-    # Super Admin -> 200
+    # Admin -> 200
     res_admin = client.post("/pricing", json=payload, headers=auth_tokens["admin"])
     assert res_admin.status_code == 200
     assert res_admin.json()["final_price"] > 0
 
 
-def test_approver_forbidden_admin_endpoints(auth_tokens):
-    """Approvers cannot call users, pricing, payouts, KYC review, or project reassignment endpoints."""
-    # 1. User management
-    res_user = client.post("/users/invite", json={"name": "Test", "email": "test@test.com", "role": "ngo"}, headers=auth_tokens["approver"])
-    assert res_user.status_code == 403
+def test_non_admin_forbidden_endpoints(auth_tokens):
+    """Non-admin roles (NGO, Corporate, Verifier) cannot call admin management endpoints."""
+    forbidden_roles = ["ngo", "corporate", "verifier"]
 
-    # 2. KYC review
-    res_kyc = client.post("/onboarding/admin/review", json={"profile_id": 1, "decision": "verified"}, headers=auth_tokens["approver"])
-    assert res_kyc.status_code == 403
+    for r in forbidden_roles:
+        h = auth_tokens[r]
+        # 1. User invite
+        res_user = client.post("/users/invite", json={"name": "Test", "email": f"test_{r}@test.com", "role": "ngo"}, headers=h)
+        assert res_user.status_code == 403, f"Role {r} should be blocked from /users/invite"
 
-    # 3. Project Reassign
-    res_reassign = client.post("/projects/PRJ-MAN-AMAZON/reassign", json={"assignee_role": "approver", "assignee_email": "test@test.com"}, headers=auth_tokens["approver"])
-    assert res_reassign.status_code == 403
+        # 2. KYC review
+        res_kyc = client.post("/onboarding/admin/review", json={"profile_id": 1, "decision": "verified"}, headers=h)
+        assert res_kyc.status_code == 403, f"Role {r} should be blocked from /onboarding/admin/review"
 
-    # 4. Project Suspend
-    res_suspend = client.post("/projects/PRJ-MAN-AMAZON/suspend", json={"reason": "Audit issue"}, headers=auth_tokens["approver"])
-    assert res_suspend.status_code == 403
+        # 3. Project Reassign
+        res_reassign = client.post("/projects/PRJ-MAN-AMAZON/reassign", json={"assignee_role": "verifier", "assignee_email": "test@test.com"}, headers=h)
+        assert res_reassign.status_code == 403, f"Role {r} should be blocked from /projects/.../reassign"
+
+        # 4. Project Suspend
+        res_suspend = client.post("/projects/PRJ-MAN-AMAZON/suspend", json={"reason": "Audit issue"}, headers=h)
+        assert res_suspend.status_code == 403, f"Role {r} should be blocked from /projects/.../suspend"
 
 
 def test_admin_override_workflow(auth_tokens):
-    """Admin cannot silently approve: requires override=True, override_confirmed=True, and a mandatory reason."""
-    # 1. Admin attempts approval without override -> 400 Bad Request
-    res_silent = client.patch(
-        "/projects/PRJ-MAN-AMAZON/status",
-        json={"status": "approved", "comment": "Silent admin approval"},
-        headers=auth_tokens["admin"]
-    )
-    assert res_silent.status_code == 400
-    assert "Admin override required" in res_silent.json()["detail"]
+    """Admin cannot approve an unverified project without independent verifier sign-off unless explicit override is provided."""
+    db = SessionLocal()
+    try:
+        from credit_calculation.credits_module.db_models import Project
+        unverified_prj = db.query(Project).filter(Project.project_id == "PRJ-UNVERIFIED-TEST").first()
+        if not unverified_prj:
+            unverified_prj = Project(
+                project_id="PRJ-UNVERIFIED-TEST",
+                name="Unverified Test Plantation",
+                status="pending",
+                area_hectares=50.0,
+                number_of_trees=5000,
+                plantation_type="teak"
+            )
+            db.add(unverified_prj)
+            db.commit()
 
-    # 2. Admin provides valid override reason and confirmation -> 200 OK
-    res_override = client.patch(
-        "/projects/PRJ-MAN-AMAZON/status",
-        json={
-            "status": "approved",
-            "comment": "Administrative override execution",
-            "override": True,
-            "override_confirmed": True,
-            "override_reason": "Executive scientific board reviewed satellite telemetry and signed off."
-        },
-        headers=auth_tokens["admin"]
-    )
-    assert res_override.status_code == 200
+        # 1. Admin attempts approval of unverified project without override -> 400 Bad Request
+        res_silent = client.patch(
+            "/projects/PRJ-UNVERIFIED-TEST/status",
+            json={"status": "approved", "comment": "Approval attempt without verifier sign-off"},
+            headers=auth_tokens["admin"]
+        )
+        assert res_silent.status_code == 400
+        assert "Approval blocked" in res_silent.json()["detail"]
+
+        # 2. Admin provides valid override reason (>= 10 chars) and confirmation -> 200 OK
+        res_override = client.patch(
+            "/projects/PRJ-UNVERIFIED-TEST/status",
+            json={
+                "status": "approved",
+                "comment": "Administrative override execution",
+                "override": True,
+                "override_confirmed": True,
+                "override_reason": "Executive scientific board reviewed satellite telemetry and signed off."
+            },
+            headers=auth_tokens["admin"]
+        )
+        assert res_override.status_code == 200
+    finally:
+        db.close()
 
 
-def test_approver_four_eyes_violation(auth_tokens):
-    """Approver cannot approve a project belonging to an organization they are affiliated with."""
+def test_admin_separation_of_duties_violation(auth_tokens):
+    """Admin cannot approve a project belonging to an organization they are affiliated with."""
     db = SessionLocal()
     try:
         from credit_calculation.credits_module.db_models import Project, NGO
-        affiliated_ngo = db.query(NGO).filter(NGO.email == "matrix.approver@carbonvault.com").first()
+        affiliated_ngo = db.query(NGO).filter(NGO.email == "matrix.admin@carbonvault.com").first()
         if not affiliated_ngo:
-            affiliated_ngo = NGO(name="Approver Linked NGO", email="matrix.approver@carbonvault.com")
+            affiliated_ngo = NGO(name="Admin Linked NGO", email="matrix.admin@carbonvault.com")
             db.add(affiliated_ngo)
             db.commit()
             db.refresh(affiliated_ngo)
@@ -236,13 +242,15 @@ def test_approver_four_eyes_violation(auth_tokens):
                 plantation_type="reforestation"
             )
             db.add(test_prj)
-            db.commit()
+        else:
+            test_prj.ngo_id = affiliated_ngo.id
+        db.commit()
 
-        # Approver attempts to approve affiliated project -> 403
+        # Admin attempts to approve affiliated project -> 403
         res = client.patch(
             "/projects/PRJ-FOUR-EYES-TEST/status",
             json={"status": "approved", "comment": "Self-dealing attempt"},
-            headers=auth_tokens["approver"]
+            headers=auth_tokens["admin"]
         )
         assert res.status_code == 403
         assert "Four-eyes violation" in res.json()["detail"]

@@ -256,12 +256,12 @@ def test_tampered_client_cannot_gain_super_admin():
     R2-6: A tampered client (changed local storage, edited request headers such as X-Admin-Role: super_admin)
     cannot gain super-admin rights.
     """
-    # 1. Login as Approver
-    approver_login = client.post("/auth/login", json={"email": "approver@carbonvault.com", "password": "approver123"})
-    assert approver_login.status_code == 200, f"Approver login failed: {approver_login.text}"
-    approver_token = approver_login.json()["access_token"]
+    # 1. Login as Verifier (non-admin role)
+    verifier_login = client.post("/auth/login", json={"email": "verifier@carbonvault.com", "password": "verifier123"})
+    assert verifier_login.status_code == 200, f"Verifier login failed: {verifier_login.text}"
+    verifier_token = verifier_login.json()["access_token"]
 
-    # 2. Approver attempts to access super-admin endpoint (/pricing) without header tampering
+    # 2. Verifier attempts to access admin endpoint (/pricing) without header tampering
     pricing_payload = {
         "base": 30.0,
         "demand": 1.1,
@@ -272,32 +272,32 @@ def test_tampered_client_cannot_gain_super_admin():
     resp1 = client.post(
         "/pricing",
         json=pricing_payload,
-        headers={"Authorization": f"Bearer {approver_token}"}
+        headers={"Authorization": f"Bearer {verifier_token}"}
     )
     assert resp1.status_code == 403, f"Expected 403, got {resp1.status_code}"
     assert "Super Admin privilege required" in resp1.json()["detail"]
 
-    # 3. Tampered client: Approver token + forged X-Admin-Role: super_admin header
+    # 3. Tampered client: Verifier token + forged X-Admin-Role: super_admin header
     resp2 = client.post(
         "/pricing",
         json=pricing_payload,
         headers={
-            "Authorization": f"Bearer {approver_token}",
+            "Authorization": f"Bearer {verifier_token}",
             "X-Admin-Role": "super_admin",
-            "X-Admin-Email": "approver@carbonvault.com"
+            "X-Admin-Email": "verifier@carbonvault.com"
         }
     )
     assert resp2.status_code == 403, f"Tampered client should be blocked with 403, got {resp2.status_code}"
     assert "Super Admin privilege required" in resp2.json()["detail"]
 
-    # 4. Tampered client: Approver attempts to invite users with forged header
+    # 4. Tampered client: Verifier attempts to invite users with forged header
     invite_resp = client.post(
         "/users/invite",
         json={"name": "Hacked User", "email": "hacked@example.com", "role": "admin"},
         headers={
-            "Authorization": f"Bearer {approver_token}",
+            "Authorization": f"Bearer {verifier_token}",
             "X-Admin-Role": "super_admin",
-            "X-Admin-Email": "approver@carbonvault.com"
+            "X-Admin-Email": "verifier@carbonvault.com"
         }
     )
     assert invite_resp.status_code == 403

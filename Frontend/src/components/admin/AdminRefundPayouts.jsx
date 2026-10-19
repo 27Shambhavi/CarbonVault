@@ -86,10 +86,26 @@ export function AdminRefundPayouts() {
   };
 
   return (
-    <div style={{ background: 'var(--surface-card, rgba(14,18,27,0.8))', border: `1px solid ${T.border}`, borderRadius: 14, padding: 22, marginTop: 20 }}>
-      {/* Tab selection */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: `1px solid ${T.border}`, paddingBottom: 14, marginBottom: 20 }}>
-        <div style={{ display: 'flex', gap: 10 }}>
+    <div style={{ padding: 28 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 22 }}>
+        <div>
+          <h1 style={{ fontSize: 24, fontWeight: 900, color: T.t1, fontFamily: 'Fraunces, serif', margin: 0 }}>
+            Payments and Payouts
+          </h1>
+          <div style={{ fontSize: 13, color: T.t3, marginTop: 4 }}>
+            Transaction reconciliation, corporate credit purchase reversals, and NGO settlement ledger.
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+          <Badge type="teal" label="Reconciliation: Live & Synced" />
+          <Badge type="gold" label={`Ledger: ${transactions.length} Txns · ${payouts.length} Payouts`} />
+        </div>
+      </div>
+
+      <div style={{ background: 'var(--surface-card, rgba(14,18,27,0.8))', border: `1px solid ${T.border}`, borderRadius: 14, padding: 22 }}>
+        {/* Tab selection */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: `1px solid ${T.border}`, paddingBottom: 14, marginBottom: 20 }}>
+          <div style={{ display: 'flex', gap: 10 }}>
           <button
             onClick={() => setActiveTab('refunds')}
             style={{
@@ -380,5 +396,6 @@ export function AdminRefundPayouts() {
         </Modal>
       )}
     </div>
+  </div>
   );
 }

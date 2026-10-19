@@ -91,10 +91,10 @@ export default function AdminMLModels() {
               </div>
               <div>
                 <h1 style={{ fontSize: 24, fontWeight: 900, color: T.t1, margin: 0, fontFamily: 'Fraunces, serif' }}>
-                  Audited ML Models & Inference Inspector
+                  Machine Learning Engine
                 </h1>
                 <div style={{ fontSize: 13, color: T.t3, marginTop: 2 }}>
-                  Autonomous vision screening, peer anomaly detection, satellite harmonics, and reviewer learning.
+                  Audited ML Models & Inference Inspector: Autonomous vision screening, peer anomaly detection, and satellite harmonics.
                 </div>
               </div>
             </div>

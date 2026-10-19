@@ -1,27 +1,33 @@
-name: CarbonVault Keep-Alive & Synthetic Monitor
+name: CarbonVault Keep-Alive
 
 on:
   schedule:
-    # Run every 10 minutes to prevent Render free tier from sleeping
+    # Run every 10 minutes to prevent Render web service from sleeping
     - cron: '*/10 * * * *'
   workflow_dispatch:
 
 jobs:
-  ping-health:
+  keepalive:
+    name: Warm Render Backend
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    if: github.repository == '27Shambhavi/CarbonVault'
     steps:
       - name: Ping Render Backend Health Probe
         run: |
-          echo "Pinging https://carbonvault-api.onrender.com/health..."
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 60 https://carbonvault-api.onrender.com/health)
-          echo "Health HTTP Status: $STATUS"
-          if [ "$STATUS" -ne 200 ]; then
-            echo "::warning ::Backend /health returned status $STATUS (may be waking up)"
-          fi
+          echo "Pinging https://carbonvault-api.onrender.com/health to keep service awake..."
+          # 120s timeout to allow free tier spin-up, 3 retries with exponential delay, exit 0 to prevent e-mail spam
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            --max-time 120 \
+            --retry 3 \
+            --retry-delay 5 \
+            --retry-connrefused \
+            https://carbonvault-api.onrender.com/health || echo "000")
 
-      - name: Ping Render Backend Readiness Probe
-        run: |
-          echo "Pinging https://carbonvault-api.onrender.com/ready..."
-          READY_BODY=$(curl -s --max-time 60 https://carbonvault-api.onrender.com/ready)
-          echo "Readiness response: $READY_BODY"
+          echo "Health HTTP Status: $STATUS"
+          if [ "$STATUS" -eq 200 ]; then
+            echo "Backend is warm and responding (HTTP 200)."
+          else
+            echo "::warning ::Backend returned HTTP $STATUS (service may still be waking up). Skipping step failure to prevent e-mail notifications."
+          fi
+          exit 0

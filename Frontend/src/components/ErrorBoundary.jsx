@@ -117,26 +117,61 @@ export class ErrorBoundary extends React.Component {
               </details>
             )}
 
-            <button
-              type="button"
-              onClick={() => this.setState({ error: null, errorInfo: null, errorId: null })}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 8,
-                padding: '9px 18px',
-                borderRadius: 8,
-                border: `1px solid ${T.border2}`,
-                background: 'rgba(255,255,255,0.06)',
-                color: T.t1,
-                cursor: 'pointer',
-                fontWeight: 600,
-                fontSize: 13,
-              }}
-            >
-              <RefreshCw size={13} />
-              Try again
-            </button>
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+              <button
+                type="button"
+                onClick={() => this.setState({ error: null, errorInfo: null, errorId: null, copied: false })}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '9px 18px',
+                  borderRadius: 8,
+                  border: `1px solid ${T.border2}`,
+                  background: 'rgba(255,255,255,0.06)',
+                  color: T.t1,
+                  cursor: 'pointer',
+                  fontWeight: 600,
+                  fontSize: 13,
+                }}
+              >
+                <RefreshCw size={13} />
+                Try again
+              </button>
+
+              <button
+                type="button"
+                id="btn-copy-error-details"
+                onClick={() => {
+                  const details = [
+                    `Tracking ID: ${errorId || 'N/A'}`,
+                    `Message: ${error?.message || String(error)}`,
+                    error?.stack ? `Stack:\n${error.stack}` : '',
+                    errorInfo?.componentStack ? `Component Stack:\n${errorInfo.componentStack}` : ''
+                  ].filter(Boolean).join('\n\n');
+                  if (typeof navigator !== 'undefined' && navigator.clipboard) {
+                    navigator.clipboard.writeText(details).catch(() => {});
+                  }
+                  this.setState({ copied: true });
+                  setTimeout(() => this.setState({ copied: false }), 2500);
+                }}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '9px 18px',
+                  borderRadius: 8,
+                  border: `1px solid ${this.state.copied ? T.teal : T.border2}`,
+                  background: this.state.copied ? 'rgba(45,212,191,0.15)' : 'rgba(255,255,255,0.04)',
+                  color: this.state.copied ? T.tealL : T.t2,
+                  cursor: 'pointer',
+                  fontWeight: 600,
+                  fontSize: 13,
+                }}
+              >
+                {this.state.copied ? '✓ Copied Details!' : 'Copy details'}
+              </button>
+            </div>
           </div>
         </div>
       );

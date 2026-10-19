@@ -1,17 +1,18 @@
 import { useState, useEffect } from 'react';
 import { useApp } from '../../AppContext.jsx';
-import { T, Button, Badge, Modal } from '../UI.jsx';
+import { T, Button, Badge, Modal, Card } from '../UI.jsx';
 import {
   fetchProjects, submitVerifierSignoff, fetchVerifierStatus, fetchProjectDocuments
 } from '../../services/api.js';
 import {
-  ShieldCheck, CheckCircle2, XCircle, FileText, AlertTriangle, TreePine, Eye, Send, Award
+  ShieldCheck, CheckCircle2, XCircle, FileText, AlertTriangle, TreePine, Eye, Send, Award, Map, User, Check
 } from 'lucide-react';
 import { ProjectDocumentGate } from '../projects/ProjectDocumentGate.jsx';
 import ProjectScreeningReport from './ProjectScreeningReport.jsx';
+import { ProjectMap } from '../GoogleMap.jsx';
 
 export default function VerifierDashboard() {
-  const { user } = useApp();
+  const { user, page, navigateToProject } = useApp();
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(false);
   const [selectedProject, setSelectedProject] = useState(null);
@@ -64,6 +65,25 @@ export default function VerifierDashboard() {
     }
   };
 
+  const currentTab = page === 'map' ? 'map' : page === 'completed' ? 'completed' : page === 'profile' ? 'profile' : 'dashboard';
+
+  let title = 'Field Verification Workbench';
+  let subtitle = 'Independent MRV review, legal document verification, and cryptographic issuance sign-off.';
+  if (currentTab === 'map') {
+    title = 'Field Inspection Map';
+    subtitle = 'Interactive field boundaries, satellite NDVI health, and verified project polygons.';
+  } else if (currentTab === 'completed') {
+    title = 'Verified Project Archive';
+    subtitle = 'Permanently signed and verified ecological restoration projects.';
+  } else if (currentTab === 'profile') {
+    title = 'Verifier Accreditation Profile';
+    subtitle = 'ISO 14064-3 Accreditation credentials, authorized audit scope, and verifier identity.';
+  }
+
+  const displayedProjects = currentTab === 'completed'
+    ? projects.filter(p => p.status === 'verified' || p.status === 'approved' || p.status === 'active')
+    : projects;
+
   return (
     <div style={{ padding: '24px 32px', maxWidth: 1400, margin: '0 auto' }}>
       {/* Header */}
@@ -74,11 +94,11 @@ export default function VerifierDashboard() {
               <ShieldCheck size={20} color={T.tealL} />
             </div>
             <div>
-              <div style={{ fontSize: 22, fontWeight: 900, color: T.t1, fontFamily: 'Fraunces, serif' }}>
-                Accredited Verifier & Auditor Workbench
-              </div>
-              <div style={{ fontSize: 13, color: T.t3, marginTop: 2 }}>
-                Independent MRV review, legal document verification, and cryptographic issuance sign-off.
+              <h1 style={{ fontSize: 24, fontWeight: 900, color: T.t1, fontFamily: 'Fraunces, serif', margin: 0 }}>
+                {title}
+              </h1>
+              <div style={{ fontSize: 13, color: T.t3, marginTop: 4 }}>
+                {subtitle}
               </div>
             </div>
           </div>
@@ -100,39 +120,83 @@ export default function VerifierDashboard() {
         </div>
       )}
 
-      {/* Projects under review queue */}
-      <div style={{ background: 'var(--surface-card, rgba(14,18,27,0.8))', border: `1px solid ${T.border}`, borderRadius: 14, padding: 22, marginBottom: 24 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-          <div style={{ fontSize: 16, fontWeight: 800, color: T.t1, fontFamily: 'Fraunces, serif' }}>
-            Assigned Project Audit Queue
+      {/* Map View */}
+      {currentTab === 'map' && (
+        <div style={{ background: 'var(--surface-card, rgba(14,18,27,0.8))', border: `1px solid ${T.border}`, borderRadius: 14, padding: 22, marginBottom: 24 }}>
+          <div style={{ marginBottom: 16, fontSize: 15, fontWeight: 700, color: T.t1 }}>
+            Field Polygon Geofences ({projects.length} sites mapped)
           </div>
-          <span style={{ fontSize: 12, color: T.t3 }}>Showing {projects.length} restoration projects</span>
+          <ProjectMap features={projects} height={480} />
         </div>
+      )}
 
-        {loading ? (
-          <div style={{ padding: 40, textAlign: 'center', color: T.t3 }}>Loading projects for audit verification…</div>
-        ) : projects.length === 0 ? (
-          <div style={{ padding: 40, textAlign: 'center', color: T.t3 }}>Zero projects currently assigned for audit.</div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {projects.map((proj) => {
-              const isVerified = proj.status === 'verified' || proj.status === 'active';
-              return (
-                <div key={proj.id} style={{
-                  padding: '18px 20px', borderRadius: 12,
-                  background: 'var(--glass2, rgba(255,255,255,0.02))', border: `1px solid ${T.border}`,
-                  display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                    <div style={{ width: 42, height: 42, borderRadius: 10, background: 'rgba(16,185,129,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <TreePine size={22} color={T.emeraldL} />
-                    </div>
-                    <div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <span style={{ fontSize: 15, fontWeight: 800, color: T.t1 }}>{proj.name}</span>
-                        <Badge type={isVerified ? 'teal' : proj.status === 'pending' ? 'gold' : 'muted'} label={proj.status || 'Draft'} />
-                        {proj.country && <span style={{ fontSize: 12, color: T.t3 }}>({proj.country})</span>}
+      {/* Profile View */}
+      {currentTab === 'profile' && (
+        <div style={{ background: 'var(--surface-card, rgba(14,18,27,0.8))', border: `1px solid ${T.border}`, borderRadius: 14, padding: 28, marginBottom: 24 }}>
+          <div style={{ display: 'flex', gap: 24, alignItems: 'center', marginBottom: 24 }}>
+            <div style={{ width: 64, height: 64, borderRadius: '50%', background: 'rgba(45,212,191,0.15)', border: `2px solid ${T.teal}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <User size={32} color={T.tealL} />
+            </div>
+            <div>
+              <div style={{ fontSize: 18, fontWeight: 800, color: T.t1 }}>{user?.name || 'Marcus Vance'}</div>
+              <div style={{ fontSize: 13, color: T.t3 }}>{user?.email || 'verifier@carbonvault.com'} · {user?.org || 'Global Carbon Verifiers'}</div>
+              <div style={{ marginTop: 6, display: 'flex', gap: 8 }}>
+                <Badge type="teal" label="Accredited Verifier Level 3" />
+                <Badge type="gold" label="Ed25519 Signing Key Active" />
+              </div>
+            </div>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
+            <div style={{ padding: 16, borderRadius: 10, background: 'rgba(255,255,255,0.03)', border: `1px solid ${T.border}` }}>
+              <div style={{ fontSize: 11, color: T.t3, textTransform: 'uppercase', fontWeight: 700 }}>Accreditation Standard</div>
+              <div style={{ fontSize: 14, color: T.t1, fontWeight: 700, marginTop: 4 }}>ISO 14064-3:2019 / GHG Protocol</div>
+            </div>
+            <div style={{ padding: 16, borderRadius: 10, background: 'rgba(255,255,255,0.03)', border: `1px solid ${T.border}` }}>
+              <div style={{ fontSize: 11, color: T.t3, textTransform: 'uppercase', fontWeight: 700 }}>Authorized Methodology</div>
+              <div style={{ fontSize: 14, color: T.t1, fontWeight: 700, marginTop: 4 }}>VM0007 / AR-ACM0003 Afforestation</div>
+            </div>
+            <div style={{ padding: 16, borderRadius: 10, background: 'rgba(255,255,255,0.03)', border: `1px solid ${T.border}` }}>
+              <div style={{ fontSize: 11, color: T.t3, textTransform: 'uppercase', fontWeight: 700 }}>Cryptographic Status</div>
+              <div style={{ fontSize: 14, color: T.emeraldL, fontWeight: 700, marginTop: 4 }}>Verified & Bound to Ledger</div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Projects under review queue */}
+      {(currentTab === 'dashboard' || currentTab === 'completed') && (
+        <div style={{ background: 'var(--surface-card, rgba(14,18,27,0.8))', border: `1px solid ${T.border}`, borderRadius: 14, padding: 22, marginBottom: 24 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+            <div style={{ fontSize: 16, fontWeight: 800, color: T.t1, fontFamily: 'Fraunces, serif' }}>
+              {currentTab === 'completed' ? 'Verified Project Archive' : 'Assigned Project Audit Queue'}
+            </div>
+            <span style={{ fontSize: 12, color: T.t3 }}>Showing {displayedProjects.length} restoration projects</span>
+          </div>
+
+          {loading ? (
+            <div style={{ padding: 40, textAlign: 'center', color: T.t3 }}>Loading projects for audit verification…</div>
+          ) : displayedProjects.length === 0 ? (
+            <div style={{ padding: 40, textAlign: 'center', color: T.t3 }}>Zero projects found in this queue.</div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {displayedProjects.map((proj) => {
+                const isVerified = proj.status === 'verified' || proj.status === 'active';
+                return (
+                  <div key={proj.id} style={{
+                    padding: '18px 20px', borderRadius: 12,
+                    background: 'var(--glass2, rgba(255,255,255,0.02))', border: `1px solid ${T.border}`,
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                      <div style={{ width: 42, height: 42, borderRadius: 10, background: 'rgba(16,185,129,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <TreePine size={22} color={T.emeraldL} />
                       </div>
+                      <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <span style={{ fontSize: 15, fontWeight: 800, color: T.t1 }}>{proj.name}</span>
+                          <Badge type={isVerified ? 'teal' : proj.status === 'pending' ? 'gold' : 'muted'} label={proj.status || 'Draft'} />
+                          {proj.country && <span style={{ fontSize: 12, color: T.t3 }}>({proj.country})</span>}
+                        </div>
                       <div style={{ fontSize: 12, color: T.t3, marginTop: 4 }}>
                         Developer: <strong style={{ color: T.t2 }}>{proj.developer || proj.ngo_name || 'Amazonia Conservation'}</strong> · Total Credits: <strong>{Number(proj.total_credits || 0).toLocaleString()} tCO2e</strong> · Price: <strong>${proj.price || 28}/t</strong>
                       </div>
@@ -156,6 +220,7 @@ export default function VerifierDashboard() {
           </div>
         )}
       </div>
+      )}
 
       {/* Selected project Screening Pipeline Report */}
       {screeningProject && (

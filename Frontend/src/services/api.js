@@ -2,6 +2,9 @@
 // Real Data Architecture: talks directly to FastAPI backend, no invented mock fallbacks.
 // Uses Vite proxy (/api → http://127.0.0.1:8000) or VITE_API_BASE_URL.
 
+import { safeArray, normalizeDocumentsContract, normalizeListContract } from './contracts.js';
+export { safeArray, normalizeDocumentsContract, normalizeListContract };
+
 const RAW_BASE = import.meta.env.VITE_API_BASE_URL;
 export const API_BASE = RAW_BASE
   ? RAW_BASE.replace(/\/$/, '')
@@ -193,7 +196,7 @@ export async function fetchProjects(ngoId) {
   const q = ngoId != null && ngoId !== '' ? `?ngo_id=${encodeURIComponent(ngoId)}` : '';
   const res = await request(`${API_BASE}/projects/projects${q}`);
   if (res.error) return { data: [], error: res.error };
-  return res;
+  return { ...res, data: safeArray(res.data) };
 }
 
 /** Fetch complete project detail for 8-tab view */
@@ -250,7 +253,7 @@ export async function fetchProjectAiSummary(projectId, audience = 'admin') {
 export async function fetchAllProjects() {
   const res = await request(`${API_BASE}/projects/all-projects`);
   if (res.error) return { data: [], error: res.error };
-  return res;
+  return { ...res, data: safeArray(res.data) };
 }
 
 /** Update project status (admin / approver lifecycle with comment and optional override) */
@@ -295,6 +298,15 @@ export async function suspendProject(projectId, reason) {
 /** Fetch Project Status History / Audit Trail */
 export async function fetchProjectHistory(projectId) {
   return request(`${API_BASE}/projects/${projectId}/history`);
+}
+
+/** Post Inter-Role Comment to Project Timeline */
+export async function addProjectComment(projectId, comment, author) {
+  return request(`${API_BASE}/projects/${projectId}/comments`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ comment, author }),
+  });
 }
 
 /** Submit Quarterly Progress Update (NGO) */
@@ -498,10 +510,11 @@ export async function buyCredits(paymentData) {
   });
 }
 
-export async function fetchTransactions(companyName) {
-  const res = await request(`${API_BASE}/payment/transactions/${encodeURIComponent(companyName)}`);
+export async function fetchTransactions(companyName = 'all') {
+  const company = companyName || 'all';
+  const res = await request(`${API_BASE}/payment/transactions/${encodeURIComponent(company)}`);
   if (res.error) return { data: [], error: res.error };
-  return res;
+  return { ...res, data: safeArray(res.data) };
 }
 
 export async function fetchWallet(companyName) {
@@ -685,7 +698,7 @@ export async function fetchPricingForecast() {
 export async function fetchUsers() {
   const res = await request(`${API_BASE}/users`);
   if (res.error) return { data: [], error: res.error };
-  return res;
+  return { ...res, data: safeArray(res.data) };
 }
 
 export async function inviteUser(userData) {
@@ -843,7 +856,12 @@ export async function uploadProjectDocument(projectId, file, docType, title = ''
 }
 
 export async function fetchProjectDocuments(projectId) {
-  return request(`${API_BASE}/projects/${encodeURIComponent(projectId)}/documents`);
+  const res = await request(`${API_BASE}/projects/${encodeURIComponent(projectId)}/documents`);
+  const normalized = normalizeDocumentsContract(res.data, projectId);
+  return {
+    ...res,
+    data: normalized,
+  };
 }
 
 export async function fetchSubmissionReadiness(projectId) {
@@ -913,9 +931,12 @@ export async function processPaymentRefund(transactionId, reason = '') {
   });
 }
 
+
 export async function fetchPayoutsLedger(ngoId = null) {
   const qs = ngoId ? `?ngo_id=${encodeURIComponent(ngoId)}` : '';
-  return request(`${API_BASE}/payments/payouts${qs}`);
+  const res = await request(`${API_BASE}/payments/payouts${qs}`);
+  if (res.error) return { data: [], error: res.error };
+  return { ...res, data: safeArray(res.data) };
 }
 
 export async function createPayout(ngoId, amountINR, bankLast4 = '9876', ifsc = 'HDFC0001234', reference = '') {

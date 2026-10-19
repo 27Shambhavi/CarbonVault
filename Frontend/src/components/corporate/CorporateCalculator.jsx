@@ -123,8 +123,8 @@ export default function CorporateCalculator() {
             }}>
               <Calculator size={20} color={T.violetLL || '#a78bfa'} />
             </div>
-            <h1 style={{ fontSize: 24, fontWeight: 700, color: T.t1, margin: 0 }}>
-              Corporate Footprint Calculator
+            <h1 style={{ fontSize: 24, fontWeight: 900, color: T.t1, margin: 0, fontFamily: 'Fraunces, serif' }}>
+              Carbon Footprint Calculator
             </h1>
             <Badge color="violet">GHG Protocol Scope 1-3</Badge>
           </div>

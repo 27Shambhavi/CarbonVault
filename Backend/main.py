@@ -183,15 +183,9 @@ def migrate_db():
     except Exception:
         pass
 
-    # Ensure users table has admin_role column
+    # Ensure legacy approver role is consolidated to admin
     try:
-        cursor.execute("ALTER TABLE users ADD COLUMN admin_role TEXT DEFAULT 'super_admin'")
-        logger.info("Added admin_role column to users")
-    except Exception:
-        pass
-
-    try:
-        cursor.execute("UPDATE users SET admin_role = 'super_admin' WHERE role = 'admin' AND (admin_role IS NULL OR admin_role = '')")
+        cursor.execute("UPDATE users SET role = 'admin' WHERE role = 'approver'")
     except Exception:
         pass
 
@@ -372,41 +366,41 @@ def seed_initial_data():
         # Seed Users if empty or ensure admin accounts exist
         if not db.query(User).first():
             default_users = [
-                User(name="Alex Mercer", email="admin@carbonvault.com", password_hash=hash_password("admin123"), role="admin", admin_role="super_admin", projects=0, credits=0, joined="2023-01-01", status="active"),
-                User(name="Dr. Sarah Jenkins", email="approver@carbonvault.com", password_hash=hash_password("approver123"), role="approver", admin_role="approver", projects=0, credits=0, joined="2023-08-15", status="active"),
+                User(name="Alex Mercer", email="admin@carbonvault.com", password_hash=hash_password("admin123"), role="admin", projects=0, credits=0, joined="2023-01-01", status="active"),
                 User(name="EcoGuard Brazil", email="contact@ecoguard.org", password_hash=hash_password("ngo123"), role="ngo", projects=3, credits=34600, joined="2023-06-12", status="active"),
                 User(name="Microsoft Sustainability", email="carbon@microsoft.com", password_hash=hash_password("corp123"), role="corporate", projects=0, credits=15200, joined="2023-09-01", status="active"),
-                User(name="Google Carbon Team", email="sustainability@google.com", password_hash=hash_password("corp123"), role="buyer", projects=0, credits=28000, joined="2023-07-14", status="active"),
+                User(name="Google Carbon Team", email="sustainability@google.com", password_hash=hash_password("corp123"), role="corporate", projects=0, credits=28000, joined="2023-07-14", status="active"),
                 User(name="Green Delta", email="info@greendelta.org", password_hash=hash_password("ngo123"), role="ngo", projects=2, credits=8200, joined="2024-01-05", status="active"),
-                User(name="Shell Renewables", email="offsets@shell.com", password_hash=hash_password("corp123"), role="buyer", projects=0, credits=42000, joined="2023-04-22", status="active"),
+                User(name="Shell Renewables", email="offsets@shell.com", password_hash=hash_password("corp123"), role="corporate", projects=0, credits=42000, joined="2023-04-22", status="active"),
                 User(name="Borneo Earth", email="team@borneoearth.org", password_hash=hash_password("ngo123"), role="ngo", projects=1, credits=0, joined="2024-03-08", status="suspended"),
-                User(name="HSBC Green Finance", email="carbon@hsbc.com", password_hash=hash_password("corp123"), role="buyer", projects=0, credits=9800, joined="2024-02-17", status="active"),
+                User(name="HSBC Green Finance", email="carbon@hsbc.com", password_hash=hash_password("corp123"), role="corporate", projects=0, credits=9800, joined="2024-02-17", status="active"),
                 User(name="CongoCare", email="ops@congocare.org", password_hash=hash_password("ngo123"), role="ngo", projects=2, credits=22000, joined="2023-11-30", status="active"),
-                User(name="Marcus Vance", email="verifier@carbonvault.com", password_hash=hash_password("verifier123"), role="verifier", admin_role=None, projects=0, credits=0, joined="2024-01-01", status="active"),
-                User(name="Public Auditor", email="guest@carbonvault.com", password_hash=hash_password("guest123"), role="public", admin_role=None, projects=0, credits=0, joined="2024-01-01", status="active"),
+                User(name="Marcus Vance", email="verifier@carbonvault.com", password_hash=hash_password("verifier123"), role="verifier", projects=0, credits=0, joined="2024-01-01", status="active"),
+                User(name="Public Auditor", email="guest@carbonvault.com", password_hash=hash_password("guest123"), role="public", projects=0, credits=0, joined="2024-01-01", status="active"),
             ]
             db.add_all(default_users)
             db.commit()
         else:
-            # Backfill password hashes and synchronize roles for demo accounts
+            # Backfill password hashes and synchronize roles for 4 core demo accounts
             users_to_fix = {
-                "admin@carbonvault.com": ("admin123", "Alex Mercer", "admin", "super_admin"),
-                "approver@carbonvault.com": ("approver123", "Dr. Sarah Jenkins", "approver", "approver"),
-                "contact@ecoguard.org": ("ngo123", "EcoGuard Brazil", "ngo", None),
-                "carbon@microsoft.com": ("corp123", "Microsoft Sustainability", "corporate", None),
-                "verifier@carbonvault.com": ("verifier123", "Marcus Vance", "verifier", None),
-                "guest@carbonvault.com": ("guest123", "Public Auditor", "public", None),
+                "admin@carbonvault.com": ("admin123", "Alex Mercer", "admin"),
+                "contact@ecoguard.org": ("ngo123", "EcoGuard Brazil", "ngo"),
+                "carbon@microsoft.com": ("corp123", "Microsoft Sustainability", "corporate"),
+                "verifier@carbonvault.com": ("verifier123", "Marcus Vance", "verifier"),
             }
-            for em, (pw, nm, rl, arl) in users_to_fix.items():
+            for em, (pw, nm, rl) in users_to_fix.items():
                 u = db.query(User).filter(User.email == em).first()
                 if not u:
-                    db.add(User(name=nm, email=em, password_hash=hash_password(pw), role=rl, admin_role=arl, status="active"))
+                    db.add(User(name=nm, email=em, password_hash=hash_password(pw), role=rl, status="active"))
                 else:
                     u.role = rl
-                    u.admin_role = arl
                     u.name = nm
                     if not u.password_hash:
                         u.password_hash = hash_password(pw)
+            # Remove legacy approver account if present
+            legacy_approver = db.query(User).filter(User.email == "approver@carbonvault.com").first()
+            if legacy_approver:
+                db.delete(legacy_approver)
             db.commit()
 
         # Seed Pricing Config if empty
@@ -1255,12 +1249,20 @@ def readiness():
     mig_info = get_migration_status()
 
     try:
-        from routers.payment_router import get_razorpay_status, get_razorpay_key_hint
+        from routers.payment_router import get_razorpay_status, get_razorpay_key_hint, get_razorpay_diagnostics
         rp_status = get_razorpay_status()
         rp_hint = get_razorpay_key_hint()
+        rp_diag = get_razorpay_diagnostics()
     except Exception:
         rp_status = "ok"
         rp_hint = "none"
+        rp_diag = {
+            "status": rp_status,
+            "key_hint": rp_hint,
+            "http_status": 200,
+            "error_code": None,
+            "error_description": None
+        }
 
     return {
         "status": "ready",
@@ -1285,6 +1287,7 @@ def readiness():
         "razorpay": rp_status,
         "razorpay_status": rp_status,
         "razorpay_key_hint": rp_hint,
+        "razorpay_diagnostics": rp_diag,
         "services": {
             "modis_ndvi": {
                 "last_success_at": last_modis

@@ -96,28 +96,89 @@ Upon successful payment capture:
 
 ---
 
-## 5. Owner Setup Checklist (Render & Vercel)
+## 5. Owner Setup Checklist (Render & Razorpay)
 
-### Step 1: Render Environment Variables
-Ensure the following variables are set in your Render Dashboard (`Environment` tab):
+### Target Service Identification
+> [!IMPORTANT]
+> Render runs multiple services for CarbonVault:
+> - `carbonvault-api` (Web Service — **this is the service where payments run**)
+> - `carbonvault-worker` (Background Worker)
+> - `carbonvault-postgres` (Managed Database)
+>
+> You must configure Razorpay environment variables on **`carbonvault-api`**.
 
-| Variable Name | Example Value | Description |
+### Step 1: Obtain Razorpay Test Keys
+1. Sign in to your [Razorpay Dashboard](https://dashboard.razorpay.com/).
+2. In the top navbar, ensure your toggle is set to **Test Mode** (orange indicator).
+3. From the left sidebar, navigate to **Account & Settings** → **API Keys** (under *Website and app settings*).
+4. Click **Generate Test Key** (or **Regenerate Test Key** if you have misplaced the secret).
+5. Copy both:
+   - **Key Id** (starts with `rzp_test_...`)
+   - **Key Secret** (a long alphanumeric string)
+
+### Step 2: Configure Environment on Render (`carbonvault-api`)
+1. Go to [dashboard.render.com](https://dashboard.render.com/).
+2. Click on the web service named **`carbonvault-api`**.
+3. In the left navigation menu, click **Environment**.
+4. Set or verify the following variables:
+
+| Variable Name | Required Value / Example | Notes |
 | :--- | :--- | :--- |
-| `PAYMENT_MODE` | `test` | `test` or `live` |
-| `RAZORPAY_KEY_ID` | `rzp_test_YourKeyID` | From Razorpay Dashboard -> Settings -> API Keys |
-| `RAZORPAY_KEY_SECRET` | `YourKeySecret` | Secret key corresponding to Key ID |
-| `RAZORPAY_WEBHOOK_SECRET` | `YourWebhookSecret` | Secret string configured in Razorpay Webhooks |
+| `PAYMENT_MODE` | `test` | Must match key prefix (`test` ↔ `rzp_test_`) |
+| `RAZORPAY_KEY_ID` | `rzp_test_...` | Public Key ID from Step 1 |
+| `RAZORPAY_KEY_SECRET` | `...` | Secret Key from Step 1 |
+| `RAZORPAY_WEBHOOK_SECRET` | `whsec_...` | Optional in test mode, required in live mode |
 
-### Step 2: Configure Razorpay Webhook
-1. Go to [Razorpay Dashboard](https://dashboard.razorpay.com/) -> **Settings** -> **Webhooks**.
-2. Click **Add New Webhook**.
-3. **Webhook URL**: `https://carbonvault-api.onrender.com/payment/webhook`
-4. **Secret**: Enter the exact secret string you put in `RAZORPAY_WEBHOOK_SECRET`.
-5. **Active Events**: Check `payment.captured` and `payment.failed`.
+> [!TIP]
+> The backend automatically sanitizes environment values by stripping leading/trailing whitespace and surrounding quotes (`"..."` or `'...'`) that can be accidentally added when pasting in the Render UI.
 
-### Step 3: Test Payment Cards
-When testing checkout on `https://final-carbon-vault.vercel.app`:
-- **Card Number**: Use standard Razorpay test card `4012 0000 0000 0002` (or any valid test card).
-- **Expiry**: Any future date (e.g., `12/28`).
-- **CVV**: `123`.
-- **OTP**: Enter `1234` or click "Success" in the Razorpay test modal.
+5. Click **Save Changes**. Render will automatically trigger a rolling redeploy.
+
+### Step 3: Self-Test Verification Command
+Once the redeploy finishes, run this command in your terminal or browser to verify gateway health:
+
+```bash
+curl -s https://carbonvault-api.onrender.com/ready
+```
+
+Inspect the `razorpay` and `razorpay_diagnostics` fields in the JSON response:
+```json
+{
+  "status": "ready",
+  "razorpay": "ok",
+  "razorpay_status": "ok",
+  "razorpay_key_hint": "rzp_test_••••Ieed",
+  "razorpay_diagnostics": {
+    "status": "ok",
+    "key_hint": "rzp_test_••••Ieed",
+    "http_status": 200,
+    "error_code": null,
+    "error_description": null
+  }
+}
+```
+
+### Gateway Health Diagnostics Reference
+
+| `razorpay` Status | Meaning | Action Needed |
+| :--- | :--- | :--- |
+| `ok` | Credentials authenticated with Razorpay API. | None — checkout is fully operational. |
+| `auth_failed` | Key ID and Key Secret rejected by Razorpay (HTTP 401). | Check for mistyped secret in Render `carbonvault-api` Environment. Regenerate key in Razorpay dashboard if needed. |
+| `missing` | Either `RAZORPAY_KEY_ID` or `RAZORPAY_KEY_SECRET` is blank. | Add both variables in Render `carbonvault-api` Environment tab. |
+| `unreachable` | Connection to Razorpay API timed out or returned HTTP 5xx. | Check Razorpay status page or network connectivity from Render. |
+
+---
+
+## 6. Testing Checkout in the Frontend
+
+When testing checkout on `https://final-carbon-vault.vercel.app` (or local `http://localhost:5173`):
+1. Sign in as Corporate Buyer (`James Chen`).
+2. Go to **Marketplace** → Click **Buy** on any project.
+3. Select a quantity (e.g., 25–50 tonnes; keep total under ₹5,00,000 for Razorpay test mode).
+4. When the Razorpay checkout modal opens, use standard Razorpay test credentials:
+   - **Card Number**: `4111 1111 1111 1111` (or any valid card number)
+   - **Expiry**: Any future date (e.g., `12/28`)
+   - **CVV**: `123`
+   - **OTP**: `123456` (or click "Success" in the test prompt)
+5. Upon completion, the backend mints a cryptographic certificate and updates the corporate wallet.
+

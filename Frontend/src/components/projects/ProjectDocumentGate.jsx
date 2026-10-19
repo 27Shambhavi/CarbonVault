@@ -25,29 +25,44 @@ export function ProjectDocumentGate({ projectId, onReadinessChange, canUpload = 
   const [docs, setDocs] = useState([]);
   const [readiness, setReadiness] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState(null);
   const [uploadingType, setUploadingType] = useState(null);
   const [msg, setMsg] = useState(null);
 
   useEffect(() => {
     if (projectId) {
       loadDocs();
+    } else {
+      setDocs([]);
+      setReadiness(null);
+      setLoadError(null);
     }
   }, [projectId]);
 
   const loadDocs = async () => {
+    if (!projectId) return;
     setLoading(true);
+    setLoadError(null);
     try {
       const [docsRes, readyRes] = await Promise.all([
         fetchProjectDocuments(projectId),
         fetchSubmissionReadiness(projectId),
       ]);
-      setDocs(docsRes.data || []);
+      if (docsRes.error) {
+        setLoadError(docsRes.error);
+      }
+      const raw = docsRes.data;
+      const docList = Array.isArray(raw?.documents)
+        ? raw.documents
+        : (Array.isArray(raw?.items) ? raw.items : (Array.isArray(raw) ? raw : []));
+      setDocs(docList);
       setReadiness(readyRes.data || null);
       if (onReadinessChange) {
         onReadinessChange(readyRes.data);
       }
-    } catch {
-      // Fallback
+    } catch (err) {
+      setLoadError(err.message || 'Failed to retrieve project documents');
+      setDocs([]);
     } finally {
       setLoading(false);
     }
@@ -71,9 +86,12 @@ export function ProjectDocumentGate({ projectId, onReadinessChange, canUpload = 
     }
   };
 
+  const safeDocs = Array.isArray(docs) ? docs : [];
   const docMap = {};
-  docs.forEach((d) => {
-    docMap[d.doc_type] = d;
+  safeDocs.forEach((d) => {
+    if (d && d.doc_type) {
+      docMap[d.doc_type] = d;
+    }
   });
 
   const missingList = REQUIRED_DOCS.filter(r => !docMap[r.type]);
@@ -95,6 +113,37 @@ export function ProjectDocumentGate({ projectId, onReadinessChange, canUpload = 
           label={isComplete ? '4 of 4 Verified' : `${missingList.length} Missing`}
         />
       </div>
+
+      {/* Load error banner with Retry */}
+      {loadError && (
+        <div style={{
+          padding: '12px 16px', borderRadius: 10, background: 'rgba(239,68,68,0.08)',
+          border: `1px solid ${T.crimson}`, marginBottom: 18, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <AlertCircle size={20} color={T.crimsonL} style={{ flexShrink: 0 }} />
+            <div style={{ fontSize: 13, color: T.crimsonL, fontWeight: 600 }}>
+              {loadError}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={loadDocs}
+            style={{
+              background: 'transparent',
+              border: `1px solid ${T.crimsonL}`,
+              color: T.crimsonL,
+              borderRadius: 6,
+              padding: '4px 12px',
+              fontSize: 12,
+              fontWeight: 700,
+              cursor: 'pointer'
+            }}
+          >
+            Retry
+          </button>
+        </div>
+      )}
 
       {/* Gate blocker banner */}
       {!isComplete ? (

@@ -4,9 +4,9 @@ import { fetchUsers, inviteUser, updateUserStatus } from '../../services/api.js'
 import { Card, SectionHeader, Table, Badge, Modal, Btn, T } from '../UI.jsx';
 import { Search, UserPlus, ShieldAlert, Lock } from 'lucide-react';
 
-export default function AdminUsers() {
+export default function AdminUsers({ initialTab = 'users' }) {
   const { user: currentUser } = useApp();
-  const isApprover = currentUser?.admin_role === 'approver';
+  const isOrgs = initialTab === 'organizations';
 
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -34,10 +34,6 @@ export default function AdminUsers() {
   }, []);
 
   const handleInvite = async () => {
-    if (isApprover) {
-      setInviteError('Super Admin privilege required to invite users');
-      return;
-    }
     if (!inviteData.name || !inviteData.email) {
       setInviteError('Please fill in both name and email');
       return;
@@ -56,7 +52,6 @@ export default function AdminUsers() {
   };
 
   const handleToggleStatus = async (user) => {
-    if (isApprover) return;
     const nextStatus = user.status === 'active' ? 'suspended' : 'active';
     const res = await updateUserStatus(user.id, nextStatus);
     if (!res.error) {
@@ -78,47 +73,17 @@ export default function AdminUsers() {
 
   return (
     <div style={{ padding: 28 }}>
-      <SectionHeader
-        title="User Management"
-        subtitle="Manage platform users, roles and access levels"
-        action={
-          isApprover ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: 11, color: T.goldL, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
-                <Lock size={12} /> Read-only mode
-              </span>
-              <Btn
-                disabled
-                style={{ opacity: 0.5, cursor: 'not-allowed' }}
-                title="Super Admin privilege required to invite users"
-              >
-                <UserPlus size={13} /> Invite User
-              </Btn>
-            </div>
-          ) : (
-            <Btn onClick={() => setInvite(true)}><UserPlus size={13} />Invite User</Btn>
-          )
-        }
-      />
-
-      {/* Approver role notification banner */}
-      {isApprover && (
-        <div style={{
-          background: 'rgba(56,189,248,0.08)',
-          border: `1px solid rgba(56,189,248,0.25)`,
-          borderRadius: 10,
-          padding: '12px 16px',
-          marginBottom: 20,
-          display: 'flex',
-          alignItems: 'center',
-          gap: 12,
-        }}>
-          <ShieldAlert size={18} color={T.skyL} />
-          <div style={{ fontSize: 13, color: T.skyL }}>
-            <strong>Project Approver Role:</strong> You have read-only access to user directories. Inviting new users and suspending accounts requires <strong>Super Admin</strong> authorization.
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 22 }}>
+        <div>
+          <h1 style={{ fontSize: 24, fontWeight: 900, color: T.t1, fontFamily: 'Fraunces, serif', margin: 0 }}>
+            {isOrgs ? 'Organisation Verification' : 'Platform Users'}
+          </h1>
+          <div style={{ fontSize: 13, color: T.t3, marginTop: 4 }}>
+            {isOrgs ? 'Corporate & NGO legal compliance, KYC status, and entity accreditation' : 'Manage platform users, roles and access levels'}
           </div>
         </div>
-      )}
+        <Btn onClick={() => setInvite(true)}><UserPlus size={13} />Invite User</Btn>
+      </div>
 
       {/* Stats */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 13, marginBottom: 22 }}>
@@ -180,20 +145,18 @@ export default function AdminUsers() {
               <button onClick={() => setSel(u)} style={{ background: 'rgba(45,212,191,0.08)', border: '1px solid rgba(45,212,191,0.2)', borderRadius: 7, padding: '4px 9px', color: T.teal, fontSize: 11, cursor: 'pointer', fontWeight: 700, transition: 'all 0.15s' }}>
                 View
               </button>
-              {!isApprover && (
-                <button
-                  onClick={() => handleToggleStatus(u)}
-                  style={{
-                    background: u.status === 'active' ? 'rgba(239,68,68,0.08)' : 'rgba(16,185,129,0.08)',
-                    border: `1px solid ${u.status === 'active' ? 'rgba(239,68,68,0.25)' : 'rgba(16,185,129,0.25)'}`,
-                    borderRadius: 7, padding: '4px 9px',
-                    color: u.status === 'active' ? T.crimsonL : T.emeraldL,
-                    fontSize: 11, cursor: 'pointer', fontWeight: 700, transition: 'all 0.15s'
-                  }}
-                >
-                  {u.status === 'active' ? 'Suspend' : 'Activate'}
-                </button>
-              )}
+              <button
+                onClick={() => handleToggleStatus(u)}
+                style={{
+                  background: u.status === 'active' ? 'rgba(239,68,68,0.08)' : 'rgba(16,185,129,0.08)',
+                  border: `1px solid ${u.status === 'active' ? 'rgba(239,68,68,0.25)' : 'rgba(16,185,129,0.25)'}`,
+                  borderRadius: 7, padding: '4px 9px',
+                  color: u.status === 'active' ? T.crimsonL : T.emeraldL,
+                  fontSize: 11, cursor: 'pointer', fontWeight: 700, transition: 'all 0.15s'
+                }}
+              >
+                {u.status === 'active' ? 'Suspend' : 'Activate'}
+              </button>
             </div>
           ])}
         />
@@ -202,7 +165,7 @@ export default function AdminUsers() {
       <Modal open={!!sel} onClose={() => setSel(null)} title={sel?.name || ''} width={520}>
         {sel && <>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 20 }}>
-            {[{ l: 'Email', v: sel.email }, { l: 'Role', v: sel.role === 'admin' ? (sel.admin_role === 'approver' ? 'Project Approver' : 'Super Admin') : <Badge type={sel.role} label={sel.role.toUpperCase()} /> }, { l: 'Projects', v: sel.projects }, { l: 'Credits', v: (sel.credits || 0).toLocaleString() }, { l: 'Joined', v: sel.joined }, { l: 'Status', v: <Badge type={sel.status} label={sel.status} /> }].map(({ l, v }) => (
+            {[{ l: 'Email', v: sel.email }, { l: 'Role', v: sel.role === 'admin' ? 'Platform Administrator' : <Badge type={sel.role} label={sel.role.toUpperCase()} /> }, { l: 'Projects', v: sel.projects }, { l: 'Credits', v: (sel.credits || 0).toLocaleString() }, { l: 'Joined', v: sel.joined }, { l: 'Status', v: <Badge type={sel.status} label={sel.status} /> }].map(({ l, v }) => (
               <div key={l} style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 9, padding: 13 }}>
                 <div style={{ fontSize: 9, color: T.t3, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.7px', marginBottom: 6 }}>{l}</div>
                 <div style={{ fontSize: 13, color: T.t1 }}>{v}</div>
@@ -210,16 +173,10 @@ export default function AdminUsers() {
             ))}
           </div>
           <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-            {isApprover ? (
-              <div style={{ fontSize: 12, color: T.t3, fontStyle: 'italic', display: 'flex', alignItems: 'center', gap: 6 }}>
-                <Lock size={13} color={T.goldL} /> Super Admin permission required to modify user status.
-              </div>
+            {sel.status === 'active' ? (
+              <Btn variant="danger" onClick={() => handleToggleStatus(sel)}>Suspend Account</Btn>
             ) : (
-              sel.status === 'active' ? (
-                <Btn variant="danger" onClick={() => handleToggleStatus(sel)}>Suspend Account</Btn>
-              ) : (
-                <Btn onClick={() => handleToggleStatus(sel)}>Activate Account</Btn>
-              )
+              <Btn onClick={() => handleToggleStatus(sel)}>Activate Account</Btn>
             )}
             <Btn variant="secondary" onClick={() => setSel(null)}>Close</Btn>
           </div>

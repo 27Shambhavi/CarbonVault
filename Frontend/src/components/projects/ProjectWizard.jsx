@@ -256,7 +256,7 @@ export default function ProjectWizard() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
         <div>
           <h1 style={{ fontSize: 24, fontWeight: 900, color: T.t1, margin: 0, fontFamily: 'Fraunces, serif' }}>
-            New Carbon Project Registration Wizard
+            Register Carbon Project
           </h1>
           <div style={{ fontSize: 13, color: T.t3, marginTop: 4 }}>
             Six-step submission pipeline with draft autosave and pre-flight validation.

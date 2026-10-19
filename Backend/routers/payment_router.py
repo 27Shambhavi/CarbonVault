@@ -48,8 +48,11 @@ def get_current_inr_rate(db: Session = None) -> float:
 try:
     import razorpay
 
-    if RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET:
-        razorpay_client = razorpay.Client(auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET))
+    clean_key_id = (RAZORPAY_KEY_ID or "").strip().strip('"').strip("'")
+    clean_key_secret = (RAZORPAY_KEY_SECRET or "").strip().strip('"').strip("'")
+
+    if clean_key_id and clean_key_secret:
+        razorpay_client = razorpay.Client(auth=(clean_key_id, clean_key_secret))
         logger.info("[OK] Razorpay client initialized")
     else:
         razorpay_client = None
@@ -61,14 +64,22 @@ except ImportError:
 
 
 # ── Razorpay Health Tracking (R2-4) ──────────────────────────────────────────
-_razorpay_status_cache = {"status": "ok", "checked_at": 0}
+_razorpay_status_cache = {
+    "status": "ok",
+    "http_status": 200,
+    "error_code": None,
+    "error_description": None,
+    "checked_at": 0
+}
 
 def get_razorpay_key_hint() -> str:
     """Returns a non-secret masked hint of the loaded key ID (e.g. rzp_test_••••abcd)."""
     from core.config import RAZORPAY_KEY_ID
     if not RAZORPAY_KEY_ID:
         return "none"
-    clean_id = RAZORPAY_KEY_ID.strip()
+    clean_id = str(RAZORPAY_KEY_ID).strip().strip('"').strip("'")
+    if not clean_id:
+        return "none"
     if len(clean_id) <= 8:
         return clean_id[:3] + "••••"
     prefix = clean_id[:9]
@@ -87,30 +98,78 @@ def get_razorpay_status() -> str:
         return _razorpay_status_cache["status"]
 
     from core.config import RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET
-    if not RAZORPAY_KEY_ID or not RAZORPAY_KEY_SECRET:
-        status = "missing"
-        _razorpay_status_cache = {"status": status, "checked_at": now}
-        return status
+    clean_id = (RAZORPAY_KEY_ID or "").strip().strip('"').strip("'")
+    clean_sec = (RAZORPAY_KEY_SECRET or "").strip().strip('"').strip("'")
+    if not clean_id or not clean_sec:
+        _razorpay_status_cache = {
+            "status": "missing",
+            "http_status": None,
+            "error_code": "CONFIG_MISSING",
+            "error_description": "Razorpay key ID or key secret is not configured",
+            "checked_at": now
+        }
+        return "missing"
 
     if not razorpay_client:
-        status = "unreachable"
-        _razorpay_status_cache = {"status": status, "checked_at": now}
-        return status
+        _razorpay_status_cache = {
+            "status": "unreachable",
+            "http_status": None,
+            "error_code": "SDK_UNAVAILABLE",
+            "error_description": "Razorpay client is not initialized",
+            "checked_at": now
+        }
+        return "unreachable"
 
     try:
         # Cheap authenticated probe: fetch single order
         razorpay_client.order.all({"count": 1})
-        status = "ok"
+        _razorpay_status_cache = {
+            "status": "ok",
+            "http_status": 200,
+            "error_code": None,
+            "error_description": None,
+            "checked_at": now
+        }
+        return "ok"
     except Exception as e:
         err_str = str(e).lower()
+        err_code = getattr(e, "code", None) or getattr(e, "error_code", None)
+        err_status = getattr(e, "status_code", None) or getattr(e, "http_status", None)
+        if hasattr(e, "error") and isinstance(e.error, dict):
+            err_code = err_code or e.error.get("code")
+
         if "auth" in err_str or "unauthorized" in err_str or "401" in err_str or "signature" in err_str or "key" in err_str:
             status = "auth_failed"
+            http_status = err_status or 401
+            code = err_code or "BAD_REQUEST_ERROR"
+            desc = "Authentication failed with Razorpay API. Verify key and secret."
         else:
             status = "unreachable"
-        logger.warning("Razorpay health check probe returned %s: %s", status, e)
+            http_status = err_status or 503
+            code = err_code or "GATEWAY_UNREACHABLE"
+            desc = "Unable to connect to Razorpay gateway."
 
-    _razorpay_status_cache = {"status": status, "checked_at": now}
-    return status
+        logger.warning("Razorpay health check probe returned %s: %s", status, e)
+        _razorpay_status_cache = {
+            "status": status,
+            "http_status": http_status,
+            "error_code": code,
+            "error_description": desc,
+            "checked_at": now
+        }
+        return status
+
+
+def get_razorpay_diagnostics() -> dict:
+    """Returns non-secret diagnostic telemetry for readiness probe."""
+    status = get_razorpay_status()
+    return {
+        "status": status,
+        "key_hint": get_razorpay_key_hint(),
+        "http_status": _razorpay_status_cache.get("http_status"),
+        "error_code": _razorpay_status_cache.get("error_code"),
+        "error_description": _razorpay_status_cache.get("error_description"),
+    }
 
 
 # Initial check at module load
@@ -554,9 +613,10 @@ def get_transactions(company: str):
     """Get all transactions for a corporate buyer."""
     db = SessionLocal()
     try:
-        txns = db.query(Transaction).filter(
-            Transaction.corporate_name == company
-        ).order_by(Transaction.id.desc()).all()
+        q = db.query(Transaction)
+        if company.lower() != 'all':
+            q = q.filter(Transaction.corporate_name == company)
+        txns = q.order_by(Transaction.id.desc()).all()
 
         results = []
         for t in txns:

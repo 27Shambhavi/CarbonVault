@@ -78,8 +78,10 @@ async def realtime_stream(
 
     async def event_generator():
         try:
-            # Flush initial connection comment immediately to bypass reverse proxy buffering
+            now_iso = datetime.utcnow().isoformat() + "Z"
+            # Flush initial connection comment & named event immediately to bypass reverse proxy buffering
             yield ": connected\n\n"
+            yield f"event: connected\ndata: {json.dumps({'time': now_iso, 'status': 'connected'})}\n\n"
 
             # 1. Replay missed events if requested
             if replay_id is not None and replay_id >= 0:
@@ -97,8 +99,10 @@ async def realtime_stream(
                     event = await asyncio.wait_for(sub.queue.get(), timeout=15.0)
                     yield f"id: {event['id']}\nevent: {event['type']}\ndata: {json.dumps(event['payload'])}\n\n"
                 except asyncio.TimeoutError:
-                    # Send comment heartbeat to maintain connection
+                    # Send both comment and named event so browser EventSource triggers message handlers
+                    hb_time = datetime.utcnow().isoformat() + "Z"
                     yield ": heartbeat\n\n"
+                    yield f"event: heartbeat\ndata: {json.dumps({'time': hb_time})}\n\n"
         except asyncio.CancelledError:
             pass
         finally:
@@ -110,6 +114,7 @@ async def realtime_stream(
         "Connection": "keep-alive",
         "X-Accel-Buffering": "no",
         "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Headers": "Cache-Control, Last-Event-ID, Authorization",
     }
     return StreamingResponse(event_generator(), media_type="text/event-stream", headers=headers)
 

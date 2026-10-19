@@ -62,7 +62,14 @@ export function CorporateDashboard() {
   return (
     <DataBoundary loading={loading} loadingMessage="Loading dashboard…">
       <div style={{padding:28}}>
-        <SectionHeader title="Corporate Dashboard" subtitle={`${corporateName} — carbon portfolio overview`}/>
+        <div style={{ marginBottom: 22 }}>
+          <h1 style={{ fontSize: 24, fontWeight: 900, color: T.t1, fontFamily: 'Fraunces, serif', margin: 0 }}>
+            Corporate Climate Portfolio
+          </h1>
+          <div style={{ fontSize: 13, color: T.t3, marginTop: 4 }}>
+            {corporateName} — carbon portfolio overview and retirement status
+          </div>
+        </div>
         <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:15,marginBottom:24}}>
           <KPICard icon={Package}    label="Available Credits"     value={realTotalCredits.toLocaleString()} sub="Total tonnes CO₂e" color={T.violetLL || T.violetL}/>
           <KPICard icon={TrendingUp} label="Active Projects"       value={projects.length}          sub="Projects supported" color={T.teal}/>
@@ -235,7 +242,10 @@ export function CorporateMarketplace() {
 
   const handleRazorPay = async (item, quantity) => {
     if (razorpayHealth !== 'ok') {
-      alert('Payments are temporarily unavailable. Gateway status is degraded.');
+      const msg = razorpayHealth === 'auth_failed'
+        ? 'Payment gateway authentication failed. Please verify Razorpay API keys in Render dashboard (service: carbonvault-api).'
+        : `Payments are temporarily unavailable (${razorpayHealth}). Please check payment gateway configuration.`;
+      alert(msg);
       return;
     }
     setBuying(true);
@@ -344,10 +354,14 @@ export function CorporateMarketplace() {
 
   return (
     <div style={{padding:28, position: 'relative', minHeight: '85vh'}}>
-      <SectionHeader
-        title="Carbon Credit Marketplace"
-        subtitle="Browse verified ecological restoration projects, compare quality metrics, and purchase audited credits"
-      />
+      <div style={{ marginBottom: 22 }}>
+        <h1 style={{ fontSize: 24, fontWeight: 900, color: T.t1, fontFamily: 'Fraunces, serif', margin: 0 }}>
+          Carbon Credit Marketplace
+        </h1>
+        <div style={{ fontSize: 13, color: T.t3, marginTop: 4 }}>
+          Browse verified ecological restoration projects, compare quality metrics, and purchase audited credits
+        </div>
+      </div>
 
       {/* Live Dynamic Price Ticker & M4 Forecast Sparkline */}
       <div style={{
@@ -767,8 +781,19 @@ export function CorporateMarketplace() {
 
             {razorpayHealth !== 'ok' ? (
               <div style={{background:'rgba(244,63,94,0.1)',border:'1px solid rgba(244,63,94,0.3)',borderRadius:8,padding:'12px',marginBottom:10,textAlign:'center'}}>
-                <div style={{color:T.roseL,fontWeight:700,fontSize:13,marginBottom:4}}>⚠️ Payments are temporarily unavailable</div>
-                <div style={{color:T.t3,fontSize:11}}>Payment gateway health is degraded ({razorpayHealth}). Purchases are disabled to prevent failed transactions.</div>
+                <div style={{color:T.roseL,fontWeight:700,fontSize:13,marginBottom:4}}>⚠️ Payments Temporarily Unavailable</div>
+                <div style={{color:T.t2,fontSize:11.5,lineHeight:1.4}}>
+                  {razorpayHealth === 'auth_failed'
+                    ? 'Payment gateway authentication failed. Please verify Razorpay API keys in Render dashboard (service: carbonvault-api).'
+                    : razorpayHealth === 'missing'
+                    ? 'Razorpay credentials are not configured in the environment.'
+                    : razorpayHealth === 'unreachable'
+                    ? 'Unable to reach Razorpay payment gateway. Network timeout or service unreachable.'
+                    : `Payment gateway health is degraded (${razorpayHealth}). Purchases are disabled to prevent failed transactions.`}
+                </div>
+                <div style={{color:T.t3,fontSize:10.5,marginTop:6,fontStyle:'italic'}}>
+                  Hint: Check Razorpay keys in Render (carbonvault-api)
+                </div>
               </div>
             ) : (
               <Btn style={{width:'100%',justifyContent:'center',background:'linear-gradient(135deg,#072654,#1a56db)',color:'#fff',boxShadow:'0 4px 16px rgba(26,86,219,0.35)',border:'none'}}
@@ -808,11 +833,17 @@ export function CorporateWallet() {
 
   return (
     <div style={{padding:28}}>
-      <SectionHeader
-        title="My Wallet"
-        subtitle="Carbon credit holdings and verifiable retirement impact certificates"
-        action={<Btn variant="secondary"><Download size={13}/>Export</Btn>}
-      />
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 22 }}>
+        <div>
+          <h1 style={{ fontSize: 24, fontWeight: 900, color: T.t1, fontFamily: 'Fraunces, serif', margin: 0 }}>
+            Corporate Credit Wallet
+          </h1>
+          <div style={{ fontSize: 13, color: T.t3, marginTop: 4 }}>
+            Carbon credit holdings and verifiable retirement impact certificates
+          </div>
+        </div>
+        <Btn variant="secondary"><Download size={13}/>Export</Btn>
+      </div>
       <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:15,marginBottom:24}}>
         <KPICard icon={Package}    label="Total Credits"   value={realCredits.toLocaleString()} sub="Tonnes CO₂e held"           trend="up" color={T.violetLL || T.violetL}/>
         <KPICard icon={WalletIcon} label="Portfolio Value" value={`$${realSpentUSD.toLocaleString()}`} sub="At market price" trend="up" color={T.emeraldL}/>
@@ -949,7 +980,14 @@ export function CorporateESG() {
 
         {/* Header & Controls */}
         <div style={{marginBottom:28}}>
-          <SectionHeader title="ESG Reports" subtitle="Generate comprehensive Environmental, Social & Governance impact reports"/>
+          <div style={{ marginBottom: 22 }}>
+            <h1 style={{ fontSize: 24, fontWeight: 900, color: T.t1, fontFamily: 'Fraunces, serif', margin: 0 }}>
+              Corporate ESG Disclosure
+            </h1>
+            <div style={{ fontSize: 13, color: T.t3, marginTop: 4 }}>
+              Generate comprehensive Environmental, Social & Governance impact reports
+            </div>
+          </div>
           
           {/* Project Selector */}
           <div className="no-print" style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:14,marginBottom:22}}>

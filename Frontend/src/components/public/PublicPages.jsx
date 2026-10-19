@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useApp } from '../../AppContext.jsx';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { fetchLeaderboard, fetchPlatformStats, fetchPublicStats, fetchAuditLogs, fetchCertificates, fetchClimateAnalytics, fetchUsers, fetchGrsLeaderboard, timeAgo, getCertificateDownloadUrl, fetchPublicRetirements } from '../../services/api.js';
 
@@ -36,7 +37,14 @@ export function PublicDashboard() {
 
   return (
     <div style={{ padding: 28 }}>
-      <SectionHeader title="Public Transparency Dashboard" subtitle="CarbonVault platform-wide impact metrics" />
+      <div style={{ marginBottom: 22 }}>
+        <h1 style={{ fontSize: 24, fontWeight: 900, color: T.t1, fontFamily: 'Fraunces, serif', margin: 0 }}>
+          Global Ecological Impact
+        </h1>
+        <div style={{ fontSize: 13, color: T.t3, marginTop: 4 }}>
+          CarbonVault platform-wide impact metrics, restoration polygons, and live registry statistics
+        </div>
+      </div>
 
       <div style={{ background: 'linear-gradient(135deg, #0a1a0a 0%, #0e2a0e 100%)', border: '1px solid rgba(45,212,191,0.3)', borderRadius: 16, padding: 28, marginBottom: 24 }}>
         <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 12 }}>
@@ -142,7 +150,14 @@ export function PublicLeaderboard() {
 
   return (
     <div style={{ padding: 28 }}>
-      <SectionHeader title="Impact Leaderboard" subtitle="Top organizations by carbon impact" />
+      <div style={{ marginBottom: 22 }}>
+        <h1 style={{ fontSize: 24, fontWeight: 900, color: T.t1, fontFamily: 'Fraunces, serif', margin: 0 }}>
+          Carbon Impact Leaderboard
+        </h1>
+        <div style={{ fontSize: 13, color: T.t3, marginTop: 4 }}>
+          Top organizations and corporate buyers ranked by verified ecological impact
+        </div>
+      </div>
       <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
         {['all', 'ngo', 'buyer'].map(f => (
           <button key={f} onClick={() => setFilter(f)}
@@ -191,6 +206,7 @@ export function PublicLeaderboard() {
 }
 
 export function PublicAudit() {
+  const { user } = useApp();
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -222,9 +238,18 @@ export function PublicAudit() {
     loadAuditLogs();
   }, []);
 
+  const auditTitle = user?.role === 'admin' ? 'Public Audit Trail' : 'Immutable Audit Ledger';
+
   return (
     <div style={{ padding: 28 }}>
-      <SectionHeader title="Audit Trail" subtitle="Immutable log of all platform actions" />
+      <div style={{ marginBottom: 22 }}>
+        <h1 style={{ fontSize: 24, fontWeight: 900, color: T.t1, fontFamily: 'Fraunces, serif', margin: 0 }}>
+          {auditTitle}
+        </h1>
+        <div style={{ fontSize: 13, color: T.t3, marginTop: 4 }}>
+          Immutable cryptographic ledger of platform actions, verifier sign-offs, and state transitions
+        </div>
+      </div>
 
       {loading ? (
         <div style={{ textAlign: 'center', padding: '50px 0' }}>
@@ -362,7 +387,14 @@ export function PublicCertificates() {
   if (error) {
     return (
       <div style={{ padding: 28 }}>
-        <SectionHeader title="Verification Certificates" subtitle="Publicly accessible, cryptographically verified certificate registry" />
+        <div style={{ marginBottom: 22 }}>
+          <h1 style={{ fontSize: 24, fontWeight: 900, color: T.t1, fontFamily: 'Fraunces, serif', margin: 0 }}>
+            Public Retirement Certificates
+          </h1>
+          <div style={{ fontSize: 13, color: T.t3, marginTop: 4 }}>
+            Publicly accessible, cryptographically verified certificate registry
+          </div>
+        </div>
         <Card style={{ padding: 28, textAlign: 'center', border: '1px solid rgba(244,63,94,0.3)' }}>
           <div style={{ color: '#f43f5e', fontSize: 13, marginBottom: 12 }}>Failed to load certificates: {error}</div>
           <button
@@ -380,10 +412,12 @@ export function PublicCertificates() {
     <div style={{ padding: 28 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
         <div>
-          <SectionHeader
-            title={typeFilter === 'registry' ? 'Public Retirement Registry' : 'Verification Certificates'}
-            subtitle={typeFilter === 'registry' ? 'Public transparency ledger of permanently retired credits and unique serial ranges' : 'Publicly accessible, cryptographically verified certificate registry'}
-          />
+          <h1 style={{ fontSize: 24, fontWeight: 900, color: T.t1, fontFamily: 'Fraunces, serif', margin: 0 }}>
+            Public Retirement Certificates
+          </h1>
+          <div style={{ fontSize: 13, color: T.t3, marginTop: 4 }}>
+            Public transparency ledger of permanently retired credits and unique serial ranges
+          </div>
         </div>
         <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
           {/* Search box */}
@@ -651,7 +685,14 @@ export function PublicClimate() {
 
   return (
     <div style={{ padding: 28 }}>
-      <SectionHeader title="Climate Resilience Analytics" subtitle="Environmental impact of verified reforestation and afforestation projects" />
+      <div style={{ marginBottom: 22 }}>
+        <h1 style={{ fontSize: 24, fontWeight: 900, color: T.t1, fontFamily: 'Fraunces, serif', margin: 0 }}>
+          Climate & Satellite Insights
+        </h1>
+        <div style={{ fontSize: 13, color: T.t3, marginTop: 4 }}>
+          Environmental impact and satellite telemetry of verified reforestation and afforestation projects
+        </div>
+      </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 16, marginBottom: 24, maxWidth: 680 }}>
         {[

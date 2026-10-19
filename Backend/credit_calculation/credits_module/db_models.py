@@ -153,8 +153,7 @@ class User(Base):
     name = Column(String, index=True)
     email = Column(String, unique=True, index=True)
     password_hash = Column(String, nullable=True)
-    role = Column(String)  # 'admin', 'ngo', 'buyer'
-    admin_role = Column(String, default="super_admin")  # 'super_admin' or 'approver'
+    role = Column(String)  # 'admin', 'verifier', 'ngo', 'corporate'
     projects = Column(Integer, default=0)
     credits = Column(Float, default=0.0)
     status = Column(String, default="active")  # 'active', 'suspended'

@@ -4,7 +4,7 @@ import { useApp } from '../../AppContext.jsx';
 import { fetchPricingConfig, savePricingConfig, fetchPlatformStats, fetchAllProjects, fetchClimateAnalytics, fetchPricingForecast } from '../../services/api.js';
 import { Card, SectionHeader, KPICard, Btn, T, withAlpha } from '../UI.jsx';
 import { DollarSign, TrendingUp, Package, Activity, Save, RotateCcw, ShieldAlert, Lock, Cpu, Sliders, ArrowUpRight, ArrowDownRight, Minus } from 'lucide-react';
-import { AdminRefundPayouts } from './AdminRefundPayouts.jsx';
+import { formatCurrency, formatPercent, formatNumber } from '../../utils/formatters.js';
 
 const CT = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null;
@@ -24,7 +24,6 @@ const CT = ({ active, payload, label }) => {
 
 export function AdminPricing() {
   const { user, subscribeToEvent } = useApp();
-  const isApprover = user?.admin_role === 'approver';
 
   const [p, setP] = useState({
     base: 28.50,
@@ -80,10 +79,6 @@ export function AdminPricing() {
   }, [subscribeToEvent]);
 
   const handleSave = async (overrideMode = null) => {
-    if (isApprover) {
-      setSavedMsg('Super Admin privilege required to update pricing configuration');
-      return;
-    }
     setSaving(true);
     setSavedMsg('');
     const targetMode = overrideMode || p.mode;
@@ -115,7 +110,7 @@ export function AdminPricing() {
     const color = sc[field] || T.teal;
     const pct = ((p[field] - min) / (max - min)) * 100;
     return (
-      <div style={{ marginBottom: 22, opacity: disabled || isApprover ? 0.75 : 1 }}>
+      <div style={{ marginBottom: 22, opacity: disabled ? 0.75 : 1 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 9 }}>
           <span style={{ fontSize: 13, color: T.t2, fontWeight: 500 }}>{label}</span>
           <span style={{ fontSize: 19, fontWeight: 800, color, fontFamily: 'Fraunces, serif' }}>
@@ -142,9 +137,9 @@ export function AdminPricing() {
           max={max}
           step={0.01}
           value={p[field]}
-          disabled={disabled || isApprover}
+          disabled={disabled}
           onChange={(e) => setP({ ...p, [field]: parseFloat(e.target.value) })}
-          style={{ width: '100%', cursor: disabled || isApprover ? 'not-allowed' : 'pointer', accentColor: color }}
+          style={{ width: '100%', cursor: disabled ? 'not-allowed' : 'pointer', accentColor: color }}
         />
       </div>
     );
@@ -154,17 +149,21 @@ export function AdminPricing() {
 
   return (
     <div style={{ padding: 28 }}>
-      <SectionHeader
-        title="Pricing Engine"
-        subtitle="Dynamic pricing engine with algorithmic auto-mode and real-time ledger history"
-        action={
-          <div style={{ display: 'flex', alignItems: 'center', background: 'var(--card-bg, rgba(255,255,255,0.04))', border: `1px solid ${T.border}`, borderRadius: 20, padding: '3px 4px', gap: 4 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+        <div>
+          <h1 style={{ fontSize: 24, fontWeight: 900, color: T.t1, fontFamily: 'Fraunces, serif', margin: '0 0 4px 0' }}>
+            Carbon Pricing Engine
+          </h1>
+          <div style={{ fontSize: 13, color: T.t3 }}>
+            Dynamic pricing engine with algorithmic auto-mode and real-time ledger history
+          </div>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', background: 'var(--card-bg, rgba(255,255,255,0.04))', border: `1px solid ${T.border}`, borderRadius: 20, padding: '3px 4px', gap: 4 }}>
             <button
               onClick={() => {
                 setP({ ...p, mode: 'manual' });
                 handleSave('manual');
               }}
-              disabled={isApprover}
               style={{
                 background: p.mode === 'manual' ? 'rgba(45,212,191,0.2)' : 'transparent',
                 border: p.mode === 'manual' ? `1px solid ${T.teal}` : '1px solid transparent',
@@ -173,7 +172,7 @@ export function AdminPricing() {
                 padding: '4px 12px',
                 fontSize: 11,
                 fontWeight: 700,
-                cursor: isApprover ? 'not-allowed' : 'pointer',
+                cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
                 gap: 5,
@@ -186,7 +185,6 @@ export function AdminPricing() {
                 setP({ ...p, mode: 'auto' });
                 handleSave('auto');
               }}
-              disabled={isApprover}
               style={{
                 background: p.mode === 'auto' ? 'rgba(245,158,11,0.2)' : 'transparent',
                 border: p.mode === 'auto' ? `1px solid ${T.goldL}` : '1px solid transparent',
@@ -195,7 +193,7 @@ export function AdminPricing() {
                 padding: '4px 12px',
                 fontSize: 11,
                 fontWeight: 700,
-                cursor: isApprover ? 'not-allowed' : 'pointer',
+                cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
                 gap: 5,
@@ -204,29 +202,7 @@ export function AdminPricing() {
               <Cpu size={12} /> Auto Algorithmic
             </button>
           </div>
-        }
-      />
-
-      {/* Approver role read-only banner */}
-      {isApprover && (
-        <div
-          style={{
-            background: 'rgba(56,189,248,0.08)',
-            border: `1px solid rgba(56,189,248,0.25)`,
-            borderRadius: 10,
-            padding: '12px 16px',
-            marginBottom: 20,
-            display: 'flex',
-            alignItems: 'center',
-            gap: 12,
-          }}
-        >
-          <ShieldAlert size={18} color={T.skyL} />
-          <div style={{ fontSize: 13, color: T.skyL }}>
-            <strong>Project Approver Role:</strong> Viewing live pricing configuration in read-only mode. Adjusting base prices and multipliers requires <strong>Super Admin</strong> authorization.
-          </div>
         </div>
-      )}
 
       {p.mode === 'auto' && (
         <div
@@ -265,7 +241,6 @@ export function AdminPricing() {
                 <input
                   type="number"
                   value={p.base}
-                  disabled={isApprover}
                   onChange={(e) => setP({ ...p, base: parseFloat(e.target.value) || 0 })}
                   style={{
                     background: `rgba(45,212,191,0.07)`,
@@ -278,7 +253,6 @@ export function AdminPricing() {
                     outline: 'none',
                     width: 130,
                     fontFamily: 'Fraunces, serif',
-                    cursor: isApprover ? 'not-allowed' : 'text',
                   }}
                 />
                 <span style={{ color: T.t3, fontSize: 13 }}>per tonne</span>
@@ -290,16 +264,10 @@ export function AdminPricing() {
             <Slider label="Living Credit Multiplier" field="living" />
 
             <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-              {isApprover ? (
-                <Btn disabled style={{ opacity: 0.5, cursor: 'not-allowed' }} title="Super Admin privilege required">
-                  <Lock size={13} /> Save Config (Locked)
-                </Btn>
-              ) : (
-                <Btn onClick={() => handleSave()} disabled={saving}>
-                  <Save size={13} />
-                  {saving ? 'Saving…' : 'Save Config'}
-                </Btn>
-              )}
+              <Btn onClick={() => handleSave()} disabled={saving}>
+                <Save size={13} />
+                {saving ? 'Saving…' : 'Save Config'}
+              </Btn>
               <Btn variant="secondary" onClick={loadConfig}>
                 <RotateCcw size={13} />
                 Reset
@@ -427,9 +395,6 @@ export function AdminPricing() {
           )}
         </div>
       </div>
-
-      {/* Refunds and Payouts Settlement Section */}
-      <AdminRefundPayouts />
     </div>
   );
 }
@@ -466,38 +431,40 @@ export function AdminAnalytics() {
       ? Object.entries(typeMap).map(([name, value]) => ({ name, value }))
       : [];
 
-  const radarData =
-    climate?.co_benefits && climate.co_benefits.length > 0
-      ? climate.co_benefits.map((c) => ({ metric: c.metric, score: c.value }))
-      : [
-          { metric: 'Flood Control', score: 78 },
-          { metric: 'Biodiversity', score: 85 },
-          { metric: 'Fisheries', score: 62 },
-          { metric: 'Coastal Prot.', score: 71 },
-          { metric: 'Carbon Seq.', score: 93 },
-          { metric: 'Livelihood', score: 67 },
-        ];
+  const hasCoBenefits = Boolean(climate?.co_benefits && Array.isArray(climate.co_benefits) && climate.co_benefits.length > 0);
+  const radarData = hasCoBenefits
+    ? climate.co_benefits.map((c) => ({ metric: c.metric, score: Number(c.value || c.score || 0) }))
+    : null;
 
   const historyData =
     pricing?.history && pricing.history.length > 0
       ? pricing.history.map((h) => ({ month: h.month, credits: Math.round(h.price * 1400) }))
       : [];
 
-  const revenueDisplay = stats?.total_funding_usd ? `$${Math.round(stats.total_funding_usd / 1000)}K` : '$580K';
-  const availableCredits = stats?.total_credits ? Math.round(stats.total_credits).toLocaleString() : '48,800';
-  const approvalRate = stats?.approval_rate ? `${stats.approval_rate}%` : '87.5%';
-  const avgPrice = pricing?.final_price ? `$${pricing.final_price.toFixed(2)}` : '$29.40';
+  const revenueDisplay = stats?.total_funding_usd ? formatCurrency(stats.total_funding_usd, 'USD', 0) : '$0';
+  const availableCredits = stats?.total_credits ? formatNumber(stats.total_credits) : '0';
+  const approvalRate = formatPercent(stats?.approval_rate ?? stats?.approval_rate_pct ?? 100);
+  const avgPrice = pricing?.final_price ? formatCurrency(pricing.final_price, 'USD', 2) : '$0.00';
 
   return (
     <div style={{ padding: 28 }}>
-      <SectionHeader title="Platform Analytics" subtitle="Comprehensive performance and impact insights" />
+      <div style={{ marginBottom: 22 }}>
+        <h1 style={{ fontSize: 24, fontWeight: 900, color: T.t1, fontFamily: 'Fraunces, serif', margin: '0 0 4px 0' }}>
+          Platform Analytics
+        </h1>
+        <div style={{ fontSize: 13, color: T.t3 }}>
+          Comprehensive performance, revenue reconciliation, and ecological impact insights.
+        </div>
+      </div>
+
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 15, marginBottom: 24 }}>
         <KPICard icon={DollarSign} label="Total Revenue" value={revenueDisplay} sub="From verified credit sales" color={T.emeraldL} />
         <KPICard icon={TrendingUp} label="Avg Credit Price" value={avgPrice} sub="Current effective rate" color={T.teal} />
-        <KPICard icon={Package} label="Credits Available" value={availableCredits} sub={`Across ${stats?.active_projects || 5} active projects`} color={T.goldL} />
+        <KPICard icon={Package} label="Credits Available" value={availableCredits} sub={`Across ${stats?.active_projects || projects.length || 0} active projects`} color={T.goldL} />
         <KPICard icon={Activity} label="Verification Rate" value={approvalRate} sub="Of submitted projects" color={T.violetLL} />
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18, marginBottom: 18 }}>
+
+      <div style={{ display: 'grid', gridTemplateColumns: radarData ? '1fr 1fr' : '1fr', gap: 18, marginBottom: 18 }}>
         <Card>
           <SectionHeader title="Credits by Project Type" />
           <ResponsiveContainer width="100%" height={220}>
@@ -515,18 +482,22 @@ export function AdminAnalytics() {
             </BarChart>
           </ResponsiveContainer>
         </Card>
-        <Card>
-          <SectionHeader title="Climate Resilience Radar" />
-          <ResponsiveContainer width="100%" height={220}>
-            <RadarChart data={radarData}>
-              <PolarGrid stroke="rgba(255,255,255,0.06)" />
-              <PolarAngleAxis dataKey="metric" tick={{ fill: T.t3, fontSize: 10 }} />
-              <Radar name="Score" dataKey="score" stroke={T.teal} fill={T.teal} fillOpacity={0.15} strokeWidth={2} />
-              <Tooltip content={<CT />} />
-            </RadarChart>
-          </ResponsiveContainer>
-        </Card>
+
+        {radarData && (
+          <Card>
+            <SectionHeader title="Climate Resilience Radar" subtitle="Verified project co-benefits" />
+            <ResponsiveContainer width="100%" height={220}>
+              <RadarChart data={radarData}>
+                <PolarGrid stroke="rgba(255,255,255,0.06)" />
+                <PolarAngleAxis dataKey="metric" tick={{ fill: T.t3, fontSize: 10 }} />
+                <Radar name="Score" dataKey="score" stroke={T.teal} fill={T.teal} fillOpacity={0.15} strokeWidth={2} />
+                <Tooltip content={<CT />} />
+              </RadarChart>
+            </ResponsiveContainer>
+          </Card>
+        )}
       </div>
+
       <Card>
         <SectionHeader title="Monthly Generation Trend" />
         <ResponsiveContainer width="100%" height={180}>
